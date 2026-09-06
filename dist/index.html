@@ -1,0 +1,885 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#071724">
+  <meta name="description" content="CAGE Operations Hub for request intake, projects, missions, equipment, compliance, approvals, CRM, calendar, finance, chat, leave and knowledge.">
+  <title>CAGE Operations Hub</title>
+  <link rel="icon" href="./cage-logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <section class="auth-gate" id="auth-gate" aria-labelledby="auth-title">
+    <div class="auth-card">
+      <img src="./cage-logo.svg" alt="CAGE" class="auth-logo">
+      <p class="section-kicker">Secure company workspace</p>
+      <h1 id="auth-title">Sign in to Operations Hub</h1>
+      <p>Use your approved CAGE email address. Your work is shared with the team and recorded in the company audit history.</p>
+      <form id="login-form" class="auth-form">
+        <label class="field"><span>Email address</span><input id="login-email" name="email" type="email" autocomplete="email" required placeholder="name@cagemw.com"></label>
+        <label class="field"><span>Password</span><input id="login-password" name="password" type="password" autocomplete="current-password" minlength="8" required></label>
+        <p class="form-error" id="login-error" role="alert"></p>
+        <button class="primary-button auth-submit" type="submit">Sign in</button>
+      </form>
+      <button class="text-button auth-reset" id="forgot-password" type="button">Forgot password?</button>
+      <p class="auth-support">Access is limited to accounts approved by a CAGE administrator.</p>
+    </div>
+  </section>
+
+  <div class="sync-banner" id="sync-banner" role="status" aria-live="polite">Connecting to the secure workspace…</div>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="Primary navigation">
+      <div class="brand-row">
+        <img class="brand-logo" src="./cage-logo.svg" alt="CAGE">
+        <div>
+          <div class="brand-product">Operations Hub</div>
+        </div>
+        <button class="icon-button sidebar-close" id="close-sidebar" aria-label="Close navigation">×</button>
+      </div>
+
+      <div class="environment-pill"><span></span> Secure shared workspace</div>
+
+      <nav class="side-nav">
+        <span class="nav-section-title">Overview</span>
+        <button class="nav-item active" data-view="dashboard"><span class="nav-icon">⌂</span><span>Dashboard</span></button>
+        <button class="nav-item" data-view="chat"><span class="nav-icon">◌</span><span>Work chat</span><span class="nav-count" id="chat-nav-count">0</span></button>
+        <span class="nav-section-title">1 · Start & win work</span>
+        <button class="nav-item" data-view="requests"><span class="nav-icon">↳</span><span>Request centre</span><span class="nav-count warning" id="requests-nav-count">0</span></button>
+        <button class="nav-item" data-view="crm"><span class="nav-icon">◇</span><span>CRM & opportunities</span><span class="nav-count" id="crm-nav-count">0</span></button>
+        <button class="nav-item" data-view="commercial"><span class="nav-icon">▣</span><span>Tenders, grants & contracts</span><span class="nav-count" id="commercial-nav-count">0</span></button>
+        <button class="nav-item" data-view="approvals"><span class="nav-icon">✓</span><span>Approvals</span><span class="nav-count warning" id="approvals-nav-count">0</span></button>
+        <span class="nav-section-title">2 · Plan & deliver</span>
+        <button class="nav-item" data-view="projects"><span class="nav-icon">▦</span><span>Projects</span><span class="nav-count" id="projects-nav-count">0</span></button>
+        <button class="nav-item" data-view="tasks"><span class="nav-icon">✓</span><span>Work board</span><span class="nav-count" id="tasks-nav-count">0</span></button>
+        <button class="nav-item" data-view="calendar"><span class="nav-icon">□</span><span>Calendar</span><span class="nav-count" id="calendar-nav-count">0</span></button>
+        <button class="nav-item" data-view="missions"><span class="nav-icon">⌖</span><span>Mission control</span><span class="nav-count" id="missions-nav-count">0</span></button>
+        <button class="nav-item" data-view="assets"><span class="nav-icon">◈</span><span>Equipment</span><span class="nav-count warning" id="assets-nav-count">0</span></button>
+        <button class="nav-item" data-view="compliance"><span class="nav-icon">⌾</span><span>Compliance</span><span class="nav-count warning" id="compliance-nav-count">0</span></button>
+        <span class="nav-section-title">3 · Close & learn</span>
+        <button class="nav-item" data-view="evidence"><span class="nav-icon">⌁</span><span>Evidence</span><span class="nav-count warning" id="evidence-nav-count">0</span></button>
+        <button class="nav-item" data-view="finance"><span class="nav-icon">¤</span><span>Finance</span><span class="nav-count warning" id="finance-nav-count">0</span></button>
+        <button class="nav-item" data-view="reports"><span class="nav-icon">↗</span><span>Reports</span></button>
+        <button class="nav-item" data-view="knowledge"><span class="nav-icon">▤</span><span>Knowledge</span><span class="nav-count" id="knowledge-nav-count">0</span></button>
+        <span class="nav-section-title">4 · People</span>
+        <button class="nav-item" data-view="leave"><span class="nav-icon">☼</span><span>Leave</span><span class="nav-count warning" id="leave-nav-count">0</span></button>
+        <button class="nav-item" data-view="team"><span class="nav-icon">◎</span><span>Team</span></button>
+        <button class="nav-item" data-view="hr"><span class="nav-icon">HR</span><span>Recruitment & HR</span><span class="nav-count" id="hr-nav-count">0</span></button>
+        <button class="nav-item" data-view="admin" id="admin-nav-item"><span class="nav-icon">⚙</span><span>User administration</span></button>
+      </nav>
+
+      <div class="sidebar-divider"></div>
+      <p class="nav-label">Quick filters</p>
+      <button class="quick-filter" data-task-filter="mine"><span class="filter-dot blue"></span>My tasks</button>
+      <button class="quick-filter" data-task-filter="overdue"><span class="filter-dot red"></span>Overdue</button>
+      <button class="quick-filter" data-task-filter="blocked"><span class="filter-dot amber"></span>Blocked</button>
+
+      <div class="sidebar-spacer"></div>
+      <div class="user-card">
+        <div class="avatar">AM</div>
+        <div class="user-copy">
+          <strong id="current-user-name">CAGE user</strong>
+          <span id="current-user-role">Team member</span>
+        </div>
+        <button class="icon-button subtle" id="sign-out-button" aria-label="Sign out" title="Sign out">↪</button>
+      </div>
+    </aside>
+
+    <button class="sidebar-overlay" id="sidebar-overlay" aria-label="Close navigation"></button>
+
+    <div class="workspace">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="icon-button menu-button" id="open-sidebar" aria-label="Open navigation">☰</button>
+          <div>
+            <p class="eyebrow" id="view-eyebrow">CAGE / Operations</p>
+            <h1 id="view-title">Dashboard</h1>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <label class="global-search">
+            <span aria-hidden="true">⌕</span>
+            <input id="global-search" type="search" placeholder="Search all CAGE work" aria-label="Search projects, tasks, clients, events and invoices">
+            <kbd>⌘ K</kbd>
+          </label>
+          <button class="icon-button notification-button" data-view="requests" aria-label="Open work requiring attention"><span id="notification-count">0</span>♢</button>
+          <button class="primary-button" id="add-task-top"><span>＋</span> Add task</button>
+        </div>
+      </header>
+
+      <main class="main-content">
+        <section class="view-panel active" data-view-panel="dashboard">
+          <div class="page-intro dashboard-intro">
+            <div>
+              <p class="date-line" id="today-label">Friday, 4 September 2026</p>
+              <h2>Good evening, Alexander.</h2>
+              <p>Projects, field missions, decisions, clients, people and money in one place.</p>
+            </div>
+            <div class="intro-actions">
+              <button class="secondary-button" data-go-view="reports">View weekly brief</button>
+              <button class="primary-button" id="new-request-dashboard">＋ New request</button>
+            </div>
+          </div>
+
+          <div class="metric-grid" id="metric-grid"></div>
+
+          <div class="control-strip" id="control-strip" aria-label="Operations control centre"></div>
+
+          <div class="dashboard-grid">
+            <article class="surface priority-surface">
+              <div class="surface-heading">
+                <div>
+                  <p class="section-kicker">Priority queue</p>
+                  <h3>Needs attention</h3>
+                </div>
+                <button class="text-button" data-go-view="tasks" data-preset-filter="attention">View all</button>
+              </div>
+              <div id="attention-list" class="attention-list"></div>
+            </article>
+
+            <article class="surface pulse-surface">
+              <div class="surface-heading">
+                <div>
+                  <p class="section-kicker">Operations pulse</p>
+                  <h3>Today’s focus</h3>
+                </div>
+                <span class="live-pill"><span></span> Live</span>
+              </div>
+              <div class="focus-date">
+                <strong>04</strong>
+                <div><span>SEPTEMBER</span><b>FRIDAY</b></div>
+              </div>
+              <div id="focus-list" class="focus-list"></div>
+              <button class="full-width-button" data-go-view="calendar">Open team calendar</button>
+            </article>
+          </div>
+
+          <article class="surface project-overview">
+            <div class="surface-heading">
+              <div>
+                <p class="section-kicker">Portfolio health</p>
+                <h3>Active projects</h3>
+              </div>
+              <button class="text-button" data-go-view="projects">See all projects</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Project</th><th>Owner</th><th>Health</th><th>Deadline</th><th>Progress</th><th></th></tr></thead>
+                <tbody id="dashboard-projects"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <section class="view-panel" data-view-panel="requests">
+          <div class="page-intro">
+            <div><p class="date-line">Single front door</p><h2>Request centre</h2><p>Capture every enquiry once, qualify it, prepare the right offer and convert accepted work into delivery.</p></div>
+            <div class="intro-actions"><button class="secondary-button" id="manage-purpose-button">Manage purposes</button><button class="primary-button" id="new-request-button">＋ New request</button></div>
+          </div>
+          <div class="decision-guide surface" aria-label="Where new work starts">
+            <span class="decision-guide-icon">↳</span>
+            <div><strong>Client contacted CAGE?</strong><p>Email, WhatsApp, call, referral or website enquiry always starts as a <b>New request</b>.</p></div>
+            <i></i>
+            <span class="decision-guide-icon proactive">◇</span>
+            <div><strong>CAGE found a possible client?</strong><p>A proactive lead with no incoming request starts as a <b>CRM opportunity</b>.</p></div>
+          </div>
+          <div class="metric-grid" id="request-metric-grid"></div>
+          <div class="request-flow surface" aria-label="Request to delivery workflow">
+            <span><b>1</b><strong>Intake</strong><small>Capture request</small></span>
+            <i>›</i><span><b>2</b><strong>Qualify</strong><small>Go / no-go</small></span>
+            <i>›</i><span><b>3</b><strong>Scope & cost</strong><small>Technical plan</small></span>
+            <i>›</i><span><b>4</b><strong>Approve</strong><small>Internal gate</small></span>
+            <i>›</i><span><b>5</b><strong>Submit</strong><small>Offer or application</small></span>
+            <i>›</i><span><b>6</b><strong>Contract</strong><small>Formal acceptance</small></span>
+            <i>›</i><span><b>7</b><strong>Project</strong><small>Deliver and close</small></span>
+          </div>
+          <div class="toolbar request-toolbar">
+            <div class="segmented-control" id="request-filters" aria-label="Filter requests">
+              <button class="active" data-request-filter="all">All</button>
+              <button data-request-filter="action">Needs action</button>
+              <button data-request-filter="service">Services</button>
+              <button data-request-filter="Tender / RFQ">Tenders</button>
+              <button data-request-filter="Grant">Grants</button>
+              <button data-request-filter="Converted">Converted</button>
+            </div>
+            <label class="inline-search"><span>⌕</span><input id="request-search" type="search" placeholder="Find a request or organisation" aria-label="Find a request"></label>
+          </div>
+          <div class="request-layout">
+            <div class="request-board-scroll"><div class="request-board" id="request-board"></div></div>
+            <aside class="surface request-guardrails">
+              <div class="surface-heading"><div><p class="section-kicker">Required controls</p><h3>Before work starts</h3></div></div>
+              <div class="request-rule-list">
+                <div><span>1</span><p><strong>One owner</strong>Every request needs a responsible person and dated next action.</p></div>
+                <div><span>2</span><p><strong>Evidence first</strong>Scope, costing and supporting documents must be complete before review.</p></div>
+                <div><span>3</span><p><strong>Approval before sending</strong>No quote, tender or grant application leaves CAGE without approval.</p></div>
+                <div><span>4</span><p><strong>Acceptance before delivery</strong>Create a project only after a contract, PO, award or accepted quote is recorded.</p></div>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view-panel" data-view-panel="projects">
+          <div class="page-intro">
+            <div><p class="date-line">Portfolio</p><h2>Projects</h2><p>Every project has one lead, a deadline and an automatically calculated progress score.</p></div>
+            <button class="primary-button" id="new-project-button">＋ New project</button>
+          </div>
+          <div class="toolbar">
+            <div class="segmented-control" id="project-filters" aria-label="Filter projects">
+              <button class="active" data-project-filter="all">All</button>
+              <button data-project-filter="attention">Needs attention</button>
+              <button data-project-filter="on-track">On track</button>
+              <button data-project-filter="complete">Complete</button>
+            </div>
+            <label class="inline-search"><span>⌕</span><input id="project-search" type="search" placeholder="Find a project" aria-label="Find a project"></label>
+          </div>
+          <div class="project-card-grid" id="project-grid"></div>
+        </section>
+
+        <section class="view-panel" data-view-panel="tasks">
+          <div class="page-intro">
+            <div><p class="date-line">Execution</p><h2>Work board</h2><p>Type directly on cards, add work in one step and create any headings your team needs.</p></div>
+            <button class="secondary-button" id="add-task-tasks">Open detailed card</button>
+          </div>
+          <div class="toolbar task-toolbar">
+            <div class="segmented-control" id="task-filters" aria-label="Filter tasks">
+              <button class="active" data-filter="all">All work</button>
+              <button data-filter="mine">Mine</button>
+              <button data-filter="overdue">Overdue</button>
+              <button data-filter="blocked">Blocked</button>
+              <button data-filter="done">Done</button>
+            </div>
+            <div class="toolbar-right">
+              <div class="segmented-control compact-control" id="task-view-toggle" aria-label="Choose board or list view">
+                <button class="active" data-task-view="board">Board</button>
+                <button data-task-view="list">List</button>
+              </div>
+              <label class="select-wrap"><span>Project</span><select id="board-project-filter" aria-label="Filter board by project"><option value="all">All projects</option></select></label>
+              <label class="select-wrap"><span>Owner</span><select id="owner-filter" aria-label="Filter by owner"><option value="all">Everyone</option></select></label>
+              <label class="inline-search"><span>⌕</span><input id="task-search" type="search" placeholder="Find a task" aria-label="Find a task"></label>
+            </div>
+          </div>
+          <div class="kanban-scroll" id="task-kanban-wrap">
+            <div class="kanban-board" id="task-kanban"></div>
+          </div>
+          <article class="surface task-board-surface" id="task-list-surface" hidden>
+            <div class="task-table-head">
+              <span>Task</span><span>Owner</span><span>Due</span><span>Status</span><span>Evidence</span><span></span>
+            </div>
+            <div id="task-list" class="task-list"></div>
+            <div id="task-empty" class="empty-state" hidden><div>✓</div><h3>No tasks here</h3><p>Try another filter or add a new task.</p></div>
+          </article>
+        </section>
+
+        <section class="view-panel" data-view-panel="crm">
+          <div class="page-intro">
+            <div><p class="date-line">Growth</p><h2>CRM & opportunities</h2><p>Qualified requests appear here automatically. Add an opportunity directly only when CAGE is proactively pursuing a lead.</p></div>
+            <div class="intro-actions"><span class="prototype-note">Client email? Use New request</span><button class="primary-button" id="new-deal-button">＋ Add proactive opportunity</button></div>
+          </div>
+          <div class="metric-grid" id="crm-metric-grid"></div>
+          <article class="surface pipeline-surface">
+            <div class="surface-heading"><div><p class="section-kicker">Sales pipeline</p><h3>Opportunities by stage</h3></div><span class="legend">Drag cards between stages · Click text to edit</span></div>
+            <div class="pipeline-scroll"><div class="sales-pipeline" id="crm-pipeline"></div></div>
+          </article>
+          <article class="surface client-surface">
+            <div class="surface-heading"><div><p class="section-kicker">Relationships</p><h3>Organisations & next actions</h3></div><button class="text-button" id="show-all-clients">All organisations</button></div>
+            <div class="table-wrap">
+              <table><thead><tr><th>Organisation</th><th>Relationship</th><th>Owner</th><th>Last activity</th><th>Next action</th></tr></thead><tbody id="crm-client-list"></tbody></table>
+            </div>
+          </article>
+        </section>
+
+        <section class="view-panel" data-view-panel="calendar">
+          <div class="page-intro">
+            <div><p class="date-line">Schedule</p><h2>Team calendar</h2><p>Meetings, field missions, training and task deadlines on one shared schedule.</p></div>
+            <div class="intro-actions"><button class="secondary-button" id="calendar-today">Today</button><button class="primary-button" id="new-event-button">＋ New event</button></div>
+          </div>
+          <div class="calendar-toolbar surface">
+            <button class="icon-button" id="calendar-prev" aria-label="Previous month">‹</button>
+            <h3 id="calendar-title">September 2026</h3>
+            <button class="icon-button" id="calendar-next" aria-label="Next month">›</button>
+            <div class="calendar-legend"><span><i class="event-dot meeting"></i>Meeting</span><span><i class="event-dot field"></i>Field</span><span><i class="event-dot deadline"></i>Deadline</span></div>
+          </div>
+          <div class="calendar-layout">
+            <article class="surface calendar-main"><div class="calendar-scroll"><div class="calendar-month" id="calendar-grid"></div></div></article>
+            <aside class="surface agenda-panel"><div class="surface-heading"><div><p class="section-kicker">Next up</p><h3>Agenda</h3></div><span class="live-pill"><span></span> Shared</span></div><div id="calendar-agenda" class="agenda-list"></div></aside>
+          </div>
+        </section>
+
+        <section class="view-panel" data-view-panel="missions">
+          <div class="page-intro">
+            <div><p class="date-line">Field operations</p><h2>Mission control</h2><p>Prepare, clear and track every field deployment from client brief to data handover.</p></div>
+            <button class="primary-button" id="new-mission-button">＋ New mission</button>
+          </div>
+          <div class="metric-grid" id="mission-metric-grid"></div>
+          <div class="mission-layout">
+            <section class="mission-board" id="mission-board"></section>
+            <aside class="surface mission-side-panel">
+              <div class="surface-heading"><div><p class="section-kicker">Next deployment</p><h3>Readiness summary</h3></div></div>
+              <div id="mission-readiness-summary"></div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view-panel" data-view-panel="assets">
+          <div class="page-intro">
+            <div><p class="date-line">Fleet & inventory</p><h2>Equipment</h2><p>Know what is available, assigned or due for attention before planning a mission.</p></div>
+            <button class="primary-button" id="new-asset-button">＋ Add equipment</button>
+          </div>
+          <div class="metric-grid" id="asset-metric-grid"></div>
+          <div class="toolbar asset-toolbar">
+            <div class="segmented-control" id="asset-filters"><button class="active" data-asset-filter="all">All</button><button data-asset-filter="Aircraft">Aircraft</button><button data-asset-filter="Battery">Batteries</button><button data-asset-filter="Survey equipment">Survey equipment</button><button data-asset-filter="Maintenance">Needs attention</button></div>
+            <label class="inline-search"><span>⌕</span><input id="asset-search" type="search" placeholder="Find equipment" aria-label="Find equipment"></label>
+          </div>
+          <div class="asset-grid" id="asset-grid"></div>
+        </section>
+
+        <section class="view-panel" data-view-panel="compliance">
+          <div class="page-intro">
+            <div><p class="date-line">Safety & governance</p><h2>Compliance</h2><p>Keep licences, registrations, insurance, permits and safety reviews current.</p></div>
+            <button class="primary-button" id="new-compliance-button">＋ Add record</button>
+          </div>
+          <div class="metric-grid" id="compliance-metric-grid"></div>
+          <div class="automation-strip surface"><span class="automation-icon">↻</span><span><strong>Automatic renewal reminders</strong><small>Surface licence, permit, insurance and safety reviews before they expire.</small></span><label class="switch"><input id="compliance-reminders" type="checkbox" checked><span></span></label></div>
+          <div class="compliance-layout">
+            <article class="surface compliance-register">
+              <div class="surface-heading"><div><p class="section-kicker">Register</p><h3>Compliance obligations</h3></div><span class="prototype-note">Expiry alerts are calculated automatically</span></div>
+              <div class="table-wrap"><table><thead><tr><th>Requirement</th><th>Owner</th><th>Renewal</th><th>Document</th><th>Status</th></tr></thead><tbody id="compliance-list"></tbody></table></div>
+            </article>
+            <aside class="surface compliance-alerts"><div class="surface-heading"><div><p class="section-kicker">Action queue</p><h3>Upcoming renewals</h3></div></div><div id="compliance-alert-list"></div></aside>
+          </div>
+        </section>
+
+        <section class="view-panel" data-view-panel="chat">
+          <div class="page-intro">
+            <div><p class="date-line">Company communication</p><h2>Work chat</h2><p>One continuous conversation from first request or opportunity through submission, delivery and closure.</p></div>
+            <span class="prototype-note">Press Enter to send · Shift + Enter for a new line</span>
+          </div>
+          <div class="communication-rule surface"><span class="communication-rule-icon">◎</span><span><strong>Use Work chat for CAGE work</strong><small>Requests, decisions, files, approvals and handovers stay searchable and linked to the work. WhatsApp is not the official work record.</small></span></div>
+          <div class="chat-workspace surface">
+            <aside class="chat-channels">
+              <label class="chat-search"><span>⌕</span><input id="chat-search" type="search" placeholder="Search work or messages" aria-label="Search work conversations"></label>
+              <div class="chat-filter" id="chat-filter"><button class="active" data-chat-filter="all">All</button><button data-chat-filter="intake">Intake</button><button data-chat-filter="commercial">Grants & tenders</button><button data-chat-filter="delivery">Delivery</button></div>
+              <div id="chat-channel-list" class="chat-channel-list"></div>
+            </aside>
+            <section class="chat-main">
+              <header class="chat-header" id="chat-header"></header>
+              <div class="chat-context" id="chat-context"></div>
+              <div class="chat-messages" id="chat-messages" aria-live="polite"></div>
+              <form class="chat-composer" id="chat-form">
+                <button type="button" class="chat-tool" id="chat-attach" aria-label="Attach a file">＋</button>
+                <input id="chat-file-input" type="file" hidden>
+                <div class="chat-compose-main"><div class="chat-compose-tools"><select id="chat-message-type" aria-label="Message type"><option value="Update">Update</option><option value="Decision">Decision</option><option value="Question">Question</option><option value="Approval">Approval</option><option value="Client communication">Client communication</option></select><button type="button" id="chat-mention" aria-label="Mention a colleague">@ Mention</button></div><textarea id="chat-input" rows="1" maxlength="1200" placeholder="Write an update, decision or question…" aria-label="Work message"></textarea></div>
+                <button type="submit" class="chat-send">Send</button>
+              </form>
+            </section>
+          </div>
+        </section>
+
+        <section class="view-panel" data-view-panel="finance">
+          <div class="page-intro">
+            <div><p class="date-line">Money</p><h2>Finance</h2><p>Issue invoices, record expenses and see project profitability without leaving operations.</p></div>
+            <div class="intro-actions"><button class="text-button" id="new-expense-button">Record expense</button><button class="secondary-button" id="new-invoice-button">＋ Invoice</button><button class="primary-button" id="new-quote-button">＋ Quote</button></div>
+          </div>
+          <div class="metric-grid" id="finance-metric-grid"></div>
+          <div class="automation-strip surface"><span class="automation-icon">↻</span><span><strong>Automatic payment follow-up</strong><small>Prepare reminder messages for overdue invoices without checking another system.</small></span><label class="switch"><input id="auto-reminders" type="checkbox" checked><span></span></label></div>
+          <article class="surface quotes-surface">
+            <div class="surface-heading"><div><p class="section-kicker">Sales documents</p><h3>Quotes</h3></div><span class="prototype-note">Create, approve and send in one flow</span></div>
+            <div class="table-wrap"><table><thead><tr><th>Quote</th><th>Client</th><th>Valid until</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody id="finance-quote-list"></tbody></table></div>
+          </article>
+          <div class="finance-layout">
+            <article class="surface finance-ledger-surface">
+              <div class="surface-heading"><div><p class="section-kicker">Accounts receivable</p><h3>Invoices</h3></div><div class="segmented-control" id="finance-filters"><button class="active" data-finance-filter="all">All</button><button data-finance-filter="open">Open</button><button data-finance-filter="overdue">Overdue</button><button data-finance-filter="paid">Paid</button></div></div>
+              <div class="table-wrap"><table><thead><tr><th>Invoice</th><th>Client</th><th>Due</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody id="finance-invoice-list"></tbody></table></div>
+            </article>
+            <aside class="surface profitability-panel"><div class="surface-heading"><div><p class="section-kicker">Project view</p><h3>Revenue vs costs</h3></div></div><div id="project-profitability"></div></aside>
+          </div>
+          <article class="surface expenses-surface"><div class="surface-heading"><div><p class="section-kicker">Cashbook</p><h3>Recent expenses</h3></div><span class="prototype-note">Recorded against CAGE projects</span></div><div id="expense-list" class="expense-list"></div></article>
+        </section>
+
+        <section class="view-panel" data-view-panel="approvals">
+          <div class="page-intro">
+            <div><p class="date-line">Decisions</p><h2>Approval inbox</h2><p>Approve money, leave, missions and submissions from one short queue.</p></div>
+            <button class="primary-button" id="new-approval-button">＋ Request approval</button>
+          </div>
+          <div class="metric-grid" id="approval-metric-grid"></div>
+          <div class="approval-layout">
+            <section class="approval-queue" id="approval-list"></section>
+            <aside class="surface approval-rules"><div class="surface-heading"><div><p class="section-kicker">Guardrails</p><h3>Approval rules</h3></div></div><div id="approval-rule-list"></div></aside>
+          </div>
+        </section>
+
+        <section class="view-panel" data-view-panel="commercial">
+          <div class="page-intro">
+            <div><p class="date-line">Growth control</p><h2>Tenders, grants & contracts</h2><p>Track requirements, review gates, signatures and delivery obligations without separate spreadsheets.</p></div>
+            <button class="primary-button" id="new-commercial-button">＋ Add record</button>
+          </div>
+          <div class="metric-grid" id="commercial-metric-grid"></div>
+          <article class="surface opportunity-monitor" aria-label="AI opportunity monitor">
+            <div class="opportunity-monitor-head">
+              <div class="opportunity-monitor-title"><span class="ai-badge">AI</span><div><p class="section-kicker">Daily discovery</p><h3>Opportunity monitor</h3><p>Checks selected funding and procurement sources, scores each result against CAGE capabilities and alerts the team to strong matches.</p></div></div>
+              <button class="primary-button" id="run-opportunity-scan">Run scan now</button>
+            </div>
+            <div class="monitor-control-grid">
+              <div class="monitor-status" id="opportunity-monitor-status"></div>
+              <div class="monitor-sources"><span>Sources monitored</span><div id="opportunity-source-list"></div></div>
+              <div class="monitor-switches">
+                <label><span><strong>Daily alerts</strong><small>Notify the team at 07:00 CAT</small></span><span class="switch"><input id="opportunity-alerts" type="checkbox"><span></span></span></label>
+                <label><span><strong>Auto-create qualified requests</strong><small>Send 80%+ matches to Request centre</small></span><span class="switch"><input id="opportunity-auto-intake" type="checkbox"><span></span></span></label>
+              </div>
+            </div>
+            <div class="opportunity-match-head"><div><strong>Recommended for CAGE</strong><span>Review before applying</span></div><span class="prototype-note">Daily monitored matches</span></div>
+            <div class="opportunity-match-list" id="opportunity-match-list"></div>
+          </article>
+          <div class="toolbar commercial-toolbar">
+            <div class="segmented-control" id="commercial-filters"><button class="active" data-commercial-filter="all">All</button><button data-commercial-filter="Tender">Tenders</button><button data-commercial-filter="Grant">Grants</button><button data-commercial-filter="Contract">Contracts</button><button data-commercial-filter="attention">Needs attention</button></div>
+            <label class="inline-search"><span>⌕</span><input id="commercial-search" type="search" placeholder="Find a tender or contract" aria-label="Find a tender, grant or contract"></label>
+          </div>
+          <div class="commercial-grid" id="commercial-grid"></div>
+        </section>
+
+        <section class="view-panel" data-view-panel="leave">
+          <div class="page-intro">
+            <div><p class="date-line">People</p><h2>Vacation tracker</h2><p>See who is available, request time off and approve leave without separate spreadsheets.</p></div>
+            <button class="primary-button" id="new-leave-button">＋ Request leave</button>
+          </div>
+          <div class="metric-grid" id="leave-metric-grid"></div>
+          <div class="leave-layout">
+            <article class="surface leave-timeline-surface"><div class="surface-heading"><div><p class="section-kicker">September availability</p><h3>Team leave calendar</h3></div><span class="legend"><i class="legend-active"></i> Approved <i class="legend-overdue"></i> Pending</span></div><div id="leave-timeline" class="leave-timeline"></div></article>
+            <aside class="surface leave-balance-surface"><div class="surface-heading"><div><p class="section-kicker">Annual leave</p><h3>Balances</h3></div></div><div id="leave-balances"></div></aside>
+          </div>
+          <article class="surface leave-requests-surface"><div class="surface-heading"><div><p class="section-kicker">Approvals</p><h3>Leave requests</h3></div></div><div class="table-wrap"><table><thead><tr><th>Team member</th><th>Dates</th><th>Type</th><th>Handover</th><th>Status</th></tr></thead><tbody id="leave-request-list"></tbody></table></div></article>
+        </section>
+
+        <section class="view-panel" data-view-panel="knowledge">
+          <div class="page-intro">
+            <div><p class="date-line">Reference</p><h2>Knowledge centre</h2><p>SOPs, templates, technical guides and lessons learned—searchable and linked to CAGE work.</p></div>
+            <button class="primary-button" id="new-knowledge-button">＋ Add reference</button>
+          </div>
+          <div class="toolbar knowledge-toolbar"><div class="segmented-control" id="knowledge-filters"><button class="active" data-knowledge-filter="all">All</button><button data-knowledge-filter="SOP">SOPs</button><button data-knowledge-filter="Template">Templates</button><button data-knowledge-filter="Technical guide">Technical</button><button data-knowledge-filter="Lesson learned">Lessons</button></div><label class="inline-search"><span>⌕</span><input id="knowledge-search" type="search" placeholder="Search references" aria-label="Search knowledge centre"></label></div>
+          <div class="knowledge-layout"><aside class="surface knowledge-pinned"><div class="surface-heading"><div><p class="section-kicker">Quick access</p><h3>Pinned</h3></div></div><div id="knowledge-pinned"></div></aside><div class="knowledge-grid" id="knowledge-grid"></div></div>
+        </section>
+
+        <section class="view-panel" data-view-panel="team">
+          <div class="page-intro">
+            <div><p class="date-line">People & access</p><h2>Team workload and accounts</h2><p>See assignments, verified login emails and access levels in one place.</p></div>
+            <span class="prototype-note">Alexander and Ndapile are administrators</span>
+          </div>
+          <div class="team-summary" id="team-summary"></div>
+          <article class="surface">
+            <div class="surface-heading"><div><p class="section-kicker">User accounts</p><h3>Assignments by person</h3></div><span class="legend"><i class="legend-active"></i> Active <i class="legend-overdue"></i> Overdue</span></div>
+            <div id="team-workload" class="team-workload"></div>
+          </article>
+          <article class="surface shared-accounts-panel">
+            <div class="surface-heading"><div><p class="section-kicker">Shared access</p><h3>Company account</h3></div><span class="prototype-note">Not available for task ownership or leave</span></div>
+            <div id="shared-accounts"></div>
+          </article>
+        </section>
+
+        <section class="view-panel" data-view-panel="hr">
+          <div class="page-intro">
+            <div><p class="date-line">People lifecycle</p><h2>Recruitment and employee records</h2><p>Manage vacancies, applications, interviews and secure employee documents from one place.</p></div>
+            <div class="intro-actions"><a class="secondary-button" href="./careers.html" target="_blank" rel="noopener">Open careers page</a><button class="primary-button hr-privileged" id="new-job-button">＋ New vacancy</button></div>
+          </div>
+          <div class="metric-grid" id="hr-metrics"></div>
+          <div class="hr-top-grid">
+            <article class="surface"><div class="surface-heading"><div><p class="section-kicker">Workforce</p><h3>My employee record</h3></div><button class="text-button" id="upload-cv-button">Upload CV or certificate</button></div><div id="my-employee-profile"></div></article>
+            <article class="surface hr-privileged"><div class="surface-heading"><div><p class="section-kicker">Interview calendar</p><h3>Upcoming interviews</h3></div><button class="text-button" id="schedule-interview-button">Schedule</button></div><div id="interview-list" class="hr-list"></div></article>
+          </div>
+          <article class="surface hr-privileged"><div class="surface-heading"><div><p class="section-kicker">Vacancies</p><h3>Open roles</h3></div><span class="prototype-note">Applications: /careers.html</span></div><div id="job-opening-list" class="hr-list"></div></article>
+          <article class="surface hr-privileged"><div class="surface-heading"><div><p class="section-kicker">Candidate pipeline</p><h3>Applications</h3></div><label class="inline-search"><span>⌕</span><input id="candidate-search" type="search" placeholder="Search candidates"></label></div><div id="candidate-board" class="candidate-board"></div></article>
+        </section>
+
+        <section class="view-panel" data-view-panel="admin">
+          <div class="page-intro"><div><p class="date-line">Administrator only</p><h2>User accounts and roles</h2><p>Invite staff, change access roles and deactivate accounts without changing the database manually.</p></div><button class="primary-button" id="invite-user-button">＋ Invite user</button></div>
+          <article class="surface"><div class="surface-heading"><div><p class="section-kicker">Access control</p><h3>CAGE accounts</h3></div><span class="prototype-note">Changes take effect immediately</span></div><div id="admin-user-list" class="admin-user-list"></div></article>
+          <article class="surface role-guide"><div class="surface-heading"><div><p class="section-kicker">Role guide</p><h3>What each role is for</h3></div></div><div class="role-grid"><div><strong>Administrator</strong><span>Accounts, roles and all company functions</span></div><div><strong>Manager</strong><span>Operational decisions and HR oversight</span></div><div><strong>HR</strong><span>Recruitment and employee records</span></div><div><strong>Finance</strong><span>Finance workflows and reporting</span></div><div><strong>Member</strong><span>Normal project and operational work</span></div><div><strong>Viewer</strong><span>Read-only access</span></div><div><strong>Shared</strong><span>Company mailbox; not assignable</span></div></div></article>
+        </section>
+
+        <section class="view-panel" data-view-panel="evidence">
+          <div class="page-intro">
+            <div><p class="date-line">Completion evidence</p><h2>Documents & deliverables</h2><p>Signed contracts, reports and client deliverables stay connected to the work.</p></div>
+            <button class="secondary-button" id="show-missing-evidence">Show missing only</button>
+          </div>
+          <div class="evidence-grid" id="evidence-grid"></div>
+        </section>
+
+        <section class="view-panel" data-view-panel="reports">
+          <div class="page-intro">
+            <div><p class="date-line">Management report</p><h2>Weekly operations brief</h2><p>A clean summary generated from current project and task records.</p></div>
+            <div class="intro-actions"><button class="secondary-button" id="copy-brief">Copy brief</button><button class="primary-button" id="print-brief">Print report</button></div>
+          </div>
+          <div class="report-layout">
+            <article class="surface report-paper" id="weekly-brief"></article>
+            <aside class="surface report-checklist">
+              <p class="section-kicker">Data quality</p>
+              <h3>System checks</h3>
+              <div id="quality-checks"></div>
+              <button class="full-width-button" id="export-workspace">Export secure backup</button>
+              <label class="full-width-button file-import" id="import-workspace-label">Import workspace backup<input id="import-workspace" type="file" accept="application/json,.json" hidden></label>
+              <button class="full-width-button" id="reset-prototype">Restore sample data</button>
+            </aside>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <button class="mobile-add-button" id="mobile-add" aria-label="Add task">＋</button>
+
+  <dialog id="request-dialog" class="app-dialog">
+    <form method="dialog" id="request-form">
+      <div class="dialog-heading"><div><p class="section-kicker">New business or programme</p><h2>Capture request</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid">
+        <label class="field field-wide"><span>Request title *</span><input name="title" required maxlength="120" placeholder="What is the client or funder asking for?"></label>
+        <label class="field"><span>Organisation *</span><input name="organisation" required maxlength="100" placeholder="Client, funder or issuing organisation"></label>
+        <label class="field"><span>Contact person *</span><input name="contact" required maxlength="100" placeholder="Name or department"></label>
+        <label class="field"><span>Email or phone</span><input name="contactDetail" maxlength="120" placeholder="How CAGE should respond"></label>
+        <label class="field"><span>Purpose of request *</span><select name="type" id="request-type-input"></select><small class="field-help">Admins can add more purposes from Request centre.</small></label>
+        <label class="field"><span>Source</span><select name="source"><option>Email</option><option>WhatsApp</option><option>Website</option><option>Telephone</option><option>Referral</option><option>Tender portal</option><option>Grant portal</option><option>LinkedIn</option><option>AI opportunity monitor</option><option>Existing client</option></select></label>
+        <label class="field"><span>Assigned owner *</span><select name="owner" id="request-owner-input" required></select></label>
+        <label class="field"><span>Priority</span><select name="priority"><option>Normal</option><option>High</option><option>Urgent</option></select></label>
+        <label class="field"><span>Location</span><input name="location" maxlength="120" placeholder="Site, district, country or online"></label>
+        <label class="field"><span>Required date or deadline *</span><input name="deadline" type="date" required></label>
+        <label class="field"><span>Expected delivery date</span><input name="deliveryDeadline" type="date"></label>
+        <label class="field"><span>Estimated value (MWK)</span><input name="value" type="number" min="0" step="1000" placeholder="Optional"></label>
+        <label class="field field-wide"><span>Request summary *</span><textarea name="summary" rows="3" required placeholder="Requirements, outputs and what success looks like"></textarea></label>
+        <label class="field field-wide"><span>Attachments or links</span><input name="attachments" maxlength="220" placeholder="Email thread, tender document, KMZ, brief or Drive location"></label>
+        <label class="field field-wide"><span>Next action *</span><input name="nextAction" required maxlength="160" placeholder="The next specific action and who CAGE is waiting on"></label>
+      </div>
+      <p class="form-error" id="request-form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Create request</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="purpose-dialog" class="app-dialog compact-dialog">
+    <form method="dialog" id="purpose-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Admin setup</p><h2>Request purposes</h2><p>Add the services and enquiry types staff can select during intake.</p></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="purpose-add-row"><input name="purpose" maxlength="60" placeholder="e.g. Construction progress monitoring" aria-label="New request purpose"><button class="primary-button" value="default">＋ Add purpose</button></div>
+      <p class="form-error" id="purpose-form-error" role="alert"></p>
+      <div class="purpose-list" id="purpose-list"></div>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Done</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="request-detail-dialog" class="app-dialog request-detail-dialog">
+    <div id="request-detail-content"></div>
+  </dialog>
+
+  <dialog id="task-dialog" class="app-dialog">
+    <form method="dialog" id="task-form">
+      <div class="dialog-heading">
+        <div><p class="section-kicker" id="task-dialog-kicker">New work item</p><h2 id="task-dialog-title">Add task</h2></div>
+        <button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button>
+      </div>
+      <div class="form-grid">
+        <label class="field field-wide"><span>Task title *</span><input name="title" required maxlength="90" placeholder="What needs to be delivered?"></label>
+        <label class="field field-wide"><span>Expected output *</span><textarea name="output" required rows="3" placeholder="Describe what ‘done’ looks like"></textarea></label>
+        <label class="field"><span>Project *</span><select name="project" id="task-project-input" required></select></label>
+        <label class="field"><span>Accountable owner *</span><select name="owner" id="task-owner-input" required></select></label>
+        <label class="field"><span>Due date *</span><input name="due" type="date" required></label>
+        <label class="field"><span>Priority</span><select name="priority"><option>Medium</option><option>High</option><option>Low</option></select></label>
+        <label class="field"><span>Status</span><select name="status" id="task-status-input"><option>To Do</option><option>Doing</option><option>Blocked</option><option>Done</option></select></label>
+        <label class="field" id="blocker-field" hidden><span>Blocker reason *</span><input name="blocker" placeholder="What is preventing progress?"></label>
+        <label class="field field-wide"><span>Evidence or deliverable</span><input name="evidence" type="text" placeholder="Drive link, file name or completion note"></label>
+      </div>
+      <p class="form-error" id="task-form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default" id="save-task-button">Create task</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="project-dialog" class="app-dialog project-dialog">
+    <div id="project-dialog-content"></div>
+    <div class="dialog-actions"><button class="primary-button" id="close-project-dialog">Close</button></div>
+  </dialog>
+
+  <dialog id="new-project-dialog" class="app-dialog">
+    <form method="dialog" id="project-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Portfolio</p><h2>New project</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid">
+        <label class="field field-wide"><span>Project name *</span><input name="name" required maxlength="90" placeholder="Project name"></label>
+        <label class="field"><span>Client *</span><input name="client" required placeholder="Client or internal sponsor"></label>
+        <label class="field"><span>Project lead *</span><select name="owner" id="project-owner-input" required></select></label>
+        <label class="field"><span>Deadline *</span><input name="deadline" type="date" required min="2026-09-04"></label>
+        <label class="field"><span>Category *</span><select name="category" required><option>Mapping & Data</option><option>Training</option><option>Agriculture</option><option>Equipment Hire</option><option>Disaster Risk</option><option>Internal</option></select></label>
+        <label class="field field-wide"><span>Project outcome *</span><textarea name="outcome" required rows="3" placeholder="What must this project deliver?"></textarea></label>
+      </div>
+      <p class="form-error" id="project-form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default" id="save-project-button">Create project</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="deal-dialog" class="app-dialog">
+    <form method="dialog" id="deal-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Proactive sales lead</p><h2>New opportunity</h2><p>Use this only when CAGE identified the lead. If a client contacted CAGE, capture a request first.</p></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid">
+        <label class="field field-wide"><span>Opportunity name *</span><input name="name" required maxlength="100" placeholder="e.g. ESCOM feeder mapping"></label>
+        <label class="field"><span>Organisation *</span><input name="company" required placeholder="Client or partner"></label>
+        <label class="field"><span>Owner *</span><select name="owner" id="deal-owner-input" required></select></label>
+        <label class="field"><span>Expected value (MWK) *</span><input name="value" type="number" min="0" step="1000" required placeholder="0"></label>
+        <label class="field"><span>Stage</span><select name="stage"><option>Lead</option><option>Qualified</option><option>Proposal</option><option>Negotiation</option><option>Won</option><option>Lost</option></select></label>
+        <label class="field"><span>Next follow-up *</span><input name="nextAction" type="date" required min="2026-09-04"></label>
+        <label class="field"><span>Probability</span><select name="probability"><option value="20">20%</option><option value="40">40%</option><option value="60">60%</option><option value="80">80%</option><option value="100">100%</option></select></label>
+        <label class="field field-wide"><span>Next action *</span><input name="nextStep" required placeholder="What must happen next?"></label>
+      </div>
+      <p class="form-error" id="deal-form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Create opportunity</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="event-dialog" class="app-dialog">
+    <form method="dialog" id="event-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Shared calendar</p><h2>New event</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid">
+        <label class="field field-wide"><span>Event title *</span><input name="title" required maxlength="100" placeholder="Meeting, field mission or training"></label>
+        <label class="field"><span>Date *</span><input name="date" type="date" required></label>
+        <label class="field"><span>Type</span><select name="type"><option>Meeting</option><option>Field</option><option>Training</option><option>Deadline</option></select></label>
+        <label class="field"><span>Start time *</span><input name="start" type="time" required></label>
+        <label class="field"><span>End time *</span><input name="end" type="time" required></label>
+        <label class="field"><span>Owner *</span><select name="owner" id="event-owner-input" required></select></label>
+        <label class="field"><span>Linked project</span><select name="project" id="event-project-input"></select></label>
+        <label class="field field-wide"><span>Attendees or location</span><input name="attendees" placeholder="Team, client or field location"></label>
+      </div>
+      <p class="form-error" id="event-form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Add to calendar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="invoice-dialog" class="app-dialog">
+    <form method="dialog" id="invoice-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Accounts receivable</p><h2>New invoice</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid">
+        <label class="field"><span>Client *</span><input name="client" required placeholder="Client organisation"></label>
+        <label class="field"><span>Linked project *</span><select name="project" id="invoice-project-input" required></select></label>
+        <label class="field"><span>Issue date *</span><input name="issued" type="date" required></label>
+        <label class="field"><span>Due date *</span><input name="due" type="date" required></label>
+        <label class="field"><span>Amount (MWK) *</span><input name="amount" type="number" min="0" step="1000" required placeholder="0"></label>
+        <label class="field"><span>Status</span><select name="status"><option>Draft</option><option>Sent</option><option>Paid</option></select></label>
+        <label class="field field-wide"><span>Recipient email *</span><input name="recipient" type="email" required placeholder="accounts@client.org"></label>
+        <label class="field field-wide"><span>Description *</span><input name="description" required placeholder="Service, milestone or deliverable being billed"></label>
+        <label class="check-field field-wide"><input name="sendNow" type="checkbox"><span><strong>Send immediately after saving</strong><small>Email the invoice now and record delivery in the audit trail.</small></span></label>
+      </div>
+      <p class="form-error" id="invoice-form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Create invoice</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="quote-dialog" class="app-dialog">
+    <form method="dialog" id="quote-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Sales document</p><h2>New quote</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid">
+        <label class="field"><span>Client *</span><input name="client" required placeholder="Client organisation"></label>
+        <label class="field"><span>Linked opportunity</span><select name="deal" id="quote-deal-input"></select></label>
+        <label class="field"><span>Issue date *</span><input name="issued" type="date" required></label>
+        <label class="field"><span>Valid until *</span><input name="validUntil" type="date" required></label>
+        <label class="field"><span>Amount (MWK) *</span><input name="amount" type="number" min="0" step="1000" required placeholder="0"></label>
+        <label class="field"><span>Status</span><select name="status"><option>Draft</option><option>Approved</option></select></label>
+        <label class="field field-wide"><span>Recipient email *</span><input name="recipient" type="email" required placeholder="client@example.org"></label>
+        <label class="field field-wide"><span>Scope summary *</span><textarea name="description" required rows="3" placeholder="What CAGE will deliver"></textarea></label>
+        <label class="check-field field-wide"><input name="sendNow" type="checkbox"><span><strong>Send immediately after saving</strong><small>Available for approved standalone quotes; request-linked quotes still require approval.</small></span></label>
+      </div>
+      <p class="form-error" id="quote-form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Create quote</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="send-dialog" class="app-dialog send-dialog">
+    <form method="dialog" id="send-form">
+      <div class="dialog-heading"><div><p class="section-kicker">One-click delivery</p><h2 id="send-dialog-title">Send document</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <input name="documentType" type="hidden"><input name="documentId" type="hidden">
+      <div class="document-preview" id="send-document-preview"></div>
+      <div class="form-grid">
+        <label class="field field-wide"><span>To *</span><input name="recipient" type="email" required></label>
+        <label class="field field-wide"><span>Subject *</span><input name="subject" required></label>
+        <label class="field field-wide"><span>Message</span><textarea name="message" rows="4"></textarea></label>
+        <label class="check-field field-wide"><input name="automaticFollowUp" type="checkbox" checked><span><strong>Automatic follow-up</strong><small>Prepare a reminder if payment or approval is still outstanding.</small></span></label>
+      </div>
+      <p class="prototype-send-note">Delivery is sent through CAGE's verified email service and recorded in the Hub.</p>
+      <p class="form-error" id="send-form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Send now</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="leave-dialog" class="app-dialog">
+    <form method="dialog" id="leave-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Time off</p><h2>Request leave</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid">
+        <label class="field"><span>Team member *</span><select name="person" id="leave-person-input" required></select></label>
+        <label class="field"><span>Leave type *</span><select name="type"><option>Annual leave</option><option>Sick leave</option><option>Compassionate leave</option><option>Study leave</option><option>Other</option></select></label>
+        <label class="field"><span>Start date *</span><input name="start" type="date" required></label>
+        <label class="field"><span>End date *</span><input name="end" type="date" required></label>
+        <label class="field field-wide"><span>Work handover *</span><textarea name="handover" rows="3" required placeholder="Who covers urgent work and what must they know?"></textarea></label>
+      </div>
+      <p class="form-error" id="leave-form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Submit request</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="knowledge-dialog" class="app-dialog">
+    <form method="dialog" id="knowledge-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Knowledge centre</p><h2>Add reference</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid">
+        <label class="field field-wide"><span>Title *</span><input name="title" required maxlength="110" placeholder="Clear reference title"></label>
+        <label class="field"><span>Category *</span><select name="category"><option>SOP</option><option>Template</option><option>Technical guide</option><option>Lesson learned</option><option>Policy</option></select></label>
+        <label class="field"><span>Owner *</span><select name="owner" id="knowledge-owner-input" required></select></label>
+        <label class="field"><span>Linked project</span><select name="project" id="knowledge-project-input"></select></label>
+        <label class="field"><span>Link or file reference *</span><input name="link" required placeholder="Drive link or file name"></label>
+        <label class="field field-wide"><span>Summary *</span><textarea name="summary" rows="3" required placeholder="What this reference helps the team do"></textarea></label>
+        <label class="check-field field-wide"><input name="pinned" type="checkbox"><span><strong>Pin for quick access</strong></span></label>
+      </div>
+      <p class="form-error" id="knowledge-form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Add reference</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="mission-dialog" class="app-dialog">
+    <form method="dialog" id="mission-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Field operations</p><h2>New mission</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid">
+        <label class="field field-wide"><span>Mission name *</span><input name="title" required maxlength="100" placeholder="e.g. Nyika mapping field capture"></label>
+        <label class="field"><span>Linked project *</span><select name="project" id="mission-project-input" required></select></label>
+        <label class="field"><span>Mission lead *</span><select name="lead" id="mission-lead-input" required></select></label>
+        <label class="field field-wide"><span>Site or coordinates *</span><input name="location" required placeholder="District, site name or map coordinates"></label>
+        <label class="field"><span>Start date *</span><input name="start" type="date" required></label>
+        <label class="field"><span>End date *</span><input name="end" type="date" required></label>
+        <label class="field"><span>Primary equipment</span><select name="asset" id="mission-asset-input"></select></label>
+        <label class="field"><span>Risk level</span><select name="risk"><option>Low</option><option selected>Medium</option><option>High</option></select></label>
+        <label class="field field-wide"><span>Mission objective *</span><textarea name="objective" rows="3" required placeholder="The field result that must be achieved"></textarea></label>
+      </div>
+      <p class="form-error" id="mission-form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Create mission</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="asset-dialog" class="app-dialog">
+    <form method="dialog" id="asset-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Fleet & inventory</p><h2>Add equipment</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid">
+        <label class="field field-wide"><span>Equipment name *</span><input name="name" required maxlength="90" placeholder="e.g. DJI Matrice 4T"></label>
+        <label class="field"><span>Category *</span><select name="category"><option>Aircraft</option><option>Battery</option><option>Survey equipment</option><option>Payload</option><option>Vehicle</option><option>Field kit</option></select></label>
+        <label class="field"><span>Asset tag *</span><input name="tag" required maxlength="30" placeholder="CAGE-DR-001"></label>
+        <label class="field"><span>Custodian *</span><select name="custodian" id="asset-custodian-input" required></select></label>
+        <label class="field"><span>Status</span><select name="status"><option>Available</option><option>Assigned</option><option>Maintenance</option></select></label>
+        <label class="field"><span>Linked project</span><select name="project" id="asset-project-input"></select></label>
+        <label class="field"><span>Condition</span><select name="condition"><option>Excellent</option><option selected>Good</option><option>Monitor</option><option>Repair required</option></select></label>
+        <label class="field"><span>Hours or cycles</span><input name="usage" type="number" min="0" value="0"></label>
+        <label class="field"><span>Next service or check</span><input name="nextService" type="date"></label>
+      </div>
+      <p class="form-error" id="asset-form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Add equipment</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="compliance-dialog" class="app-dialog">
+    <form method="dialog" id="compliance-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Safety & governance</p><h2>Add compliance record</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid">
+        <label class="field field-wide"><span>Requirement *</span><input name="title" required maxlength="110" placeholder="Licence, registration, insurance or safety review"></label>
+        <label class="field"><span>Category *</span><select name="category"><option>Operating approval</option><option>Pilot licence</option><option>Aircraft registration</option><option>Insurance</option><option>Safety review</option><option>Project permit</option></select></label>
+        <label class="field"><span>Responsible owner *</span><select name="owner" id="compliance-owner-input" required></select></label>
+        <label class="field"><span>Renewal or review date *</span><input name="renewal" type="date" required></label>
+        <label class="field"><span>Status</span><select name="status"><option>Active</option><option>Review required</option><option>Renewal submitted</option><option>Expired</option></select></label>
+        <label class="field field-wide"><span>Document reference *</span><input name="document" required placeholder="Drive link, certificate or permit reference"></label>
+        <label class="field field-wide"><span>Notes</span><textarea name="note" rows="2" placeholder="Conditions, limits or next action"></textarea></label>
+      </div>
+      <p class="form-error" id="compliance-form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Add record</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="approval-dialog" class="app-dialog">
+    <form method="dialog" id="approval-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Decision request</p><h2>Request approval</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid">
+        <label class="field field-wide"><span>Decision needed *</span><input name="title" required maxlength="110" placeholder="What needs approval?"></label>
+        <label class="field"><span>Type *</span><select name="type"><option>Purchase</option><option>Mission clearance</option><option>Quote</option><option>Expense</option><option>Leave</option><option>Submission</option><option>Contract</option><option>Other</option></select></label>
+        <label class="field"><span>Requested by *</span><select name="requester" id="approval-requester-input" required></select></label>
+        <label class="field"><span>Decision by *</span><input name="due" type="date" required></label>
+        <label class="field"><span>Amount (MWK)</span><input name="amount" type="number" min="0" step="1000" placeholder="Optional"></label>
+        <label class="field field-wide"><span>Decision summary *</span><textarea name="summary" rows="3" required placeholder="What is being requested, why it is needed and the impact"></textarea></label>
+      </div>
+      <p class="form-error" id="approval-form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Submit request</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="commercial-dialog" class="app-dialog">
+    <form method="dialog" id="commercial-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Growth control</p><h2>Add tender, grant or contract</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid">
+        <label class="field field-wide"><span>Record title *</span><input name="title" required maxlength="120" placeholder="Opportunity or contract name"></label>
+        <label class="field"><span>Type *</span><select name="type"><option>Tender</option><option>Grant</option><option>Contract</option></select></label>
+        <label class="field"><span>Organisation *</span><input name="organisation" required placeholder="Client, funder or issuing organisation"></label>
+        <label class="field"><span>Owner *</span><select name="owner" id="commercial-owner-input" required></select></label>
+        <label class="field"><span>Deadline or renewal *</span><input name="deadline" type="date" required></label>
+        <label class="field"><span>Value (MWK)</span><input name="value" type="number" min="0" step="1000" placeholder="Optional"></label>
+        <label class="field"><span>Stage *</span><select name="stage"><option>Monitoring</option><option>Preparing</option><option>Internal review</option><option>Submitted</option><option>Negotiation</option><option>Active</option><option>Awarded</option><option>Closed</option></select></label>
+        <label class="field"><span>Completion</span><input name="progress" type="number" min="0" max="100" value="10"></label>
+        <label class="field field-wide"><span>Next action *</span><input name="nextAction" required placeholder="The next action, requirement or signature needed"></label>
+      </div>
+      <p class="form-error" id="commercial-form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Add record</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="expense-dialog" class="app-dialog">
+    <form method="dialog" id="expense-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Cashbook</p><h2>Record expense</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid">
+        <label class="field field-wide"><span>Description *</span><input name="description" required maxlength="100" placeholder="What was paid for?"></label>
+        <label class="field"><span>Linked project *</span><select name="project" id="expense-project-input" required></select></label>
+        <label class="field"><span>Category *</span><select name="category"><option>Field operations</option><option>Equipment</option><option>Software</option><option>Training</option><option>Travel</option><option>Administration</option></select></label>
+        <label class="field"><span>Date *</span><input name="date" type="date" required></label>
+        <label class="field"><span>Amount (MWK) *</span><input name="amount" type="number" min="0" step="1000" required placeholder="0"></label>
+        <label class="field field-wide"><span>Receipt reference</span><input name="receipt" placeholder="Receipt number, file name or link"></label>
+      </div>
+      <p class="form-error" id="expense-form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Record expense</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="job-dialog" class="app-dialog">
+    <form method="dialog" id="job-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Recruitment</p><h2>Create vacancy</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid"><label class="field"><span>Job title *</span><input name="title" required></label><label class="field"><span>Department *</span><input name="department" required></label><label class="field"><span>Location *</span><input name="location" required value="Malawi"></label><label class="field"><span>Employment type *</span><select name="employmentType"><option>Permanent</option><option>Fixed-term</option><option>Part-time</option><option>Intern</option><option>Consultant</option></select></label><label class="field"><span>Closing date *</span><input name="closingDate" type="date" required></label><label class="field"><span>Status *</span><select name="status"><option>Draft</option><option>Open</option></select></label><label class="field field-wide"><span>Role description *</span><textarea name="description" rows="4" required></textarea></label><label class="field field-wide"><span>Minimum requirements *</span><textarea name="requirements" rows="4" required></textarea></label></div>
+      <p class="form-error" id="job-form-error"></p><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Create vacancy</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="interview-dialog" class="app-dialog">
+    <form method="dialog" id="interview-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Recruitment</p><h2>Schedule interview</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid"><label class="field field-wide"><span>Candidate *</span><select name="applicationId" id="interview-candidate-input" required></select></label><label class="field"><span>Start *</span><input name="start" type="datetime-local" required></label><label class="field"><span>End *</span><input name="end" type="datetime-local" required></label><label class="field"><span>Format *</span><select name="format"><option>In person</option><option>Video</option><option>Telephone</option></select></label><label class="field"><span>Location or meeting link *</span><input name="location" required></label><label class="field field-wide"><span>Panel members</span><input name="panel" placeholder="Select or list interview panel"></label></div>
+      <p class="form-error" id="interview-form-error"></p><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Schedule interview</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="employee-document-dialog" class="app-dialog">
+    <form method="dialog" id="employee-document-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Employee file</p><h2>Upload document</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid"><label class="field"><span>Document type *</span><select name="documentType"><option>CV</option><option>Certificate</option><option>Licence</option><option>Medical</option><option>ID</option><option>Other</option></select></label><label class="field"><span>Expiry date</span><input name="expiryDate" type="date"></label><label class="field field-wide"><span>File *</span><input name="file" type="file" required accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"></label></div>
+      <p class="form-error" id="employee-document-form-error"></p><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Upload</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="invite-user-dialog" class="app-dialog">
+    <form method="dialog" id="invite-user-form">
+      <div class="dialog-heading"><div><p class="section-kicker">User administration</p><h2>Invite CAGE user</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="form-grid"><label class="field field-wide"><span>Full name *</span><input name="fullName" required></label><label class="field"><span>CAGE email *</span><input name="email" type="email" required placeholder="name@cagemw.com"></label><label class="field"><span>Initials *</span><input name="initials" required maxlength="3"></label><label class="field field-wide"><span>Role *</span><select name="role"><option value="member">Member</option><option value="manager">Manager</option><option value="hr">HR</option><option value="finance">Finance</option><option value="viewer">Viewer</option><option value="admin">Administrator</option><option value="shared">Shared account</option></select></label></div>
+      <p class="form-error" id="invite-user-form-error"></p><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Send invitation</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="search-dialog" class="app-dialog search-dialog">
+    <div class="dialog-heading"><div><p class="section-kicker">Everything in one place</p><h2>Search CAGE</h2></div><button class="icon-button" id="close-search-dialog" aria-label="Close">×</button></div>
+    <div id="search-results" class="search-results"></div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <noscript><div class="noscript">JavaScript is required to use the CAGE Operations Hub.</div></noscript>
+  <script src="./runtime-config.js" defer></script>
+  <script src="./vendor/supabase.js" defer></script>
+  <script src="./production.js" defer></script>
+  <script src="./app.js" defer></script>
+  <script src="./hr.js" defer></script>
+</body>
+</html>

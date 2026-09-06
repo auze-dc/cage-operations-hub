@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 72" role="img" aria-labelledby="title desc">
+  <title id="title">CAGE</title>
+  <desc id="desc">CAGE wordmark with a blue flight-path symbol</desc>
+  <rect width="250" height="72" rx="10" fill="#ffffff"/>
+  <g fill="#071724">
+    <path d="M35 10C15 10 3 22 3 36s12 26 32 26c9 0 17-2 24-7l-8-12c-5 3-9 4-15 4-10 0-16-4-16-11s6-11 16-11c6 0 11 2 15 5l9-12c-7-5-16-8-25-8z"/>
+    <path d="M135 10c-20 0-33 10-33 26 0 17 13 26 34 26 12 0 22-3 30-9V33h-31v12h15v4c-4 1-8 2-13 2-12 0-19-5-19-15 0-9 7-15 19-15 8 0 14 2 19 6l9-11c-8-5-17-6-30-6z"/>
+    <path d="M176 11v50h68V48h-51v-7h43V30h-43v-6h49V11z"/>
+  </g>
+  <path fill="#00adef" d="M80 8 105 62H92l-5-12H68l-5 12H49L75 8zm-3 23-6 10h13z"/>
+  <path fill="#071724" d="m77 8 7 23-7-4-7 4z"/>
+  <path d="M77 29v26" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="4 5"/>
+</svg>

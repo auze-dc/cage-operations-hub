@@ -1,0 +1,37 @@
+project_id = "cage-operations-hub"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 17
+
+[auth]
+enabled = true
+site_url = "http://localhost:4173"
+additional_redirect_urls = ["https://hub.cagemw.com"]
+enable_signup = false
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[functions.send-document]
+verify_jwt = true
+
+[functions.opportunity-scan]
+verify_jwt = false
+
+[functions.admin-users]
+verify_jwt = true
+
+[functions.careers]
+verify_jwt = false
+
+[functions.notify-interview]
+verify_jwt = true

@@ -1,0 +1,21 @@
+{
+  "name": "cage-operations-hub",
+  "version": "11.0.0",
+  "private": true,
+  "description": "Production-ready CAGE Operations Hub",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/check.mjs",
+    "dev": "npx serve dist -l 4173",
+    "export": "node scripts/export.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.4"
+  },
+  "devDependencies": {
+    "archiver": "^7.0.1",
+    "esbuild": "^0.25.9",
+    "serve": "^14.2.4"
+  }
+}

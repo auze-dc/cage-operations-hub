@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#071724">
+  <meta name="description" content="Apply for open roles at CAGE Malawi.">
+  <title>Careers at CAGE</title>
+  <link rel="icon" href="./cage-logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./careers.css">
+</head>
+<body>
+  <header class="career-header"><img src="./cage-logo.svg" alt="CAGE"><a href="https://www.cagemw.com">cagemw.com</a></header>
+  <main>
+    <section class="career-intro">
+      <p class="eyebrow">Careers at CAGE</p>
+      <h1>Build practical technology for Malawi and beyond.</h1>
+      <p>Explore current opportunities in drones, geospatial data, engineering, training and company operations.</p>
+    </section>
+    <section class="jobs" aria-labelledby="jobs-title">
+      <div class="section-heading"><div><p class="eyebrow">Open opportunities</p><h2 id="jobs-title">Available roles</h2></div><span id="job-count"></span></div>
+      <div id="jobs-list" class="jobs-list"><div class="loading">Loading vacancies…</div></div>
+    </section>
+  </main>
+
+  <dialog id="application-dialog">
+    <form id="application-form">
+      <div class="dialog-head"><div><p class="eyebrow">Job application</p><h2 id="application-title">Apply</h2></div><button type="button" id="close-application" aria-label="Close">×</button></div>
+      <input type="hidden" name="jobId" id="application-job-id">
+      <label class="form-honeypot" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
+      <div class="form-grid">
+        <label><span>Full name *</span><input name="fullName" required autocomplete="name"></label>
+        <label><span>Email *</span><input name="email" type="email" required autocomplete="email"></label>
+        <label><span>Telephone *</span><input name="phone" required autocomplete="tel"></label>
+        <label><span>Current location</span><input name="location" autocomplete="address-level2"></label>
+        <label class="wide"><span>Short cover note</span><textarea name="coverNote" rows="5" maxlength="2500" placeholder="Why are you interested, and what relevant experience would you bring?"></textarea></label>
+        <label class="wide"><span>CV *</span><input name="cv" type="file" required accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"><small>PDF, DOC or DOCX; maximum 10 MB.</small></label>
+        <label class="consent wide"><input name="consent" type="checkbox" required><span>I consent to CAGE using this information to assess my application and communicate about this vacancy.</span></label>
+      </div>
+      <p id="application-message" role="alert"></p>
+      <button class="submit" type="submit">Submit application</button>
+    </form>
+  </dialog>
+
+  <footer>© CAGE · Malawi · Applications are reviewed only for legitimate recruitment purposes.</footer>
+  <script src="./runtime-config.js" defer></script>
+  <script src="./careers.js" defer></script>
+</body>
+</html>
