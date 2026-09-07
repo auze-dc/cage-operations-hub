@@ -22,6 +22,12 @@
         <p class="form-error" id="login-error" role="alert"></p>
         <button class="primary-button auth-submit" type="submit">Sign in</button>
       </form>
+      <form id="password-setup-form" class="auth-form" hidden>
+        <label class="field"><span>Create password</span><input id="new-password" name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+        <label class="field"><span>Confirm password</span><input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" minlength="8" required></label>
+        <p class="form-error" id="password-setup-error" role="alert"></p>
+        <button class="primary-button auth-submit" type="submit">Save password and continue</button>
+      </form>
       <button class="text-button auth-reset" id="forgot-password" type="button">Forgot password?</button>
       <p class="auth-support">Access is limited to accounts approved by a CAGE administrator.</p>
     </div>
@@ -51,6 +57,7 @@
         <button class="nav-item" data-view="approvals"><span class="nav-icon">✓</span><span>Approvals</span><span class="nav-count warning" id="approvals-nav-count">0</span></button>
         <span class="nav-section-title">2 · Plan & deliver</span>
         <button class="nav-item" data-view="projects"><span class="nav-icon">▦</span><span>Projects</span><span class="nav-count" id="projects-nav-count">0</span></button>
+        <button class="nav-item" data-view="training"><span class="nav-icon">△</span><span>Training Academy</span><span class="nav-count" id="training-nav-count">0</span></button>
         <button class="nav-item" data-view="tasks"><span class="nav-icon">✓</span><span>Work board</span><span class="nav-count" id="tasks-nav-count">0</span></button>
         <button class="nav-item" data-view="calendar"><span class="nav-icon">□</span><span>Calendar</span><span class="nav-count" id="calendar-nav-count">0</span></button>
         <button class="nav-item" data-view="missions"><span class="nav-icon">⌖</span><span>Mission control</span><span class="nav-count" id="missions-nav-count">0</span></button>
@@ -233,6 +240,19 @@
             <label class="inline-search"><span>⌕</span><input id="project-search" type="search" placeholder="Find a project" aria-label="Find a project"></label>
           </div>
           <div class="project-card-grid" id="project-grid"></div>
+        </section>
+
+        <section class="view-panel" data-view-panel="training">
+          <div class="page-intro">
+            <div><p class="date-line">Learning delivery</p><h2>CAGE Training Academy</h2><p>Manage RPL students, refresher pilots, STEM learners and any other course from enrolment to completion.</p></div>
+            <div class="intro-actions"><button class="secondary-button" id="new-training-program-button">＋ Create course</button><button class="secondary-button" id="new-cohort-button">＋ New cohort</button><button class="primary-button" id="enrol-learner-button">＋ Enrol learner</button></div>
+          </div>
+          <div class="preview-banner"><strong>Correct starting point</strong><span>A new email, call or walk-in starts in Request Centre. Once accepted, open or create the training cohort here and enrol the learners.</span></div>
+          <div class="training-workflow" aria-label="Training workflow"><span>1 · Enquiry</span><i>→</i><span>2 · Enrol</span><i>→</i><span>3 · Documents & fees</span><i>→</i><span>4 · Deliver training</span><i>→</i><span>5 · Assess</span><i>→</i><span>6 · Certify & follow up</span></div>
+          <div class="metric-grid" id="training-metrics"></div>
+          <div class="training-grid"><article class="surface"><div class="surface-heading"><div><p class="section-kicker">Current delivery</p><h3>Active cohorts</h3></div><label class="inline-search"><span>⌕</span><input id="training-search" type="search" placeholder="Find learner or cohort"></label></div><div id="training-cohort-list" class="training-cohort-list"></div></article><aside class="surface"><div class="surface-heading"><div><p class="section-kicker">Action centre</p><h3>Training alerts</h3></div></div><div id="training-alerts" class="training-alerts"></div></aside></div>
+          <article class="surface training-section"><div class="surface-heading"><div><p class="section-kicker">Learner journey</p><h3>Students and participants</h3></div><span class="legend">Drag learners between stages · Use the dropdown on mobile</span></div><div class="learner-board" id="learner-board"></div></article>
+          <article class="surface training-section"><div class="surface-heading"><div><p class="section-kicker">Reusable catalogue</p><h3>Courses CAGE can offer</h3></div><span class="prototype-note">Create any future course without changing the system</span></div><div class="course-grid" id="training-course-grid"></div></article>
         </section>
 
         <section class="view-panel" data-view-panel="tasks">
@@ -845,6 +865,12 @@
     </form>
   </dialog>
 
+  <dialog id="training-program-dialog" class="app-dialog"><form method="dialog" id="training-program-form"><div class="dialog-heading"><div><p class="section-kicker">Training catalogue</p><h2>Create course</h2><p>Use this for any future training CAGE wants to deliver.</p></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div><div class="form-grid"><label class="field field-wide"><span>Course name *</span><input name="name" required></label><label class="field"><span>Training category *</span><select name="category"><option>RPL</option><option>RPL Refresher</option><option>STEM</option><option>Technical</option><option>Corporate</option><option>Other</option></select></label><label class="field"><span>Default duration *</span><input name="duration" required placeholder="e.g. 5 days"></label><label class="field"><span>Default fee per learner (MWK)</span><input name="fee" type="number" min="0" step="1000"></label><label class="field"><span>Certificate *</span><select name="certificate"><option>CAGE certificate</option><option>RPL / regulatory pathway</option><option>Attendance certificate</option><option>None</option></select></label><label class="field field-wide"><span>Required documents or controls</span><input name="requirements" placeholder="ID, medical, existing RPL, guardian consent, etc."></label><label class="field field-wide"><span>Course outcome *</span><textarea name="outcome" required rows="3"></textarea></label></div><p class="form-error" id="training-program-error"></p><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Create course</button></div></form></dialog>
+
+  <dialog id="training-cohort-dialog" class="app-dialog"><form method="dialog" id="training-cohort-form"><div class="dialog-heading"><div><p class="section-kicker">Training delivery</p><h2>Create cohort</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div><div class="form-grid"><label class="field field-wide"><span>Cohort name *</span><input name="name" required></label><label class="field"><span>Course *</span><select name="courseId" id="cohort-course-input" required></select></label><label class="field"><span>Lead instructor *</span><select name="lead" id="cohort-lead-input" required></select></label><label class="field"><span>Start date *</span><input name="start" type="date" required></label><label class="field"><span>End date *</span><input name="end" type="date" required></label><label class="field"><span>Venue *</span><input name="venue" required></label><label class="field"><span>Capacity *</span><input name="capacity" type="number" min="1" value="12" required></label><label class="field field-wide"><span>Linked accepted request or client</span><input name="source" placeholder="Request number, client or internal programme"></label></div><p class="form-error" id="training-cohort-error"></p><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Create cohort</button></div></form></dialog>
+
+  <dialog id="learner-dialog" class="app-dialog"><form method="dialog" id="learner-form"><div class="dialog-heading"><div><p class="section-kicker">Student record</p><h2>Enrol learner</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div><div class="form-grid"><label class="field field-wide"><span>Full name *</span><input name="fullName" required></label><label class="field"><span>Email</span><input name="email" type="email"></label><label class="field"><span>Phone *</span><input name="phone" required></label><label class="field"><span>Date of birth</span><input name="dob" type="date"></label><label class="field"><span>Cohort *</span><select name="cohortId" id="learner-cohort-input" required></select></label><label class="field"><span>Fee status *</span><select name="feeStatus"><option>Not invoiced</option><option>Invoiced</option><option>Part-paid</option><option>Paid</option><option>Sponsored</option></select></label><label class="field field-wide"><span>Organisation or sponsor</span><input name="sponsor"></label><label class="field training-conditional" id="rpl-fields"><span>Existing RPL number / expiry</span><input name="rplNumber"></label><label class="field training-conditional" id="guardian-fields"><span>Parent or guardian</span><input name="guardian"></label><label class="check-field field-wide"><input name="documentsComplete" type="checkbox"><span><strong>Required documents received</strong><small>ID/medical for RPL, existing licence for refresher, or guardian consent for minors.</small></span></label></div><p class="form-error" id="learner-form-error"></p><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Enrol learner</button></div></form></dialog>
+
   <dialog id="interview-dialog" class="app-dialog">
     <form method="dialog" id="interview-form">
       <div class="dialog-heading"><div><p class="section-kicker">Recruitment</p><h2>Schedule interview</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
@@ -881,5 +907,6 @@
   <script src="./production.js" defer></script>
   <script src="./app.js" defer></script>
   <script src="./hr.js" defer></script>
+  <script src="./training.js" defer></script>
 </body>
 </html>

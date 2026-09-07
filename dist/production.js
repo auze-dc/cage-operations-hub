@@ -6,6 +6,12 @@
   const banner = document.getElementById("sync-banner");
   const loginForm = document.getElementById("login-form");
   const loginError = document.getElementById("login-error");
+  const passwordSetupForm = document.getElementById("password-setup-form");
+  const passwordSetupError = document.getElementById("password-setup-error");
+  const forgotPasswordButton = document.getElementById("forgot-password");
+  const authCallbackType = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("type")
+    || new URLSearchParams(window.location.search).get("type");
+  let passwordSetupPending = ["invite", "recovery"].includes(authCallbackType);
   let client = null;
   let app = null;
   let profile = null;
@@ -32,7 +38,22 @@
   function showLogin(message = "") {
     document.body.classList.add("auth-pending");
     gate.hidden = false;
+    loginForm.hidden = false;
+    passwordSetupForm.hidden = true;
+    forgotPasswordButton.hidden = false;
+    document.getElementById("auth-title").textContent = "Sign in to Operations Hub";
     loginError.textContent = message;
+  }
+
+  function showPasswordSetup(message = "") {
+    document.body.classList.add("auth-pending");
+    gate.hidden = false;
+    loginForm.hidden = true;
+    passwordSetupForm.hidden = false;
+    forgotPasswordButton.hidden = true;
+    document.getElementById("auth-title").textContent = authCallbackType === "recovery" ? "Choose a new password" : "Complete your CAGE account";
+    passwordSetupError.textContent = message;
+    document.getElementById("new-password").focus();
   }
 
   function hideLogin() {
@@ -206,8 +227,18 @@
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
     });
     const { data } = await client.auth.getSession();
-    await establishSession(data.session);
+    if (passwordSetupPending && data.session) showPasswordSetup();
+    else await establishSession(data.session);
     client.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") {
+        passwordSetupPending = true;
+        showPasswordSetup();
+        return;
+      }
+      if (event === "SIGNED_IN" && passwordSetupPending) {
+        showPasswordSetup();
+        return;
+      }
       if (event === "SIGNED_IN" && session?.user && profile?.id !== session.user.id) establishSession(session);
       if (event === "SIGNED_OUT") {
         profile = null;
@@ -232,7 +263,33 @@
     button.textContent = "Sign in";
   });
 
-  document.getElementById("forgot-password").addEventListener("click", async () => {
+  passwordSetupForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!client) return;
+    passwordSetupError.textContent = "";
+    const password = document.getElementById("new-password").value;
+    const confirmation = document.getElementById("confirm-password").value;
+    if (password !== confirmation) {
+      passwordSetupError.textContent = "The two passwords do not match.";
+      return;
+    }
+    const button = event.submitter;
+    button.disabled = true;
+    button.textContent = "Saving password…";
+    const { data, error } = await client.auth.updateUser({ password });
+    if (error) {
+      passwordSetupError.textContent = error.message;
+      button.disabled = false;
+      button.textContent = "Save password and continue";
+      return;
+    }
+    passwordSetupPending = false;
+    history.replaceState({}, document.title, window.location.pathname);
+    button.textContent = "Password saved";
+    await establishSession(data.user ? (await client.auth.getSession()).data.session : null);
+  });
+
+  forgotPasswordButton.addEventListener("click", async () => {
     const email = document.getElementById("login-email").value.trim().toLowerCase();
     if (!email) {
       loginError.textContent = "Enter your approved email address first.";
@@ -361,6 +418,60 @@
     return result.data;
   }
 
+  async function loadTraining() {
+    if (!client || !profile) throw new Error("Sign in first.");
+    const [courses, cohorts, learners, staff] = await Promise.all([
+      client.from("training_courses").select("*").eq("organization_id", config.organizationId).order("name"),
+      client.from("training_cohorts").select("*").eq("organization_id", config.organizationId).order("start_date", { ascending: false }),
+      client.from("learners").select("*").eq("organization_id", config.organizationId).order("created_at", { ascending: false }),
+      client.from("profiles").select("id, full_name, email, active, assignable").eq("organization_id", config.organizationId).eq("active", true)
+    ]);
+    const failed = [courses, cohorts, learners, staff].find(result => result.error);
+    if (failed?.error) throw new Error(failed.error.message);
+    return { courses: courses.data || [], cohorts: cohorts.data || [], learners: learners.data || [], staff: (staff.data || []).filter(item => item.assignable !== false) };
+  }
+
+  async function createTrainingCourse(payload) {
+    const result = await client.from("training_courses").insert({
+      organization_id: config.organizationId, name: payload.name, category: payload.category,
+      duration: payload.duration, default_fee: Number(payload.fee || 0), certificate_type: payload.certificate,
+      requirements: payload.requirements || null, outcome: payload.outcome, created_by: profile.id
+    }).select().single();
+    if (result.error) throw new Error(result.error.message);
+    return result.data;
+  }
+
+  async function createTrainingCohort(payload) {
+    const result = await client.from("training_cohorts").insert({
+      organization_id: config.organizationId, course_id: payload.courseId, name: payload.name,
+      lead_instructor: payload.lead || null, start_date: payload.start, end_date: payload.end,
+      venue: payload.venue, capacity: Number(payload.capacity), source_reference: payload.source || null,
+      status: "Planned", created_by: profile.id
+    }).select().single();
+    if (result.error) throw new Error(result.error.message);
+    return result.data;
+  }
+
+  async function createLearner(payload) {
+    const expiryMatch = String(payload.rplNumber || "").match(/\b(20\d{2}-\d{2}-\d{2})\b/);
+    const result = await client.from("learners").insert({
+      organization_id: config.organizationId, cohort_id: payload.cohortId, full_name: payload.fullName,
+      email: payload.email || null, phone: payload.phone, date_of_birth: payload.dob || null,
+      sponsor: payload.sponsor || null, guardian_name: payload.guardian || null, rpl_number: payload.rplNumber || null,
+      rpl_expiry: expiryMatch?.[1] || null, renewal_due: expiryMatch?.[1] || null,
+      stage: payload.documentsComplete ? "Registered" : "Documents pending", fee_status: payload.feeStatus,
+      documents_complete: Boolean(payload.documentsComplete), created_by: profile.id
+    }).select().single();
+    if (result.error) throw new Error(result.error.message);
+    return result.data;
+  }
+
+  async function updateLearnerStage(id, stage) {
+    const result = await client.from("learners").update({ stage, updated_at: new Date().toISOString() }).eq("id", id).eq("organization_id", config.organizationId).select().single();
+    if (result.error) throw new Error(result.error.message);
+    return result.data;
+  }
+
   window.CAGE_BACKEND = {
     boot,
     scheduleSave,
@@ -373,6 +484,11 @@
     scheduleInterview,
     uploadEmployeeDocument,
     adminUsers,
+    loadTraining,
+    createTrainingCourse,
+    createTrainingCohort,
+    createLearner,
+    updateLearnerStage,
     isProduction: configured,
     currentProfile: () => profile,
     currentMemberId: () => profile?.email?.split("@")[0] === "bonfancio" ? "bonifancio" : profile?.email?.split("@")[0] || "alexander"
