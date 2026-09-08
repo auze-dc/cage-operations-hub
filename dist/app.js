@@ -291,7 +291,8 @@ const seedData = {
     autoIntake: false,
     lastScan: "2026-09-05T07:00:00+02:00",
     nextScan: "2026-09-09T07:00:00+02:00",
-    sources: ["UNGM & UN portals", "World Bank Procurement", "DevelopmentAid", "Public LinkedIn, Facebook & X posts", "Official funder and tender pages"]
+    sources: ["11 global aggregators", "5 UN & multilateral portals", "6 development banks", "6 government & bilateral portals", "7 innovation & impact platforms", "5 climate & conservation portals", "5 NGO & humanitarian portals", "Public LinkedIn & X posts"],
+    coverage: ["Opportunity Desk", "Devex Funding", "DevelopmentAid", "Funds for NGOs", "Opportunities for Africans", "Youth Opportunities", "Terra Viva Grants Directory", "TripleFunds", "MangoFetch", "TendersGo", "TendersInfo", "UNGM", "UNICEF Supply Division", "UNOPS Procurement", "UNDP Procurement Notices", "NATO Procurement", "World Bank Procurement / eConsultant2", "African Development Bank", "Asian Development Bank", "Inter-American Development Bank", "European Bank for Reconstruction and Development", "Islamic Development Bank", "SAM.gov / USAID opportunities", "TED European tenders", "FCDO", "GIZ", "AusTender", "GeBIZ", "develoPPP", "UNICEF Venture Fund", "GSMA Innovation Fund", "Google.org / Google for Startups", "Grand Challenges", "USAID Development Innovation Ventures", "SGCI Africa", "IUCN", "WWF", "Conservation International", "Global Environment Facility", "Green Climate Fund", "ReliefWeb consultancies", "Mercy Corps", "Oxfam", "Save the Children", "Catholic Relief Services", "LinkedIn public posts", "X public posts"]
   },
   settings: {
     workspaceName: "Operations Hub",
@@ -628,7 +629,7 @@ function loadState() {
         return hasLiveResults ? existing : clone(seedData.opportunityMatches);
       })(),
       opportunityMonitor: parsed.opportunityMonitor && typeof parsed.opportunityMonitor === "object"
-        ? { ...clone(seedData.opportunityMonitor), ...parsed.opportunityMonitor }
+        ? { ...clone(seedData.opportunityMonitor), ...parsed.opportunityMonitor, sources: clone(seedData.opportunityMonitor.sources), coverage: clone(seedData.opportunityMonitor.coverage) }
         : clone(seedData.opportunityMonitor),
       settings: parsed.settings && typeof parsed.settings === "object" ? { ...clone(seedData.settings), ...parsed.settings } : clone(seedData.settings)
     };
@@ -1745,7 +1746,8 @@ function renderOpportunityMonitor() {
     <span class="monitor-live-dot ${monitor.enabled === false ? "paused" : ""}"></span>
     <div><strong>${monitor.enabled === false ? "Weekday checking paused" : "Weekday check scheduled"}</strong><small>Last: ${escapeHtml(formatMonitorTime(monitor.lastScan))}<br>Next: ${escapeHtml(formatMonitorTime(monitor.nextScan))}</small></div>
     <b>${matches.filter(item => item.status === "New").length} new</b>`;
-  document.getElementById("opportunity-source-list").innerHTML = monitor.sources.map(source => `<span>${escapeHtml(source)}</span>`).join("");
+  document.getElementById("opportunity-source-list").innerHTML = `${monitor.sources.map(source => `<span>${escapeHtml(source)}</span>`).join("")}
+    <details class="monitor-source-details"><summary>View all ${monitor.coverage.length} named source platforms</summary><div>${monitor.coverage.map(source => `<span>${escapeHtml(source)}</span>`).join("")}</div></details>`;
   const deadlineLabel = match => match.deadline === "Rolling" ? "Rolling" : formatDate(match.deadline, { year: true });
   document.getElementById("opportunity-match-list").innerHTML = matches.length ? `
     <div class="opportunity-table-wrap"><table class="opportunity-table"><thead><tr><th>Opportunity Title</th><th>Organization / Client</th><th>Source / Platform</th><th>Estimated Value / Budget</th><th>Deadline</th><th>Direct URL</th><th>Qualification Match Score</th></tr></thead><tbody>${matches.map(match => `

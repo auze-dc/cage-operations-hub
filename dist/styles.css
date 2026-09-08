@@ -287,6 +287,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .monitor-sources > span { display: block; margin-bottom: 9px; color: var(--muted-light); font-size: .68rem; font-weight: 800; text-transform: uppercase; }
 .monitor-sources > div { display: flex; flex-wrap: wrap; gap: 6px; }
 .monitor-sources > div span { padding: 5px 8px; border-radius: 7px; color: #385166; background: #eef5f8; font-size: .67rem; font-weight: 700; }
+.monitor-source-details { flex-basis: 100%; margin-top: 8px; border-top: 1px solid var(--line); padding-top: 8px; }
+.monitor-source-details summary { width: max-content; cursor: pointer; color: var(--primary); font-size: .76rem; font-weight: 800; }
+.monitor-source-details > div { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 9px; }
 .monitor-switches { display: grid; gap: 8px; }
 .monitor-switches > label { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .monitor-switches strong, .monitor-switches small { display: block; }
