@@ -316,6 +316,8 @@ let missingEvidenceOnly = false;
 let calendarCursor = new Date(`${TODAY.slice(0, 7)}-01T00:00:00Z`);
 let draggedTaskId = null;
 let draggedDealId = null;
+let activeProjectId = "";
+let activeProjectTab = "overview";
 let toastTimer;
 
 const viewMeta = {
@@ -1102,7 +1104,7 @@ function renderProjects() {
     const owner = teamMember(project.owner);
     const members = project.team.map(id => teamMember(id));
     return `
-      <article class="project-card">
+      <article class="project-card" data-project-detail="${project.id}">
         <div class="project-card-top"><span class="project-glyph">${escapeHtml(project.category.slice(0,2).toUpperCase())}</span><span class="status-pill ${health}">${healthLabel(health)}</span></div>
         <h3>${escapeHtml(project.name)}</h3>
         <p class="project-client">${escapeHtml(project.client)} · Led by ${escapeHtml(owner.name)}</p>
@@ -3137,24 +3139,128 @@ function requestCommercialReview(recordId) {
   showToast("Internal review sent to the approval inbox.");
 }
 
-function openProject(projectId) {
-  const project = projectById(projectId);
+const PROJECT_WORKSPACE_TABS = [
+  ["overview", "Overview"], ["members", "Members"], ["files", "Files"],
+  ["milestones", "Milestones"], ["tasks", "Tasks"], ["board", "Task board"],
+  ["timeline", "Timeline"], ["invoices", "Invoices"], ["quotes", "Quotations"], ["chat", "Work chat"]
+];
+
+function ensureProjectWorkspace(project) {
+  if (!Array.isArray(project.team)) project.team = [project.owner].filter(Boolean);
+  if (project.owner && !project.team.includes(project.owner)) project.team.unshift(project.owner);
+  if (!Array.isArray(project.milestones)) project.milestones = [];
+  if (!Array.isArray(project.files)) project.files = [];
+}
+
+function projectLinkedQuotes(projectId) {
+  const dealIds = state.deals.filter(deal => deal.project === projectId).map(deal => deal.id);
+  const requestDealIds = state.requests.filter(request => request.project === projectId && request.deal).map(request => request.deal);
+  const ids = new Set([...dealIds, ...requestDealIds]);
+  return state.quotes.filter(quote => ids.has(quote.deal));
+}
+
+function projectReferenceFiles(project) {
+  const uploaded = project.files.map(file => ({ ...file, source: "Project upload" }));
+  const taskFiles = projectTasks(project.id).filter(task => task.evidence).map(task => ({ id: `task-${task.id}`, name: task.evidence, uploaded: task.updated, source: task.title }));
+  const chatFiles = state.messages.filter(message => message.project === project.id && message.attachment).map(message => ({ id: `chat-${message.id}`, name: message.attachment, path: message.attachmentPath, uploaded: message.date, source: "Work chat" }));
+  const references = state.knowledge.filter(item => item.project === project.id && item.link).map(item => ({ id: `knowledge-${item.id}`, name: item.link, uploaded: item.updated, source: item.title }));
+  return [...uploaded, ...taskFiles, ...chatFiles, ...references];
+}
+
+function projectTimeline(tasks) {
+  if (!tasks.length) return `<div class="project-empty"><strong>No tasks to plot</strong><span>Add tasks with due dates to build the project timeline.</span></div>`;
+  const dates = tasks.flatMap(task => [task.updated || task.due, task.due]).filter(Boolean).sort();
+  const start = asDate(dates[0]);
+  const end = asDate(dates[dates.length - 1]);
+  const span = Math.max(1, Math.round((end - start) / 86400000));
+  return `<div class="project-timeline-head"><span>${formatDate(dates[0], { year: true })}</span><strong>Project timeline</strong><span>${formatDate(dates[dates.length - 1], { year: true })}</span></div><div class="project-timeline">${tasks.slice().sort((a, b) => a.due.localeCompare(b.due)).map(task => {
+    const taskStart = asDate(task.updated || task.due);
+    const taskEnd = asDate(task.due);
+    const left = Math.max(0, Math.min(96, ((taskStart - start) / 86400000) / span * 100));
+    const width = Math.max(4, Math.min(100 - left, (Math.max(1, (taskEnd - taskStart) / 86400000) / span) * 100));
+    return `<div class="timeline-row"><button data-task-detail="${task.id}"><strong>${escapeHtml(task.title)}</strong><span>${escapeHtml(teamMember(task.owner).name)} · ${formatDate(task.due)}</span></button><div class="timeline-track"><span class="${statusClass(task.status)}" style="left:${left}%;width:${width}%" title="${escapeHtml(task.status)}"></span></div></div>`;
+  }).join("")}</div>`;
+}
+
+function projectWorkspaceTab(project, context) {
+  const { owner, tasks, progress, revenue, costs, invoices, quotes, events, missions, members, files } = context;
+  if (activeProjectTab === "overview") return `
+    <div class="project-kpi-grid"><div><span>Progress</span><strong>${progress}%</strong><small>${tasks.filter(task => task.status === "Done").length} of ${tasks.length} tasks complete</small></div><div><span>Deadline</span><strong>${formatDate(project.deadline, { year: true })}</strong><small>${projectHealth(project) === "attention" ? "Needs management attention" : "Delivery is on track"}</small></div><div><span>Project lead</span><strong>${escapeHtml(owner.name)}</strong><small>${members.length} project members</small></div><div><span>Balance</span><strong>${formatMoney(revenue - costs, true)}</strong><small>${formatMoney(revenue, true)} invoiced</small></div></div>
+    <div class="project-overview-grid"><section class="project-panel"><div class="project-panel-heading"><div><span>Required outcome</span><h3>What success looks like</h3></div></div><p class="project-outcome">${escapeHtml(project.outcome)}</p><div class="project-progress-large"><div><span>Delivery progress</span><strong>${progress}%</strong></div><div class="progress-track"><span style="width:${progress}%"></span></div></div></section><section class="project-panel"><div class="project-panel-heading"><div><span>Next actions</span><h3>Upcoming work</h3></div><button data-new-task-project="${project.id}">＋ Add task</button></div><div class="project-activity-list">${tasks.filter(task => task.status !== "Done").sort((a,b) => a.due.localeCompare(b.due)).slice(0,4).map(task => `<button data-task-detail="${task.id}"><span class="status-dot ${statusClass(task.status)}"></span><span><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(teamMember(task.owner).name)} · Due ${formatDate(task.due)}</small></span><b>›</b></button>`).join("") || `<div class="project-empty"><strong>No outstanding tasks</strong><span>This project has no open work.</span></div>`}</div></section></div>
+    <div class="project-overview-grid"><section class="project-panel"><div class="project-panel-heading"><div><span>Schedule</span><h3>Events and missions</h3></div></div><div class="project-summary-list"><span><b>${events.length}</b> calendar events</span><span><b>${missions.length}</b> field missions</span><span><b>${project.milestones.filter(item => item.complete).length}/${project.milestones.length}</b> milestones complete</span></div></section><section class="project-panel"><div class="project-panel-heading"><div><span>Financials</span><h3>Project position</h3></div></div><div class="project-summary-list"><span><b>${formatMoney(revenue, true)}</b> invoiced</span><span><b>${formatMoney(costs, true)}</b> recorded costs</span><span><b>${quotes.length}</b> linked quotations</span></div></section></div>`;
+
+  if (activeProjectTab === "members") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Project team</span><h3>${members.length} members</h3></div><div class="project-inline-action"><select id="project-member-select" aria-label="Select a member"><option value="">Add a colleague…</option>${assignableTeam().filter(member => !project.team.includes(member.id)).map(member => `<option value="${member.id}">${escapeHtml(member.name)}</option>`).join("")}</select><button data-add-project-member="${project.id}">＋ Add</button></div></div><div class="project-member-grid">${members.map(member => `<article><span class="owner-avatar">${member.initials}</span><div><strong>${escapeHtml(member.name)}</strong><small>${escapeHtml(member.role)}</small><em>${member.id === project.owner ? "Project lead" : "Project member"}</em></div>${member.id !== project.owner ? `<button data-remove-project-member="${project.id}" data-member-id="${member.id}" aria-label="Remove ${escapeHtml(member.name)}">×</button>` : ""}</article>`).join("")}</div></section>`;
+
+  if (activeProjectTab === "files") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Documents and evidence</span><h3>${files.length} project files</h3></div><label class="project-upload-button">＋ Upload file<input type="file" data-project-file-input="${project.id}" hidden></label></div><div class="project-file-list">${files.map(file => `<button ${file.path ? `data-open-project-file="${escapeHtml(file.id)}"` : ""} class="${file.path ? "" : "reference-only"}"><span class="project-file-icon">▤</span><span><strong>${escapeHtml(file.name)}</strong><small>${escapeHtml(file.source)}${file.uploaded ? ` · ${formatDate(file.uploaded)}` : ""}</small></span><b>${file.path ? "Open" : "Reference"}</b></button>`).join("") || `<div class="project-empty"><strong>No files recorded</strong><span>Upload a project document or attach evidence to a task.</span></div>`}</div></section>`;
+
+  if (activeProjectTab === "milestones") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Delivery checkpoints</span><h3>Milestones</h3></div><button data-add-project-milestone="${project.id}">＋ Add milestone</button></div><div class="milestone-list">${project.milestones.slice().sort((a,b) => a.due.localeCompare(b.due)).map(item => `<label class="milestone-row ${item.complete ? "complete" : ""}"><input type="checkbox" data-project-milestone-toggle="${item.id}" ${item.complete ? "checked" : ""}><span><strong>${escapeHtml(item.title)}</strong><small>Due ${formatDate(item.due, { year: true })}</small></span><em>${item.complete ? "Complete" : item.due < TODAY ? "Overdue" : "Upcoming"}</em></label>`).join("") || `<div class="project-empty"><strong>No milestones yet</strong><span>Add the major approval, delivery and completion checkpoints for this project.</span></div>`}</div></section>`;
+
+  if (activeProjectTab === "tasks") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Execution</span><h3>${tasks.length} project tasks</h3></div><button data-new-task-project="${project.id}">＋ Add task</button></div><div class="project-task-table">${tasks.slice().sort((a,b) => a.due.localeCompare(b.due)).map(task => `<div><button data-task-detail="${task.id}"><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.output)}</small></button><span class="owner-chip"><span class="owner-avatar">${teamMember(task.owner).initials}</span>${escapeHtml(teamMember(task.owner).name.split(" ")[0])}</span><span class="due-date ${isOverdue(task) ? "overdue" : ""}">${formatDate(task.due)}</span><select data-task-status="${task.id}" aria-label="Status for ${escapeHtml(task.title)}">${["To Do", "Doing", "Blocked", "Done"].map(status => `<option ${status === task.status ? "selected" : ""}>${status}</option>`).join("")}</select></div>`).join("") || `<div class="project-empty"><strong>No tasks yet</strong><span>Add the first task to start tracking delivery.</span></div>`}</div></section>`;
+
+  if (activeProjectTab === "board") return `<div class="project-board">${["To Do", "Doing", "Blocked", "Done"].map(status => `<section><div class="project-board-head"><strong>${status}</strong><span>${tasks.filter(task => task.status === status).length}</span></div><div>${tasks.filter(task => task.status === status).map(task => `<article><button data-task-detail="${task.id}">${escapeHtml(task.title)}</button><span><small>${escapeHtml(teamMember(task.owner).name.split(" ")[0])}</small><small>${formatDate(task.due)}</small></span></article>`).join("") || `<p>No cards</p>`}</div><button data-new-task-project="${project.id}">＋ Add task</button></section>`).join("")}</div>`;
+
+  if (activeProjectTab === "timeline") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Schedule visual</span><h3>Task timeline</h3></div><button data-new-event-project="${project.id}">＋ Schedule event</button></div>${projectTimeline(tasks)}</section>`;
+
+  if (activeProjectTab === "invoices") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Billing</span><h3>${invoices.length} project invoices</h3></div><button data-new-invoice-project="${project.id}">＋ Create invoice</button></div><div class="project-finance-list">${invoices.map(invoice => `<div><span><strong>${escapeHtml(invoice.number)}</strong><small>${escapeHtml(invoice.description)}</small></span><span><strong>${formatMoney(invoice.amount, true)}</strong><small>Due ${formatDate(invoice.due)}</small></span><span class="status-pill ${statusClass(invoice.status)}">${escapeHtml(invoice.status)}</span><button data-send-document="invoice" data-document-id="${invoice.id}">${invoice.sentAt ? "Resend" : "Send"}</button></div>`).join("") || `<div class="project-empty"><strong>No invoices yet</strong><span>Create the first project invoice when a billing milestone is reached.</span></div>`}</div></section>`;
+
+  if (activeProjectTab === "quotes") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Commercial record</span><h3>${quotes.length} linked quotations</h3></div>${context.primaryDeal ? `<button data-new-quote-deal="${context.primaryDeal.id}">＋ Create quotation</button>` : ""}</div><div class="project-finance-list">${quotes.map(quote => `<div><span><strong>${escapeHtml(quote.number)}</strong><small>${escapeHtml(quote.description)}</small></span><span><strong>${formatMoney(quote.amount, true)}</strong><small>Valid to ${formatDate(quote.validUntil)}</small></span><span class="status-pill ${statusClass(quote.status)}">${escapeHtml(quote.status)}</span><button data-send-document="quote" data-document-id="${quote.id}">${quote.sentAt ? "Resend" : "Send"}</button></div>`).join("") || `<div class="project-empty"><strong>No linked quotations</strong><span>${context.primaryDeal ? "Create a quotation for the linked opportunity." : "This project has no linked CRM opportunity."}</span></div>`}</div></section>`;
+
+  const messages = state.messages.filter(message => message.project === project.id || message.thread === project.request);
+  return `<section class="project-panel"><div class="project-panel-heading"><div><span>Project communication</span><h3>Recent work chat</h3></div><button data-open-project-chat="${project.id}">Open full chat</button></div><div class="project-chat-preview">${messages.slice(-6).map(message => `<article><span class="owner-avatar">${teamMember(message.sender).initials}</span><div><strong>${escapeHtml(teamMember(message.sender).name)} <small>${formatDate(message.date)} · ${escapeHtml(message.time || "")}</small></strong><p>${escapeHtml(message.text)}</p>${message.attachment ? `<button data-preview-chat-file="${message.id}">▤ ${escapeHtml(message.attachment)}</button>` : ""}</div></article>`).join("") || `<div class="project-empty"><strong>No project messages</strong><span>Open Work Chat to start the project conversation.</span></div>`}</div></section>`;
+}
+
+function renderProjectWorkspace() {
+  const project = projectById(activeProjectId);
   if (!project) return;
+  ensureProjectWorkspace(project);
   const owner = teamMember(project.owner);
   const tasks = projectTasks(project.id);
   const progress = projectProgress(project.id);
   const health = projectHealth(project);
-  const revenue = state.invoices.filter(invoice => invoice.project === project.id).reduce((sum, invoice) => sum + invoice.amount, 0);
-  const costs = state.expenses.filter(expense => expense.project === project.id).reduce((sum, expense) => sum + expense.amount, 0);
-  document.getElementById("project-dialog-content").innerHTML = `
-    <div class="project-dialog-hero"><div><p class="section-kicker">${escapeHtml(project.category)}</p><h2>${escapeHtml(project.name)}</h2><p>${escapeHtml(project.client)}</p></div><span class="status-pill ${health}">${healthLabel(health)}</span></div>
-    <div class="detail-grid"><div class="detail-tile"><span>Project lead</span><strong>${escapeHtml(owner.name)}</strong></div><div class="detail-tile"><span>Deadline</span><strong>${formatDate(project.deadline, { year: true })}</strong></div><div class="detail-tile"><span>Progress</span><strong>${progress}% · ${tasks.filter(t => t.status === "Done").length}/${tasks.length} done</strong></div></div>
-    <div class="detail-grid"><div class="detail-tile"><span>Invoiced</span><strong>${formatMoney(revenue, true)}</strong></div><div class="detail-tile"><span>Recorded costs</span><strong>${formatMoney(costs, true)}</strong></div><div class="detail-tile"><span>Project balance</span><strong>${formatMoney(revenue - costs, true)}</strong></div></div>
-    ${sourceRequest ? `<button class="project-origin" data-project-source-request="${sourceRequest.id}"><span>Source request</span><strong>${escapeHtml(sourceRequest.number)} · ${escapeHtml(sourceRequest.type)}</strong><b>›</b></button>` : ""}
-    <div class="detail-outcome"><span>Required outcome</span><p>${escapeHtml(project.outcome)}</p></div>
-    <div class="detail-actions"><button data-new-task-project="${project.id}">＋ Add task</button><button data-new-mission-project="${project.id}">⌖ Plan mission</button><button data-open-project-chat="${project.id}">◌ Open chat</button><button data-new-event-project="${project.id}">□ Schedule event</button><button data-new-invoice-project="${project.id}">¤ Create invoice</button></div>
-  `;
-  document.getElementById("project-dialog").showModal();
+  const invoices = state.invoices.filter(invoice => invoice.project === project.id);
+  const expenses = state.expenses.filter(expense => expense.project === project.id);
+  const revenue = invoices.reduce((sum, invoice) => sum + invoice.amount, 0);
+  const costs = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const sourceRequest = state.requests.find(request => request.project === project.id || request.id === project.request);
+  const primaryDeal = state.deals.find(deal => deal.project === project.id || deal.id === sourceRequest?.deal);
+  const context = { owner, tasks, progress, revenue, costs, invoices, quotes: projectLinkedQuotes(project.id), events: state.events.filter(event => event.project === project.id), missions: state.missions.filter(mission => mission.project === project.id), members: project.team.map(teamMember), files: projectReferenceFiles(project), primaryDeal };
+  document.getElementById("project-dialog-content").innerHTML = `<header class="project-workspace-header"><div><p class="section-kicker">${escapeHtml(project.category)} · ${escapeHtml(project.client)}</p><h2>${escapeHtml(project.name)}</h2><p>Led by ${escapeHtml(owner.name)} · Due ${formatDate(project.deadline, { year: true })}</p></div><div><span class="status-pill ${health}">${healthLabel(health)}</span><button class="icon-button" data-close-project-workspace aria-label="Close project">×</button></div></header><nav class="project-workspace-tabs" aria-label="Project sections">${PROJECT_WORKSPACE_TABS.map(([id,label]) => `<button class="${activeProjectTab === id ? "active" : ""}" data-project-tab="${id}">${label}</button>`).join("")}</nav><main class="project-workspace-body">${projectWorkspaceTab(project, context)}</main>`;
+}
+
+function openProject(projectId) {
+  const project = projectById(projectId);
+  if (!project) return;
+  activeProjectId = projectId;
+  activeProjectTab = "overview";
+  renderProjectWorkspace();
+  const dialog = document.getElementById("project-dialog");
+  if (!dialog.open) dialog.showModal();
+}
+
+async function uploadProjectFile(input) {
+  const project = projectById(input.dataset.projectFileInput);
+  const file = input.files?.[0];
+  if (!project || !file) return;
+  ensureProjectWorkspace(project);
+  try {
+    if (!window.CAGE_BACKEND?.uploadFile) throw new Error("Secure file storage is not connected.");
+    showToast("Uploading project file…");
+    const uploaded = await window.CAGE_BACKEND.uploadFile(file, "project", project.id);
+    project.files.push({
+      id: `project-file-${Date.now()}`,
+      name: uploaded.name || file.name,
+      path: uploaded.path,
+      uploaded: TODAY,
+      by: window.CAGE_BACKEND.currentMemberId?.() || ""
+    });
+    saveState();
+    renderProjectWorkspace();
+    showToast("File added to the project.");
+  } catch (error) {
+    showToast(error.message || "The project file could not be uploaded.");
+  } finally {
+    input.value = "";
+  }
 }
 
 function openTask(taskId) {
@@ -3190,6 +3296,7 @@ function changeTaskStatus(taskId, nextStatus, control) {
   task.updated = TODAY;
   saveState();
   renderAll();
+  if (document.getElementById("project-dialog").open && activeProjectId === task.project) renderProjectWorkspace();
   showToast(`${task.title} moved to ${nextStatus}.`);
 }
 
@@ -4075,6 +4182,64 @@ document.addEventListener("click", event => {
   const projectDetail = event.target.closest("[data-project-detail]");
   if (projectDetail) openProject(projectDetail.dataset.projectDetail);
 
+  const projectTab = event.target.closest("[data-project-tab]");
+  if (projectTab) {
+    activeProjectTab = projectTab.dataset.projectTab;
+    renderProjectWorkspace();
+  }
+
+  if (event.target.closest("[data-close-project-workspace]")) document.getElementById("project-dialog").close();
+
+  const addProjectMemberButton = event.target.closest("[data-add-project-member]");
+  if (addProjectMemberButton) {
+    const project = projectById(addProjectMemberButton.dataset.addProjectMember);
+    const memberId = document.getElementById("project-member-select")?.value;
+    if (project && memberId && !project.team.includes(memberId)) {
+      project.team.push(memberId);
+      saveState();
+      renderAll();
+      renderProjectWorkspace();
+      showToast(`${teamMember(memberId).name} added to the project.`);
+    }
+  }
+
+  const removeProjectMemberButton = event.target.closest("[data-remove-project-member]");
+  if (removeProjectMemberButton) {
+    const project = projectById(removeProjectMemberButton.dataset.removeProjectMember);
+    const memberId = removeProjectMemberButton.dataset.memberId;
+    if (project && memberId && memberId !== project.owner) {
+      project.team = project.team.filter(id => id !== memberId);
+      saveState();
+      renderAll();
+      renderProjectWorkspace();
+      showToast(`${teamMember(memberId).name} removed from the project.`);
+    }
+  }
+
+  const addMilestoneButton = event.target.closest("[data-add-project-milestone]");
+  if (addMilestoneButton) {
+    const project = projectById(addMilestoneButton.dataset.addProjectMilestone);
+    const title = window.prompt("Milestone name");
+    if (!project || !title?.trim()) return;
+    ensureProjectWorkspace(project);
+    const due = window.prompt("Due date (YYYY-MM-DD)", project.deadline);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(due || "")) {
+      showToast("Use a valid milestone date in YYYY-MM-DD format.");
+      return;
+    }
+    project.milestones.push({ id: `milestone-${Date.now()}`, title: title.trim(), due, complete: false });
+    saveState();
+    renderProjectWorkspace();
+    showToast("Milestone added.");
+  }
+
+  const openProjectFileButton = event.target.closest("[data-open-project-file]");
+  if (openProjectFileButton) {
+    const project = projectById(activeProjectId);
+    const file = projectReferenceFiles(project || { id: "", files: [] }).find(item => item.id === openProjectFileButton.dataset.openProjectFile);
+    if (file?.path && window.CAGE_BACKEND?.openFile) window.CAGE_BACKEND.openFile(file.path).catch(error => showToast(error.message || "The file could not be opened."));
+  }
+
   const projectSourceRequest = event.target.closest("[data-project-source-request]");
   if (projectSourceRequest) {
     document.getElementById("project-dialog").close();
@@ -4163,7 +4328,10 @@ document.addEventListener("click", event => {
   }
 
   const quoteDealButton = event.target.closest("[data-new-quote-deal]");
-  if (quoteDealButton) openQuoteDialog(quoteDealButton.dataset.newQuoteDeal);
+  if (quoteDealButton) {
+    if (document.getElementById("project-dialog").open) document.getElementById("project-dialog").close();
+    openQuoteDialog(quoteDealButton.dataset.newQuoteDeal);
+  }
 
   const sendDocumentButton = event.target.closest("[data-send-document]");
   if (sendDocumentButton) openSendDocument(sendDocumentButton.dataset.sendDocument, sendDocumentButton.dataset.documentId);
@@ -4285,6 +4453,17 @@ document.addEventListener("change", event => {
   if (event.target.matches("[data-compliance-status]")) changeComplianceStatus(event.target.dataset.complianceStatus, event.target.value);
   if (event.target.matches("[data-commercial-stage]")) changeCommercialStage(event.target.dataset.commercialStage, event.target.value, event.target);
   if (event.target.matches("[data-commercial-progress]")) changeCommercialProgress(event.target.dataset.commercialProgress, event.target.value);
+  if (event.target.matches("[data-project-milestone-toggle]")) {
+    const project = projectById(activeProjectId);
+    const milestone = project?.milestones?.find(item => item.id === event.target.dataset.projectMilestoneToggle);
+    if (milestone) {
+      milestone.complete = event.target.checked;
+      saveState();
+      renderProjectWorkspace();
+      showToast(milestone.complete ? "Milestone completed." : "Milestone reopened.");
+    }
+  }
+  if (event.target.matches("[data-project-file-input]")) uploadProjectFile(event.target);
 });
 
 document.addEventListener("submit", event => {
@@ -4530,7 +4709,6 @@ document.querySelectorAll("button[value='cancel']:not(.dialog-close)").forEach(b
   event.preventDefault();
   button.closest("dialog").close();
 }));
-document.getElementById("close-project-dialog").addEventListener("click", () => document.getElementById("project-dialog").close());
 document.getElementById("close-search-dialog").addEventListener("click", () => document.getElementById("search-dialog").close());
 document.getElementById("calendar-prev").addEventListener("click", () => {
   calendarCursor = new Date(Date.UTC(calendarCursor.getUTCFullYear(), calendarCursor.getUTCMonth() - 1, 1));
