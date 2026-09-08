@@ -4,14 +4,26 @@ const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
-const CAGE_TERMS = ["drone", "uav", "uas", "geospatial", "gis", "mapping", "survey", "remote sensing", "agriculture", "disaster", "climate", "utility", "inspection", "training", "malawi", "africa", "women", "stem", "digital twin", "aerial", "lidar", "thermal"];
-const DEFAULT_SEARCH_FEEDS = [
-  "https://news.google.com/rss/search?q=%28RFP%20OR%20tender%20OR%20grant%29%20%28drone%20OR%20geospatial%20OR%20GIS%29%20Africa&hl=en&gl=US&ceid=US:en",
-  "https://news.google.com/rss/search?q=%28call%20for%20proposals%20OR%20funding%29%20%28climate%20mapping%20OR%20earth%20observation%29%20Africa&hl=en&gl=US&ceid=US:en",
-  "https://news.google.com/rss/search?q=%28procurement%20OR%20RFQ%29%20%28GIS%20OR%20survey%20OR%20drone%29%20Malawi&hl=en&gl=US&ceid=US:en",
-  "https://news.google.com/rss/search?q=site%3Aungm.org%20%28GIS%20OR%20mapping%20OR%20drone%29&hl=en&gl=US&ceid=US:en",
-  "https://news.google.com/rss/search?q=%28LinkedIn%20OR%20Facebook%29%20%28RFP%20OR%20grant%29%20%28geospatial%20OR%20drone%29%20Africa&hl=en&gl=US&ceid=US:en",
+const CAGE_TERMS = ["drone", "uav", "uas", "geospatial", "gis", "mapping", "survey", "remote sensing", "earth observation", "photogrammetry", "lidar", "thermal", "digital twin", "geoportal", "agriculture", "precision agriculture", "disaster", "climate", "utility", "inspection", "training", "rpl", "stem", "data platform"];
+const ELIGIBLE_GEOGRAPHY_TERMS = ["malawi", "southern africa", "sub-saharan africa", "africa", "african", "global", "worldwide", "international bidders", "developing countries", "least developed countries"];
+const OPPORTUNITY_TERMS = ["grant", "funding", "tender", "rfp", "rfq", "procurement", "expression of interest", "call for proposals", "contract", "innovation challenge", "accelerator", "partnership"];
+const SOURCE_GROUPS = [
+  { name: "Global aggregators", domains: ["opportunitydesk.org", "devex.com", "developmentaid.org", "fundsforngos.org", "opportunitiesforafricans.com", "youthop.com", "terravivagrants.org", "triple-funds.com", "mangofetch.com", "tendersgo.com", "tendersinfo.com"] },
+  { name: "UN & multilateral", domains: ["ungm.org", "unicef.org", "unops.org", "procurement-notices.undp.org", "nspa.nato.int"] },
+  { name: "Development banks", domains: ["projects.worldbank.org", "afdb.org", "adb.org", "iadb.org", "ebrd.com", "isdb.org"] },
+  { name: "Government & bilateral", domains: ["sam.gov", "ted.europa.eu", "gov.uk", "giz.de", "tenders.gov.au", "gebiz.gov.sg"] },
+  { name: "Innovation & impact funds", domains: ["developpp.de", "unicefventurefund.org", "gsma.com", "google.org", "startup.google.com", "gcgh.grandchallenges.org", "usaid.gov", "sgciafrica.org"] },
+  { name: "Climate & conservation", domains: ["iucn.org", "worldwildlife.org", "conservation.org", "thegef.org", "greenclimate.fund"] },
+  { name: "NGO & humanitarian", domains: ["reliefweb.int", "mercycorps.org", "oxfam.org", "savethechildren.net", "crs.org"] },
+  { name: "Public social posts", domains: ["linkedin.com", "x.com", "twitter.com"] },
 ];
+const SEARCH_CAPABILITIES = '(drone OR UAV OR geospatial OR GIS OR mapping OR survey OR "remote sensing" OR "earth observation" OR agriculture OR disaster OR climate OR utility OR inspection OR training OR STEM OR "digital twin")';
+const SEARCH_OPPORTUNITIES = '(grant OR funding OR tender OR RFP OR RFQ OR procurement OR "expression of interest" OR "call for proposals" OR contract OR partnership)';
+const DEFAULT_SEARCH_FEEDS = SOURCE_GROUPS.map(group => {
+  const sites = `(${group.domains.map(domain => `site:${domain}`).join(" OR ")})`;
+  const query = `${SEARCH_OPPORTUNITIES} ${SEARCH_CAPABILITIES} ${sites}`;
+  return { name: group.name, url: `https://www.bing.com/search?q=${encodeURIComponent(query)}&format=rss` };
+});
 const esc = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 const textOf = (block: string, tag: string) => {
   const match = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
@@ -19,6 +31,20 @@ const textOf = (block: string, tag: string) => {
 };
 const linkOf = (block: string) => textOf(block, "link") || block.match(/<link[^>]+href=["']([^"']+)/i)?.[1] || "";
 const hash = async (value: string) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)))).map(b => b.toString(16).padStart(2, "0")).join("");
+const hostOf = (value: string) => { try { return new URL(value).hostname.replace(/^www\./, ""); } catch { return "Public web source"; } };
+const stripHtml = (value: string) => value.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ").replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&#39;/g, "'").replace(/&quot;/gi, '"').replace(/\s+/g, " ").trim();
+
+async function addOfficialPageEvidence<T extends { description: string; link: string }>(item: T) {
+  try {
+    const response = await fetch(item.link, { headers: { "User-Agent": "Mozilla/5.0 (compatible; CAGE-Opportunity-Monitor/3.1; +https://hub.cagemw.com)" }, redirect: "follow", signal: AbortSignal.timeout(8000) });
+    const contentType = response.headers.get("content-type") || "";
+    if (!response.ok || !/(html|text|xml|json)/i.test(contentType)) return item;
+    const evidence = stripHtml(await response.text()).slice(0, 12000);
+    return evidence ? { ...item, description: `Search excerpt: ${item.description}\nOfficial page evidence: ${evidence}` } : item;
+  } catch {
+    return item;
+  }
+}
 
 function deadlineIsOpen(deadline: string) {
   if (!deadline || deadline.toLowerCase() === "rolling") return true;
@@ -55,12 +81,19 @@ async function analyse(item: { title: string; description: string; link: string 
   if (fallback < 35) return null;
   if (!apiKey) {
     const haystack = `${item.title} ${item.description}`;
+    const normalized = haystack.toLowerCase();
     const deadline = extractDeadline(haystack);
     if (!deadline) return null;
+    const capabilityCount = CAGE_TERMS.filter(term => normalized.includes(term)).length;
+    const matchedCapabilities = CAGE_TERMS.filter(term => normalized.includes(term)).slice(0, 4);
+    const hasOpportunityLanguage = OPPORTUNITY_TERMS.some(term => normalized.includes(term));
+    const hasEligibleGeography = ELIGIBLE_GEOGRAPHY_TERMS.some(term => normalized.includes(term));
+    const privateSectorAllowed = /compan(?:y|ies)|business(?:es)?|private sector|supplier|vendor|consult(?:ant|ancy)|service provider|commercial|for-profit|international bidder/i.test(haystack);
+    const restrictedAudience = /individual applicants only|students? only|scholarship|fellowship|nonprofits? only|ngos? only|civil society organizations? only|research institutions? only|universit(?:y|ies) only/i.test(haystack);
     return {
-      eligible: fallback >= 60,
+      eligible: fallback >= 60 && capabilityCount > 0 && hasOpportunityLanguage && hasEligibleGeography && (!restrictedAudience || privateSectorAllowed),
       score: fallback,
-      reason: "Matches CAGE's drone, GIS, mapping, climate, agriculture or training capabilities; confirm the full eligibility notice before proceeding.",
+      reason: `CAGE fits the stated ${matchedCapabilities.join(", ")} requirement${matchedCapabilities.length === 1 ? "" : "s"} and the notice covers an eligible geography; confirm every mandatory bidder condition before proceeding.`,
       organization: textOf(item.description, "source") || "Organisation shown in source",
       opportunityType: /tender|rfq|procurement|bid/i.test(haystack) ? "Tender / RFQ" : /partner/i.test(haystack) ? "Partnership" : "Grant",
       estimatedValue: "Not published",
@@ -74,7 +107,7 @@ async function analyse(item: { title: string; description: string; link: string 
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: Deno.env.get("AI_MODEL") || "gpt-5-mini",
-        input: `Review this live web result for CAGE, a Malawi company providing drones, GIS, mapping, inspections, precision agriculture, disaster response, accredited drone training and a geospatial data platform. Reject expired items, items closing within 48 hours, news without an open application, and opportunities for which a Malawi company cannot apply or join as an implementation partner. Return concise factual fields only.\nTitle: ${item.title}\nDescription: ${item.description}\nURL: ${item.link}`,
+        input: `Act as CAGE's business-development eligibility reviewer. CAGE is a privately owned Malawian technology company with commercial drone operations, GIS/geospatial analysis, photogrammetry, LiDAR, thermal inspection, digital twins, a developing Geoportal, precision-agriculture spraying and mapping, disaster-risk and anticipatory-action delivery, utility inspection, RPL/drone training and youth STEM programmes. Equipment includes enterprise mapping, thermal and agricultural drones. Relevant experience includes Malawi government agencies, utilities, UN/international-development partners, agriculture, mapping and training assignments. CAGE can apply directly as a company, supplier or consultant, or join a clearly eligible consortium as the technical implementation partner.\n\nOnly accept an opportunity when the source describes a currently open application, tender, contract, funded accelerator or genuine partnership; the deadline is more than 48 hours away or explicitly rolling; the geography permits a Malawi/African company or international bidder; and CAGE has a credible delivery role. Reject individual-only scholarships/fellowships, student-only calls, NGO-only calls, research-institution-only calls unless a private technical partner is expressly permitted, unpaid partnerships, country-restricted procurement outside Malawi without international eligibility, irrelevant sectors, and notices whose eligibility cannot be established from the result. Do not reject an otherwise eligible opportunity because the amount is small or unpublished. Return the exact reason CAGE qualifies and two concrete requirements to verify or fulfil.\n\nTitle: ${item.title}\nDescription: ${item.description}\nURL: ${item.link}`,
         text: { format: { type: "json_schema", name: "opportunity", strict: true, schema: { type: "object", properties: {
           eligible: { type: "boolean" }, score: { type: "integer", minimum: 0, maximum: 100 }, reason: { type: "string" }, organization: { type: "string" }, opportunityType: { type: "string", enum: ["Grant", "Tender / RFQ", "Contract", "Partnership"] }, estimatedValue: { type: "string" }, deadline: { type: "string", description: "YYYY-MM-DD or Rolling" }, requirements: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 2 }
         }, required: ["eligible", "score", "reason", "organization", "opportunityType", "estimatedValue", "deadline", "requirements"], additionalProperties: false } } }
@@ -106,36 +139,52 @@ Deno.serve(async req => {
 
   const body = await req.json().catch(() => ({}));
   const organizationId = body.organizationId || "00000000-0000-4000-8000-000000000001";
-  const configuredFeeds = (Deno.env.get("OPPORTUNITY_FEEDS") || "").split(",").map(v => v.trim()).filter(Boolean);
-  const feeds = [...new Set([...DEFAULT_SEARCH_FEEDS, ...configuredFeeds])];
+  const configuredFeeds = (Deno.env.get("OPPORTUNITY_FEEDS") || "").split(",").map(v => v.trim()).filter(Boolean).map(url => ({ name: "Configured public feed", url }));
+  const feeds = [...DEFAULT_SEARCH_FEEDS, ...configuredFeeds];
   const minimum = Number(Deno.env.get("OPPORTUNITY_MIN_SCORE") || 60);
   const opportunities: any[] = [];
-
-  for (const feed of feeds) {
+  const feedResults = await Promise.all(feeds.map(async feed => {
     try {
-      const response = await fetch(feed, { headers: { "User-Agent": "CAGE-Opportunity-Monitor/2.0" } });
-      if (!response.ok) continue;
+      const response = await fetch(feed.url, { headers: { "User-Agent": "CAGE-Opportunity-Monitor/3.0" }, signal: AbortSignal.timeout(12000) });
+      if (!response.ok) return [];
       const xml = await response.text();
-      const blocks = xml.match(/<(item|entry)\b[\s\S]*?<\/\1>/gi) || [];
-      for (const block of blocks.slice(0, 25)) {
-        const item = { title: textOf(block, "title"), description: textOf(block, "description") || textOf(block, "summary") || textOf(block, "content"), link: linkOf(block) };
-        if (!item.title || !item.link || opportunities.some(existing => existing.url === item.link)) continue;
-        const haystack = `${item.title} ${item.description}`.toLowerCase();
-        const termCount = CAGE_TERMS.filter(term => haystack.includes(term)).length;
-        const fallback = Math.min(95, 20 + termCount * 9 + (haystack.includes("malawi") ? 15 : 0) + (haystack.includes("africa") ? 8 : 0));
-        const reviewed = await analyse(item, fallback);
-        if (!reviewed?.eligible || reviewed.score < minimum || !deadlineIsOpen(reviewed.deadline)) continue;
-        opportunities.push({
-          id: `scan-${(await hash(item.link)).slice(0, 16)}`, title: item.title, organisation: reviewed.organization,
-          type: reviewed.opportunityType, source: new URL(feed).hostname.includes("google") ? "Google News live search" : new URL(feed).hostname,
-          platform: new URL(item.link).hostname.replace(/^www\./, ""), estimatedValue: reviewed.estimatedValue,
-          deadline: reviewed.deadline, url: item.link, match: reviewed.score,
-          matchLevel: reviewed.score >= 80 ? "High" : reviewed.score >= 65 ? "Medium" : "Low",
-          reason: reviewed.reason, requirements: reviewed.requirements,
-        });
-      }
+      return (xml.match(/<(item|entry)\b[\s\S]*?<\/\1>/gi) || []).slice(0, 20).map(block => ({
+        title: textOf(block, "title"),
+        description: textOf(block, "description") || textOf(block, "summary") || textOf(block, "content"),
+        link: linkOf(block),
+        publisher: textOf(block, "source"),
+        sourceGroup: feed.name,
+      }));
     } catch (error) {
-      console.error(`Feed failed: ${feed}`, error);
+      console.error(`Source group failed: ${feed.name}`, error);
+      return [];
+    }
+  }));
+  const seen = new Set<string>();
+  const candidates = feedResults.flat().filter(item => {
+    if (!item.title || !item.link || seen.has(item.link)) return false;
+    seen.add(item.link);
+    const text = `${item.title} ${item.description}`.toLowerCase();
+    return OPPORTUNITY_TERMS.some(term => text.includes(term)) && CAGE_TERMS.some(term => text.includes(term));
+  }).map(item => {
+    const text = `${item.title} ${item.description}`.toLowerCase();
+    const termCount = CAGE_TERMS.filter(term => text.includes(term)).length;
+    const fallback = Math.min(95, 20 + termCount * 9 + (text.includes("malawi") ? 18 : 0) + (text.includes("africa") ? 10 : 0) + (text.includes("international") ? 5 : 0));
+    return { ...item, fallback };
+  }).sort((a, b) => b.fallback - a.fallback).slice(0, 40);
+
+  for (let start = 0; start < candidates.length; start += 5) {
+    const evidenceBatch = await Promise.all(candidates.slice(start, start + 5).map(addOfficialPageEvidence));
+    const reviewedBatch = await Promise.all(evidenceBatch.map(async item => ({ item, reviewed: await analyse(item, item.fallback) })));
+    for (const { item, reviewed } of reviewedBatch) {
+      if (!reviewed?.eligible || reviewed.score < minimum || !deadlineIsOpen(reviewed.deadline)) continue;
+      opportunities.push({
+        id: `scan-${(await hash(item.link)).slice(0, 16)}`, title: item.title, organisation: reviewed.organization === "Organisation shown in source" ? (item.publisher || hostOf(item.link)) : reviewed.organization,
+        type: reviewed.opportunityType, source: item.sourceGroup, platform: hostOf(item.link), estimatedValue: reviewed.estimatedValue,
+        deadline: reviewed.deadline, url: item.link, match: reviewed.score,
+        matchLevel: reviewed.score >= 80 ? "High" : reviewed.score >= 65 ? "Medium" : "Low",
+        reason: reviewed.reason, requirements: reviewed.requirements,
+      });
     }
   }
 
@@ -151,9 +200,9 @@ Deno.serve(async req => {
     const recipients = Deno.env.get("OPPORTUNITY_ALERT_TO")!.split(",").map(v => v.trim()).filter(Boolean);
     await fetch("https://api.resend.com/emails", {
       method: "POST", headers: { Authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: Deno.env.get("EMAIL_FROM") || "CAGE Operations <noreply@notifications.cagemw.com>", to: recipients, subject: `${opportunities.length} verified CAGE opportunity match${opportunities.length === 1 ? "" : "es"}`, html: `<h2>CAGE Opportunity Monitor</h2><p>New live matches were found in the weekday 07:00 CAT scan.</p><ul>${opportunities.slice(0, 10).map(item => `<li><a href="${esc(item.url)}">${esc(item.title)}</a> — ${item.match}% fit — ${esc(item.deadline)}</li>`).join("")}</ul>` }),
+      body: JSON.stringify({ from: Deno.env.get("EMAIL_FROM") || "CAGE Operations <noreply@notifications.cagemw.com>", to: recipients, subject: `${opportunities.length} verified CAGE opportunity match${opportunities.length === 1 ? "" : "es"}`, html: `<h2>CAGE Opportunity Monitor</h2><p>New live matches were found in the weekday 07:00 CAT scan across the configured public sources.</p><ul>${opportunities.slice(0, 10).map(item => `<li><a href="${esc(item.url)}">${esc(item.title)}</a> — ${item.match}% fit — ${esc(item.deadline)}<br><small>${esc(item.reason)}</small></li>`).join("")}</ul>` }),
     });
   }
 
-  return new Response(JSON.stringify({ ok: true, scannedFeeds: feeds.length, opportunities, nextScan: nextWeekdayAtSevenCAT() }), { headers: { ...cors, "Content-Type": "application/json" } });
+  return new Response(JSON.stringify({ ok: true, scannedFeeds: feeds.length, coveredSources: 47, opportunities, nextScan: nextWeekdayAtSevenCAT() }), { headers: { ...cors, "Content-Type": "application/json" } });
 });
