@@ -64,7 +64,11 @@
   function renderAdmin() {
     const target = document.getElementById("admin-user-list");
     if (!isAdmin()) { target.innerHTML = '<div class="empty-state"><p>Administrator access is required.</p></div>'; return; }
-    target.innerHTML = adminData.length ? adminData.map(user => `<div class="admin-user-row"><div><strong>${esc(user.full_name)}</strong><span>${esc(user.email)} · ${user.invited ? "Account active" : "Invitation pending"}</span></div><select data-user-role="${esc(user.email)}">${Object.entries(ROLE_LABELS).map(([value, label]) => `<option value="${value}" ${value === user.role ? "selected" : ""}>${label}</option>`).join("")}</select><label><input type="checkbox" data-user-active="${esc(user.email)}" ${user.active ? "checked" : ""}> Active</label></div>`).join("") : '<div class="empty-state"><p>No accounts found.</p></div>';
+    const currentEmail = String(profile()?.email || "").toLowerCase();
+    target.innerHTML = adminData.length ? adminData.map(user => {
+      const self = String(user.email).toLowerCase() === currentEmail;
+      return `<div class="admin-user-row"><div><strong>${esc(user.full_name)}</strong><span>${esc(user.email)} · ${user.invited ? "Account active" : "Invitation pending"}</span></div><select data-user-role="${esc(user.email)}" aria-label="Role for ${esc(user.full_name)}" ${self ? "disabled" : ""}>${Object.entries(ROLE_LABELS).map(([value, label]) => `<option value="${value}" ${value === user.role ? "selected" : ""}>${label}</option>`).join("")}</select><label><input type="checkbox" data-user-active="${esc(user.email)}" ${user.active ? "checked" : ""} ${self ? "disabled" : ""}> Active</label><button class="secondary-button admin-save-access" data-save-user-access="${esc(user.email)}" ${self ? "disabled" : ""}>Save access</button>${self ? '<small class="admin-self-note">Your own administrator access is protected.</small>' : ""}</div>`;
+    }).join("") : '<div class="empty-state"><p>No accounts found.</p></div>';
   }
 
   function render() {
@@ -135,13 +139,19 @@
       try { await window.CAGE_BACKEND.updateApplicationStage(event.target.dataset.candidateStage, event.target.value); showToast("Candidate stage updated."); await load(); }
       catch (e) { showToast(e.message || "Stage could not be changed."); }
     }
-    if (event.target.matches("[data-user-role], [data-user-active]")) {
-      const row = event.target.closest(".admin-user-row"); const roleSelect = row.querySelector("[data-user-role]"); const activeInput = row.querySelector("[data-user-active]"); const email = roleSelect.dataset.userRole;
-      try { await window.CAGE_BACKEND.adminUsers("update", { email, role: roleSelect.value, active: activeInput.checked }); showToast("User access updated."); await load(true); }
-      catch (e) { showToast(e.message || "User access could not be updated."); await load(true); }
-    }
   });
   document.addEventListener("click", event => {
+    const saveAccess = event.target.closest("[data-save-user-access]");
+    if (saveAccess) {
+      const row = saveAccess.closest(".admin-user-row");
+      const roleSelect = row.querySelector("[data-user-role]");
+      const activeInput = row.querySelector("[data-user-active]");
+      saveAccess.disabled = true;
+      saveAccess.textContent = "Saving…";
+      window.CAGE_BACKEND.adminUsers("update", { email: saveAccess.dataset.saveUserAccess, role: roleSelect.value, active: activeInput.checked })
+        .then(async () => { showToast("User role and access saved."); await load(true); })
+        .catch(async e => { showToast(e.message || "User access could not be updated."); await load(true); });
+    }
     const interview = event.target.closest("[data-interview-candidate]"); if (interview) openInterview(interview.dataset.interviewCandidate);
     const cv = event.target.closest("[data-candidate-cv]"); if (cv) window.CAGE_BACKEND.openFile(cv.dataset.candidateCv).catch(e => showToast(e.message));
     const file = event.target.closest("[data-open-hr-file]"); if (file) window.CAGE_BACKEND.openFile(file.dataset.openHrFile).catch(e => showToast(e.message));

@@ -105,11 +105,14 @@
           </div>
         </div>
         <div class="topbar-actions">
-          <label class="global-search">
-            <span aria-hidden="true">⌕</span>
-            <input id="global-search" type="search" placeholder="Search all CAGE work" aria-label="Search projects, tasks, clients, events and invoices">
-            <kbd>⌘ K</kbd>
-          </label>
+          <div class="global-search-wrap">
+            <label class="global-search">
+              <span aria-hidden="true">⌕</span>
+              <input id="global-search" type="search" placeholder="Search all CAGE work" aria-label="Search projects, tasks, clients, events and invoices" autocomplete="off" aria-controls="global-search-results" aria-expanded="false">
+              <kbd>⌘ K</kbd>
+            </label>
+            <div id="global-search-results" class="global-search-results" role="listbox" hidden></div>
+          </div>
           <button class="icon-button notification-button" data-view="requests" aria-label="Open work requiring attention"><span id="notification-count">0</span>♢</button>
           <button class="primary-button" id="add-task-top"><span>＋</span> Add task</button>
         </div>
@@ -630,19 +633,19 @@
 
   <dialog id="deal-dialog" class="app-dialog">
     <form method="dialog" id="deal-form">
-      <div class="dialog-heading"><div><p class="section-kicker">Proactive sales lead</p><h2>New opportunity</h2><p>Use this only when CAGE identified the lead. If a client contacted CAGE, capture a request first.</p></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="dialog-heading"><div><p class="section-kicker" id="deal-dialog-kicker">Proactive sales lead</p><h2 id="deal-dialog-title">New opportunity</h2><p>Use this only when CAGE identified the lead. If a client contacted CAGE, capture a request first.</p></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
       <div class="form-grid">
         <label class="field field-wide"><span>Opportunity name *</span><input name="name" required maxlength="100" placeholder="e.g. ESCOM feeder mapping"></label>
         <label class="field"><span>Organisation *</span><input name="company" required placeholder="Client or partner"></label>
         <label class="field"><span>Owner *</span><select name="owner" id="deal-owner-input" required></select></label>
         <label class="field"><span>Expected value (MWK) *</span><input name="value" type="number" min="0" step="1000" required placeholder="0"></label>
-        <label class="field"><span>Stage</span><select name="stage"><option>Lead</option><option>Qualified</option><option>Proposal</option><option>Negotiation</option><option>Won</option><option>Lost</option></select></label>
+        <label class="field"><span>Stage</span><select name="stage"><option>Prospect</option><option>Lead</option><option>Qualified</option><option>Proposal</option><option>Negotiation</option><option>Won</option><option>Lost</option></select></label>
         <label class="field"><span>Next follow-up *</span><input name="nextAction" type="date" required min="2026-09-04"></label>
-        <label class="field"><span>Probability</span><select name="probability"><option value="20">20%</option><option value="40">40%</option><option value="60">60%</option><option value="80">80%</option><option value="100">100%</option></select></label>
+        <label class="field"><span>Probability</span><select name="probability"><option value="0">0%</option><option value="10">10%</option><option value="20">20%</option><option value="40">40%</option><option value="60">60%</option><option value="80">80%</option><option value="100">100%</option></select></label>
         <label class="field field-wide"><span>Next action *</span><input name="nextStep" required placeholder="What must happen next?"></label>
       </div>
       <p class="form-error" id="deal-form-error" role="alert"></p>
-      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Create opportunity</button></div>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default" id="save-deal-button">Create opportunity</button></div>
     </form>
   </dialog>
 

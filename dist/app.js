@@ -305,6 +305,7 @@ let boardProjectFilter = "all";
 let boardAddingListId = "";
 let addingBoardList = false;
 let crmAddingStage = "";
+let editingDealId = "";
 let editingTaskId = "";
 let activeChatThread = GENERAL_CHAT_THREAD_ID;
 let chatFilter = "all";
@@ -824,6 +825,11 @@ function showToast(message) {
   toastTimer = setTimeout(() => toast.classList.remove("show"), 2600);
 }
 
+function currentUserCanApprove() {
+  if (!window.CAGE_BACKEND?.isProduction) return true;
+  return window.CAGE_BACKEND.canApprove?.() === true;
+}
+
 function setView(view) {
   if (!viewMeta[view]) return;
   activeView = view;
@@ -1341,7 +1347,7 @@ function renderMetricCards(targetId, metrics) {
 }
 
 function renderCRM() {
-  const stages = ["Lead", "Qualified", "Proposal", "Negotiation", "Won", "Lost"];
+  const stages = ["Prospect", "Lead", "Qualified", "Proposal", "Negotiation", "Won", "Lost"];
   const activeDeals = state.deals.filter(deal => !["Won", "Lost"].includes(deal.stage));
   const pipelineValue = activeDeals.reduce((sum, deal) => sum + deal.value, 0);
   const weightedValue = activeDeals.reduce((sum, deal) => sum + (deal.value * deal.probability / 100), 0);
@@ -1368,6 +1374,7 @@ function renderCRM() {
               <textarea class="inline-deal-next" data-inline-deal-next="${deal.id}" rows="2" aria-label="Edit next action for ${escapeHtml(deal.name)}">${escapeHtml(deal.nextStep)}</textarea>
               <select class="deal-stage-select" data-deal-stage="${deal.id}" aria-label="Stage for ${escapeHtml(deal.name)}">${stages.map(option => `<option ${option === deal.stage ? "selected" : ""}>${option}</option>`).join("")}</select>
               <div class="deal-actions">
+                <button data-edit-deal="${deal.id}">Edit opportunity</button>
                 <button data-open-work-chat="deal" data-work-chat-id="${deal.id}">Work chat</button>
                 <button data-schedule-deal="${deal.id}">Schedule follow-up</button>
                 <button data-new-quote-deal="${deal.id}">Create quote</button>
@@ -1394,7 +1401,7 @@ function addQuickDeal(stage, name, company) {
   const cleanName = String(name || "").trim();
   const cleanCompany = String(company || "").trim() || "Organisation to confirm";
   if (!cleanName) return;
-  const probabilityByStage = { Lead: 20, Qualified: 40, Proposal: 60, Negotiation: 80, Won: 100, Lost: 0 };
+  const probabilityByStage = { Prospect: 10, Lead: 20, Qualified: 40, Proposal: 60, Negotiation: 80, Won: 100, Lost: 0 };
   const deal = {
     id: `d-${Date.now()}`,
     name: cleanName,
@@ -1402,7 +1409,7 @@ function addQuickDeal(stage, name, company) {
     owner: "alexander",
     value: 0,
     stage,
-    probability: probabilityByStage[stage] ?? 20,
+    probability: probabilityByStage[stage] ?? 10,
     nextAction: dateAfter(7),
     nextStep: "Qualify the opportunity and agree the next action.",
     project: ""
@@ -2059,7 +2066,7 @@ function renderReports() {
   const requestActions = state.requests.filter(requestNeedsAction);
   const conversionGaps = state.requests.filter(request => request.stage === "Converted" && !requestAcceptanceComplete(request));
   document.getElementById("weekly-brief").innerHTML = `
-    <header class="report-header"><div><img class="report-logo" src="./cage-logo.svg" alt="CAGE"><h2>Weekly Operations Brief</h2><p>Reporting snapshot · 4 September 2026</p></div><span class="status-pill attention">Management review</span></header>
+    <header class="report-header"><div><h2>Weekly Operations Brief</h2><p>Reporting snapshot · ${formatDate(TODAY, { year: true })}</p></div><span class="status-pill attention">Management review</span></header>
     <div class="report-stat-grid">
       <div class="report-stat"><span>Active projects</span><strong>${state.projects.filter(p => projectHealth(p) !== "complete").length}</strong></div>
       <div class="report-stat"><span>Open pipeline</span><strong>${formatMoney(activeDeals.reduce((sum, deal) => sum + deal.value, 0), true)}</strong></div>
@@ -2284,8 +2291,8 @@ function ensureRequestCommercial(request) {
 function syncRequestLinks(request) {
   const deal = dealById(request.deal);
   const dealStages = {
-    New: ["Lead", 15],
-    "Needs information": ["Lead", 20],
+    New: ["Prospect", 10],
+    "Needs information": ["Prospect", 15],
     Qualified: ["Qualified", 35],
     Scoping: ["Qualified", 45],
     "Internal review": ["Proposal", 55],
@@ -3039,6 +3046,10 @@ function applyApprovalOutcome(item) {
 }
 
 function decideApproval(approvalId, decision) {
+  if (!currentUserCanApprove()) {
+    showToast("Only a manager or administrator can approve or return requests.");
+    return;
+  }
   const item = state.approvals.find(record => record.id === approvalId);
   if (!item || item.status !== "Pending") return;
   let note = decision === "Approved" ? "Approved from the CAGE decision inbox." : window.prompt("What must be changed before this can be approved?");
@@ -3454,12 +3465,25 @@ function createProject(event) {
   showToast("Project created. Add tasks to calculate its progress.");
 }
 
-function openDealDialog() {
+function openDealDialog(dealId = "") {
   renderOwnerOptions();
   const form = document.getElementById("deal-form");
   form.reset();
-  form.elements.nextAction.value = "2026-09-11";
-  form.elements.owner.value = "alexander";
+  editingDealId = dealId;
+  const deal = dealById(dealId);
+  document.getElementById("deal-dialog-kicker").textContent = deal ? "Opportunity details" : "Proactive sales lead";
+  document.getElementById("deal-dialog-title").textContent = deal ? "Edit opportunity" : "New opportunity";
+  document.getElementById("save-deal-button").textContent = deal ? "Save changes" : "Create opportunity";
+  if (deal) {
+    ["name", "company", "owner", "value", "stage", "probability", "nextAction", "nextStep"].forEach(field => {
+      form.elements[field].value = deal[field] ?? "";
+    });
+  } else {
+    form.elements.nextAction.value = dateAfter(7);
+    form.elements.owner.value = window.CAGE_BACKEND?.currentMemberId?.() || "alexander";
+    form.elements.stage.value = "Prospect";
+    form.elements.probability.value = "20";
+  }
   document.getElementById("deal-form-error").textContent = "";
   document.getElementById("deal-dialog").showModal();
 }
@@ -3471,33 +3495,41 @@ function createDeal(event) {
     return;
   }
   const data = new FormData(event.currentTarget);
+  const existing = dealById(editingDealId);
   const deal = {
-    id: `d-${Date.now()}`,
+    id: existing?.id || `d-${Date.now()}`,
     name: String(data.get("name") || "").trim(),
     company: String(data.get("company") || "").trim(),
     owner: String(data.get("owner") || ""),
     value: Number(data.get("value") || 0),
-    stage: String(data.get("stage") || "Lead"),
+    stage: String(data.get("stage") || "Prospect"),
     probability: Number(data.get("probability") || 20),
     nextAction: String(data.get("nextAction") || ""),
     nextStep: String(data.get("nextStep") || "").trim(),
-    project: ""
+    project: existing?.project || ""
   };
   if (!deal.name || !deal.company || !deal.owner || !deal.value || !deal.nextAction || !deal.nextStep) {
     document.getElementById("deal-form-error").textContent = "Complete the organisation, value, owner and next action.";
     return;
   }
   if (deal.stage === "Won") deal.probability = 100;
-  state.deals.push(deal);
-  addSystemWorkMessage(`deal:${deal.id}`, `Proactive opportunity created in ${deal.stage}. ${teamMember(deal.owner).name} owns the next action.`);
+  if (existing) {
+    const index = state.deals.findIndex(item => item.id === existing.id);
+    state.deals[index] = deal;
+    addSystemWorkMessage(`deal:${deal.id}`, `Opportunity details updated. ${teamMember(deal.owner).name} owns the next action.`);
+  } else {
+    state.deals.push(deal);
+    addSystemWorkMessage(`deal:${deal.id}`, `Proactive opportunity created in ${deal.stage}. ${teamMember(deal.owner).name} owns the next action.`);
+  }
   if (!contactByCompany(deal.company)) {
     state.contacts.push({ id: `c-${Date.now()}`, company: deal.company, contact: "New relationship", relationship: deal.stage === "Won" ? "Client" : "Prospect", owner: deal.owner, lastActivity: TODAY, nextAction: deal.nextAction, note: deal.nextStep });
   }
   saveState();
+  editingDealId = "";
   document.getElementById("deal-dialog").close();
   renderAll();
   setView("crm");
-  showToast("Opportunity added to the sales pipeline.");
+  showToast(existing ? "Opportunity changes saved." : "Opportunity added to the sales pipeline.");
 }
 
 function changeDealStage(dealId, stage) {
@@ -4037,9 +4069,9 @@ function openKnowledgeReference(itemId) {
   }
 }
 
-function openGlobalSearch(query) {
+function findGlobalSearchResults(query) {
   const value = String(query || "").trim().toLowerCase();
-  if (!value) return;
+  if (!value) return [];
   const results = [];
   state.requests.forEach(request => { if (`${request.number} ${request.title} ${request.organisation} ${request.contact} ${request.type} ${request.summary}`.toLowerCase().includes(value)) results.push({ type: "Request", id: request.id, title: request.title, detail: `${request.number} · ${request.stage}`, view: "requests", icon: "RQ" }); });
   state.projects.forEach(project => { if (`${project.name} ${project.client} ${project.category}`.toLowerCase().includes(value)) results.push({ type: "Project", id: project.id, title: project.name, detail: project.client, view: "projects", icon: "PR" }); });
@@ -4061,8 +4093,31 @@ function openGlobalSearch(query) {
     const thread = threadById(threadId);
     results.push({ type: "Chat", id: threadId, title: thread?.title || "Work chat", detail: message.text, view: "chat", icon: "CH" });
   });
-  document.getElementById("search-results").innerHTML = results.length ? results.slice(0, 14).map(result => `<button class="search-result" data-search-view="${result.view}" data-search-type="${result.type}" data-search-id="${result.id}"><span class="search-result-icon">${result.icon}</span><span class="search-result-copy"><strong>${escapeHtml(result.title)}</strong><span>${escapeHtml(result.detail)}</span></span><span class="search-result-type">${escapeHtml(result.type)}</span></button>`).join("") : `<div class="empty-state"><div>⌕</div><h3>No matches</h3><p>Try a client, project, task, event or invoice number.</p></div>`;
-  document.getElementById("search-dialog").showModal();
+  return results;
+}
+
+function searchResultMarkup(results, limit = 14) {
+  return results.length ? results.slice(0, limit).map(result => `<button class="search-result" role="option" data-search-view="${result.view}" data-search-type="${result.type}" data-search-id="${result.id}"><span class="search-result-icon">${result.icon}</span><span class="search-result-copy"><strong>${escapeHtml(result.title)}</strong><span>${escapeHtml(result.detail)}</span></span><span class="search-result-type">${escapeHtml(result.type)}</span></button>`).join("") : `<div class="empty-state compact"><div>⌕</div><h3>No matches</h3><p>Try a client, project, task, event or invoice number.</p></div>`;
+}
+
+function openGlobalSearch(query) {
+  document.getElementById("search-results").innerHTML = searchResultMarkup(findGlobalSearchResults(query));
+  const dialog = document.getElementById("search-dialog");
+  if (!dialog.open) dialog.showModal();
+}
+
+function renderGlobalSearchSuggestions() {
+  const input = document.getElementById("global-search");
+  const target = document.getElementById("global-search-results");
+  const query = input.value.trim();
+  if (query.length < 2) {
+    target.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    return;
+  }
+  target.innerHTML = searchResultMarkup(findGlobalSearchResults(query), 7);
+  target.hidden = false;
+  input.setAttribute("aria-expanded", "true");
 }
 
 function addEvidence(taskId) {
@@ -4111,6 +4166,7 @@ function renderAll() {
   renderEvidence();
   renderReports();
   window.CAGE_HR_UI?.render();
+  window.CAGE_BACKEND?.applyPermissions?.();
 }
 
 document.addEventListener("click", event => {
@@ -4393,6 +4449,9 @@ document.addEventListener("click", event => {
     if (deal) openEventDialog({ date: deal.nextAction, owner: deal.owner, title: `Follow up: ${deal.company}`, attendees: deal.company });
   }
 
+  const editDealButton = event.target.closest("[data-edit-deal]");
+  if (editDealButton) openDealDialog(editDealButton.dataset.editDeal);
+
   const createProjectDealButton = event.target.closest("[data-create-project-deal]");
   if (createProjectDealButton) openProjectDialog(createProjectDealButton.dataset.createProjectDeal);
 
@@ -4429,7 +4488,10 @@ document.addEventListener("click", event => {
 
   const searchResult = event.target.closest("[data-search-view]");
   if (searchResult) {
-    document.getElementById("search-dialog").close();
+    const searchDialog = document.getElementById("search-dialog");
+    if (searchDialog.open) searchDialog.close();
+    document.getElementById("global-search-results").hidden = true;
+    document.getElementById("global-search").setAttribute("aria-expanded", "false");
     if (searchResult.dataset.searchType === "Chat") activeChatThread = searchResult.dataset.searchId;
     setView(searchResult.dataset.searchView);
     if (searchResult.dataset.searchType === "Project") openProject(searchResult.dataset.searchId);
@@ -4695,10 +4757,21 @@ document.addEventListener("keydown", event => {
   event.target.blur();
 });
 document.getElementById("global-search").addEventListener("keydown", event => {
+  if (event.key === "Escape") {
+    document.getElementById("global-search-results").hidden = true;
+    event.currentTarget.setAttribute("aria-expanded", "false");
+    return;
+  }
   if (event.key !== "Enter") return;
   const value = event.currentTarget.value.trim();
   if (!value) return;
   openGlobalSearch(value);
+});
+document.getElementById("global-search").addEventListener("input", renderGlobalSearchSuggestions);
+document.addEventListener("click", event => {
+  if (event.target.closest(".global-search-wrap")) return;
+  document.getElementById("global-search-results").hidden = true;
+  document.getElementById("global-search").setAttribute("aria-expanded", "false");
 });
 document.addEventListener("keydown", event => {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -4713,7 +4786,7 @@ document.getElementById("new-request-button").addEventListener("click", openRequ
 document.getElementById("new-request-dashboard").addEventListener("click", openRequestDialog);
 document.getElementById("manage-purpose-button").addEventListener("click", openPurposeManager);
 document.getElementById("run-opportunity-scan").addEventListener("click", runOpportunityScan);
-document.getElementById("new-deal-button").addEventListener("click", openDealDialog);
+document.getElementById("new-deal-button").addEventListener("click", () => openDealDialog());
 document.getElementById("new-event-button").addEventListener("click", () => openEventDialog());
 document.getElementById("new-invoice-button").addEventListener("click", () => openInvoiceDialog());
 document.getElementById("new-expense-button").addEventListener("click", () => openExpenseDialog());

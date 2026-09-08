@@ -179,8 +179,29 @@ textarea:focus-visible {
   border-radius: 4px;
   background: #fff;
 }
+.global-search-wrap { position: relative; }
 .global-search { width: min(27vw, 320px); height: 36px; }
 .global-search kbd { border-radius: 3px; background: #f7f8fa; }
+.global-search-results {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 80;
+  width: min(520px, 72vw);
+  max-height: 430px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid #d0d4dc;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(24, 27, 52, .14);
+}
+.global-search-results .search-result { width: 100%; text-align: left; }
+.global-search-results .empty-state.compact { padding: 18px 12px; }
+.permission-note { max-width: 180px; color: #676879; font-size: .76rem; line-height: 1.35; }
+.admin-user-row { grid-template-columns: minmax(220px, 1fr) 180px 100px 118px; border-radius: 5px; }
+.admin-user-row .admin-save-access { min-height: 36px; padding: 0 12px; }
+.admin-self-note { grid-column: 2 / -1; color: #676879; }
 .notification-button { border: 1px solid #d0d4dc; border-radius: 4px; box-shadow: none; }
 .notification-button span { background: #fb275d; }
 

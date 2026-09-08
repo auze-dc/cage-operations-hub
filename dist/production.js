@@ -21,6 +21,7 @@
   let saveChain = Promise.resolve();
   let realtimeChannel = null;
   let applyingRemote = false;
+  let lastAccessRefresh = 0;
 
   function configured() {
     return config.mode === "production" && config.supabaseUrl && config.supabaseAnonKey && config.organizationId;
@@ -237,6 +238,20 @@
     }
   }
 
+  async function refreshAccess() {
+    if (!client || !profile || Date.now() - lastAccessRefresh < 3000) return;
+    lastAccessRefresh = Date.now();
+    try {
+      profile = await loadProfile(profile.id);
+      setCurrentUser();
+      app?.renderAll?.();
+      applyPermissions();
+    } catch (error) {
+      await client.auth.signOut();
+      showLogin(error.message || "Your access has changed. Sign in again.");
+    }
+  }
+
   async function boot(appApi) {
     app = appApi;
     document.body.classList.add("auth-pending");
@@ -438,7 +453,14 @@
 
   async function adminUsers(action, payload = {}) {
     const result = await client.functions.invoke("admin-users", { body: { action, ...payload } });
-    if (result.error) throw new Error(result.error.message || "User administration failed.");
+    if (result.error) {
+      let message = result.error.message || "User administration failed.";
+      try {
+        const details = await result.error.context?.json?.();
+        if (details?.error) message = details.error;
+      } catch { /* Keep the transport error when no JSON response is available. */ }
+      throw new Error(message);
+    }
     if (!result.data?.ok) throw new Error(result.data?.error || "User administration failed.");
     return result.data;
   }
@@ -497,6 +519,11 @@
     return result.data;
   }
 
+  window.addEventListener("focus", refreshAccess);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refreshAccess();
+  });
+
   window.CAGE_BACKEND = {
     boot,
     scheduleSave,
@@ -514,6 +541,8 @@
     createTrainingCohort,
     createLearner,
     updateLearnerStage,
+    applyPermissions,
+    canApprove: () => ["admin", "manager"].includes(profile?.role),
     isProduction: configured,
     currentProfile: () => profile,
     currentMemberId: () => profile?.email?.split("@")[0] === "bonfancio" ? "bonifancio" : profile?.email?.split("@")[0] || "alexander"
