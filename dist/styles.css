@@ -634,6 +634,7 @@ td { padding: 15px 12px; border-top: 1px solid var(--line-soft); color: #314753;
 .chat-channel-icon.intake { color: #5f4300; background: #ffedba; }
 .chat-channel-icon.commercial { color: #493483; background: #e9e2ff; }
 .chat-channel-icon.delivery { color: #075a42; background: #d8f4e9; }
+.chat-channel-icon.team { color: #075174; background: #cceffd; box-shadow: inset 0 0 0 1px #94d9f3; }
 .chat-list-empty { padding: 24px 10px; color: var(--muted); font-size: .7rem; text-align: center; }
 .unread-count { display: grid; min-width: 20px; height: 20px; place-items: center; border-radius: 99px; color: white; background: var(--brand-strong); font-size: .59rem; font-weight: 900; }
 .chat-main { display: grid; min-width: 0; grid-template-rows: auto auto minmax(0, 1fr) auto; background: #edf4f6; }
@@ -644,9 +645,15 @@ td { padding: 15px 12px; border-top: 1px solid var(--line-soft); color: #314753;
 .chat-header-main span { margin-top: 4px; color: var(--muted); font-size: .67rem; }
 .chat-header-members { display: flex; }
 .chat-header-members .owner-avatar { margin-left: -5px; border: 2px solid white; }
+.chat-member-more { display: grid; width: 30px; height: 30px; margin-left: -5px; place-items: center; border: 2px solid white; border-radius: 9px; color: #075174; background: #dff5fc; font-size: .58rem; font-weight: 900; }
 .chat-header-actions { display: flex; align-items: center; gap: 12px; }
 .chat-header-actions > button { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; color: #0a607e; background: white; font-size: .65rem; font-weight: 800; }
 .chat-context { padding: 11px 16px; border-bottom: 1px solid var(--line); background: #fbfdfd; }
+.team-chat-purpose { display: flex; align-items: center; gap: 10px; }
+.team-chat-purpose-icon { display: grid; width: 29px; height: 29px; flex: 0 0 auto; place-items: center; border-radius: 9px; color: white; background: #087da8; font-size: .75rem; font-weight: 900; }
+.team-chat-purpose strong, .team-chat-purpose small { display: block; }
+.team-chat-purpose strong { color: #193842; font-size: .7rem; }
+.team-chat-purpose small { margin-top: 3px; color: var(--muted); font-size: .63rem; line-height: 1.4; }
 .chat-lifecycle { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .chat-lifecycle button { position: relative; display: grid; justify-items: center; gap: 4px; border: 0; color: #82929a; background: transparent; font-size: .61rem; }
 .chat-lifecycle button::before { position: absolute; z-index: 0; top: 11px; right: 50%; left: -50%; height: 2px; content: ""; background: #dce5e8; }
@@ -660,6 +667,7 @@ td { padding: 15px 12px; border-top: 1px solid var(--line-soft); color: #314753;
 .chat-context-meta small, .chat-context-meta strong { display: block; }
 .chat-context-meta small { color: var(--muted); font-size: .56rem; text-transform: uppercase; letter-spacing: .06em; }
 .chat-context-meta strong { margin-top: 3px; overflow: hidden; color: #193842; font-size: .65rem; text-overflow: ellipsis; white-space: nowrap; }
+.team-chat-meta { grid-template-columns: .85fr 1.7fr .75fr; }
 .chat-messages { overflow-y: auto; padding: 22px 26px; scroll-behavior: smooth; background-image: radial-gradient(rgba(16,35,49,.055) .7px, transparent .7px); background-size: 12px 12px; }
 .message-day { width: fit-content; margin: 4px auto 18px; padding: 6px 10px; border-radius: 99px; color: var(--muted); background: rgba(255,255,255,.78); font-size: .61rem; font-weight: 800; }
 .message-row { display: flex; align-items: flex-end; gap: 8px; margin: 9px 0; }
@@ -808,6 +816,7 @@ td { padding: 15px 12px; border-top: 1px solid var(--line-soft); color: #314753;
 .project-workspace-header p { margin: 0; color: var(--muted); font-size: .78rem; }
 .project-workspace-header > div:last-child { display: flex; align-items: center; gap: 12px; }
 .project-workspace-header .icon-button { color: var(--muted); background: #eef4f6; }
+.project-header-chat { min-height: 36px; padding: 0 12px; border: 1px solid #a9ddec; border-radius: 9px; color: var(--brand-strong); background: var(--brand-soft); font-size: .7rem; font-weight: 850; }
 .project-workspace-tabs { display: flex; flex: 0 0 auto; gap: 0; overflow-x: auto; border-bottom: 1px solid var(--line); background: white; scrollbar-width: thin; }
 .project-workspace-tabs button { flex: 0 0 auto; min-height: 54px; padding: 0 20px; border: 0; border-bottom: 3px solid transparent; border-radius: 0; color: #607681; background: transparent; font-size: .76rem; font-weight: 800; white-space: nowrap; }
 .project-workspace-tabs button:hover { color: var(--brand-strong); background: #f5fbfd; }
@@ -873,14 +882,18 @@ td { padding: 15px 12px; border-top: 1px solid var(--line-soft); color: #314753;
 .project-task-table select { height: 34px; border: 1px solid var(--line); border-radius: 8px; background: white; }
 .project-board { display: grid; grid-template-columns: repeat(4, minmax(230px, 1fr)); gap: 12px; min-width: 980px; }
 .project-board > section { display: flex; min-height: 430px; flex-direction: column; padding: 12px; border: 1px solid var(--line-soft); border-radius: 12px; background: #edf3f5; }
+.project-board > section.drop-target { border-color: var(--brand); background: #dff5fc; box-shadow: inset 0 0 0 2px rgba(0,173,239,.18); }
 .project-board-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 3px 12px; font-size: .74rem; }
 .project-board-head span { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 7px; background: white; font-size: .65rem; }
 .project-board > section > div:nth-child(2) { display: grid; gap: 8px; }
 .project-board article { padding: 12px; border: 1px solid var(--line-soft); border-radius: 10px; background: white; box-shadow: var(--shadow-sm); }
+.project-board article[draggable="true"] { cursor: grab; }
+.project-board article.dragging { opacity: .5; }
 .project-board article button { width: 100%; border: 0; color: var(--text); background: transparent; font-size: .74rem; font-weight: 800; line-height: 1.4; text-align: left; }
 .project-board article span { display: flex; justify-content: space-between; margin-top: 12px; color: var(--muted); }
 .project-board section > button { margin-top: auto; padding: 10px; border: 0; color: var(--brand-strong); background: transparent; font-size: .7rem; font-weight: 850; text-align: left; }
 .project-board section > div > p { color: var(--muted-light); font-size: .68rem; text-align: center; }
+.project-board-hint { margin: 10px 2px 0; color: var(--muted); font-size: .66rem; }
 .project-timeline-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 0 15px; color: var(--muted); font-size: .68rem; }
 .project-timeline { display: grid; gap: 8px; }
 .timeline-row { display: grid; grid-template-columns: minmax(220px, 34%) 1fr; gap: 16px; align-items: center; }
@@ -897,6 +910,15 @@ td { padding: 15px 12px; border-top: 1px solid var(--line-soft); color: #314753;
 .project-finance-list strong { font-size: .76rem; }
 .project-finance-list small { margin-top: 4px; color: var(--muted); font-size: .65rem; }
 .project-finance-list button { min-height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--brand-strong); background: white; font-size: .68rem; font-weight: 800; }
+.project-expense-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 15px; }
+.project-expense-summary > span { padding: 13px; border: 1px solid var(--line-soft); border-radius: 10px; background: #f7fafb; }
+.project-expense-summary small, .project-expense-summary strong { display: block; }
+.project-expense-summary small { color: var(--muted); font-size: .62rem; }
+.project-expense-summary strong { margin-top: 4px; font-size: .86rem; }
+.project-expense-list > div { display: grid; grid-template-columns: minmax(0, 1fr) 130px 110px; gap: 12px; align-items: center; padding: 12px 2px; border-bottom: 1px solid var(--line-soft); }
+.project-expense-list span strong, .project-expense-list span small { display: block; }
+.project-expense-list span small { margin-top: 4px; color: var(--muted); font-size: .64rem; }
+.project-expense-list select { min-height: 34px; border: 1px solid var(--line); border-radius: 8px; background: white; font-size: .68rem; }
 .project-chat-preview { display: grid; gap: 10px; }
 .project-chat-preview article { display: grid; grid-template-columns: auto 1fr; gap: 11px; padding: 12px; border-radius: 10px; background: #f8fbfc; }
 .project-chat-preview strong { font-size: .73rem; }
@@ -1283,8 +1305,12 @@ td { padding: 15px 12px; border-top: 1px solid var(--line-soft); color: #314753;
   .project-workspace-header { padding: 17px 15px 14px; }
   .project-workspace-header h2 { font-size: 1.2rem; }
   .project-workspace-header .status-pill { display: none; }
+  .project-header-chat { padding: 0 9px; font-size: .63rem; }
   .project-workspace-tabs button { min-height: 48px; padding: 0 15px; }
   .project-workspace-body { padding: 14px; }
+  .project-expense-summary { grid-template-columns: 1fr; }
+  .project-expense-list > div { grid-template-columns: 1fr auto; }
+  .project-expense-list select { grid-column: 1 / -1; }
   .project-kpi-grid, .project-member-grid { grid-template-columns: 1fr; }
   .project-panel { padding: 15px; }
   .project-panel-heading { align-items: flex-start; flex-direction: column; }
