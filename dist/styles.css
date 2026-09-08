@@ -311,6 +311,45 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .match-action button { min-height: 34px; padding: 0 11px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: white; font-size: .7rem; font-weight: 750; }
 .match-action button.primary { border-color: var(--brand); color: #04202c; background: var(--brand); }
 .match-action small { color: var(--muted-light); font-size: .62rem; }
+.opportunity-table-wrap { overflow-x: auto; border: 1px solid var(--line); background: white; }
+.opportunity-table { min-width: 1180px; table-layout: fixed; }
+.opportunity-table th:nth-child(1) { width: 25%; }
+.opportunity-table th:nth-child(2) { width: 13%; }
+.opportunity-table th:nth-child(3) { width: 11%; }
+.opportunity-table th:nth-child(4) { width: 14%; }
+.opportunity-table th:nth-child(5) { width: 9%; }
+.opportunity-table th:nth-child(6) { width: 10%; }
+.opportunity-table th:nth-child(7) { width: 12%; }
+.opportunity-table th { padding: 11px 12px; border-right: 1px solid var(--line); background: #f5f7f8; font-size: .63rem; line-height: 1.25; }
+.opportunity-table td { padding: 12px; border-right: 1px solid var(--line-soft); vertical-align: top; font-size: .7rem; line-height: 1.45; }
+.opportunity-table tbody tr:hover, .opportunity-table tbody tr.added { background: #f2fbff; }
+.opportunity-table td > strong, .opportunity-table td > small { display: block; }
+.opportunity-table td > small { margin-top: 5px; color: var(--muted); }
+.opportunity-table a { color: var(--brand-strong); font-weight: 800; }
+.opportunity-intake-action { margin-top: 9px; padding: 5px 8px; border: 1px solid var(--brand); border-radius: 5px; color: var(--brand-strong); background: white; font-size: .62rem; font-weight: 800; }
+.match-level { display: inline-block; min-width: 58px; padding: 5px 7px; border-radius: 999px; color: white; background: #667085; font-size: .62rem; font-weight: 900; text-align: center; }
+.match-level.high { background: var(--green); }
+.match-level.medium { color: #181b34; background: var(--amber); }
+.match-level.low { background: var(--red); }
+.opportunity-top-summary { margin-top: 16px; padding: 14px 16px; border: 1px solid var(--line); background: #f8fafb; }
+.opportunity-top-summary article { padding: 11px 0; border-top: 1px solid var(--line-soft); }
+.opportunity-top-summary h4 { margin: 0 0 7px; font-size: .78rem; }
+.opportunity-top-summary ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: .69rem; line-height: 1.5; }
+.opportunity-top-summary li + li { margin-top: 4px; }
+.clickable-contact-row { cursor: pointer; }
+.clickable-contact-row:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.contact-name-button { display: flex; width: 100%; align-items: center; gap: 10px; padding: 0; border: 0; color: inherit; background: transparent; text-align: left; }
+.contact-name-button > span:last-child, .contact-name-button strong, .contact-name-button span span { display: block; }
+.contact-name-button span span { margin-top: 3px; color: var(--muted); font-size: .66rem; }
+.contact-detail-dialog { width: min(900px, calc(100vw - 28px)); }
+.contact-detail-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); gap: 20px; }
+.contact-linked-work { display: grid; gap: 16px; align-content: start; padding: 14px; border: 1px solid var(--line); background: #f7f9fa; }
+.contact-linked-group { display: grid; gap: 7px; }
+.contact-linked-group > strong { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
+.contact-linked-group button { display: grid; gap: 3px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 5px; color: var(--text); background: white; text-align: left; }
+.contact-linked-group button:hover { border-color: var(--brand); background: #effaff; }
+.contact-linked-group button span { font-size: .72rem; font-weight: 800; }
+.contact-linked-group button small, .contact-linked-group p { margin: 0; color: var(--muted); font-size: .64rem; }
 .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(290px, .75fr); gap: 18px; margin-bottom: 18px; }
 .priority-surface, .pulse-surface { min-height: 384px; padding: 21px; }
 .surface-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
@@ -614,7 +653,7 @@ td { padding: 15px 12px; border-top: 1px solid var(--line-soft); color: #314753;
 .communication-rule strong, .communication-rule small { display: block; }
 .communication-rule strong { font-size: .78rem; }
 .communication-rule small { margin-top: 3px; color: var(--muted); font-size: .67rem; line-height: 1.45; }
-.chat-workspace { display: grid; grid-template-columns: 340px minmax(0, 1fr); min-height: 700px; max-height: calc(100vh - 150px); overflow: hidden; }
+.chat-workspace { display: grid; height: max(620px, calc(100vh - 205px)); max-height: 820px; grid-template-columns: 340px minmax(0, 1fr); overflow: hidden; }
 .chat-channels { min-width: 0; padding: 14px; border-right: 1px solid var(--line); background: #f7fafb; }
 .chat-search { display: flex; height: 42px; align-items: center; gap: 8px; padding: 0 11px; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); background: white; }
 .chat-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; font-size: .75rem; }
@@ -637,7 +676,7 @@ td { padding: 15px 12px; border-top: 1px solid var(--line-soft); color: #314753;
 .chat-channel-icon.team { color: #075174; background: #cceffd; box-shadow: inset 0 0 0 1px #94d9f3; }
 .chat-list-empty { padding: 24px 10px; color: var(--muted); font-size: .7rem; text-align: center; }
 .unread-count { display: grid; min-width: 20px; height: 20px; place-items: center; border-radius: 99px; color: white; background: var(--brand-strong); font-size: .59rem; font-weight: 900; }
-.chat-main { display: grid; min-width: 0; grid-template-rows: auto auto minmax(0, 1fr) auto; background: #edf4f6; }
+.chat-main { display: grid; min-width: 0; min-height: 0; overflow: hidden; grid-template-rows: auto auto minmax(0, 1fr) auto; background: #edf4f6; }
 .chat-header { display: flex; min-height: 72px; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 18px; border-bottom: 1px solid var(--line); background: white; }
 .chat-header-main { display: flex; min-width: 0; align-items: center; gap: 11px; }
 .chat-header-main strong, .chat-header-main span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -668,7 +707,7 @@ td { padding: 15px 12px; border-top: 1px solid var(--line-soft); color: #314753;
 .chat-context-meta small { color: var(--muted); font-size: .56rem; text-transform: uppercase; letter-spacing: .06em; }
 .chat-context-meta strong { margin-top: 3px; overflow: hidden; color: #193842; font-size: .65rem; text-overflow: ellipsis; white-space: nowrap; }
 .team-chat-meta { grid-template-columns: .85fr 1.7fr .75fr; }
-.chat-messages { overflow-y: auto; padding: 22px 26px; scroll-behavior: smooth; background-image: radial-gradient(rgba(16,35,49,.055) .7px, transparent .7px); background-size: 12px 12px; }
+.chat-messages { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 22px 26px; scroll-behavior: smooth; background-image: radial-gradient(rgba(16,35,49,.055) .7px, transparent .7px); background-size: 12px 12px; }
 .message-day { width: fit-content; margin: 4px auto 18px; padding: 6px 10px; border-radius: 99px; color: var(--muted); background: rgba(255,255,255,.78); font-size: .61rem; font-weight: 800; }
 .message-row { display: flex; align-items: flex-end; gap: 8px; margin: 9px 0; }
 .message-row.mine { justify-content: flex-end; }
@@ -679,7 +718,7 @@ td { padding: 15px 12px; border-top: 1px solid var(--line-soft); color: #314753;
 .message-bubble p { margin: 0; font-size: .76rem; line-height: 1.5; white-space: pre-wrap; }
 .message-meta { display: flex; justify-content: flex-end; gap: 5px; margin-top: 5px; color: var(--muted-light); font-size: .58rem; }
 .message-attachment { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 7px 9px; border-radius: 7px; color: var(--brand-strong); background: rgba(255,255,255,.7); font-size: .65rem; font-weight: 800; }
-.chat-composer { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 8px; align-items: end; padding: 10px 14px 12px; border-top: 1px solid var(--line); background: white; }
+.chat-composer { position: relative; z-index: 4; display: grid; flex: 0 0 auto; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 8px; align-items: end; padding: 10px 14px 12px; border-top: 1px solid var(--line); background: white; }
 .chat-tool { width: 38px; height: 38px; border: 0; border-radius: 10px; color: var(--muted); background: #f0f5f7; font-size: 1.2rem; }
 .chat-compose-main { min-width: 0; }
 .chat-compose-tools { display: flex; gap: 6px; margin-bottom: 6px; }
@@ -1251,7 +1290,7 @@ td { padding: 15px 12px; border-top: 1px solid var(--line-soft); color: #314753;
   .client-surface, .pipeline-surface, .finance-ledger-surface, .profitability-panel, .expenses-surface, .calendar-main, .agenda-panel, .quotes-surface, .leave-timeline-surface, .leave-balance-surface, .leave-requests-surface, .knowledge-pinned { padding: 16px; }
   .search-result { grid-template-columns: 34px 1fr; }
   .search-result-type { display: none; }
-  .chat-workspace { display: block; max-height: none; }
+  .chat-workspace { display: block; height: auto; max-height: none; }
   .chat-channels { overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
   .chat-search { display: none; }
   .chat-filter { margin: 0 0 8px; }
@@ -1267,6 +1306,7 @@ td { padding: 15px 12px; border-top: 1px solid var(--line-soft); color: #314753;
   .chat-send { grid-column: 2; justify-self: end; min-width: 82px; }
   .chat-messages { padding: 17px 12px; }
   .message-bubble { max-width: 84%; }
+  .contact-detail-layout { grid-template-columns: 1fr; }
   .knowledge-grid { grid-template-columns: 1fr; }
   .knowledge-toolbar { align-items: stretch; }
   .mission-facts { grid-template-columns: 1fr 1fr; }

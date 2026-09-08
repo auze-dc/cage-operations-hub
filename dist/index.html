@@ -449,7 +449,7 @@
               <div class="monitor-status" id="opportunity-monitor-status"></div>
               <div class="monitor-sources"><span>Sources monitored</span><div id="opportunity-source-list"></div></div>
               <div class="monitor-switches">
-                <label><span><strong>Daily alerts</strong><small>Notify the team at 07:00 CAT</small></span><span class="switch"><input id="opportunity-alerts" type="checkbox"><span></span></span></label>
+                <label><span><strong>Weekday alerts</strong><small>Search and notify at 07:00 CAT, Monday–Friday</small></span><span class="switch"><input id="opportunity-alerts" type="checkbox"><span></span></span></label>
                 <label><span><strong>Auto-create qualified requests</strong><small>Send 80%+ matches to Request centre</small></span><span class="switch"><input id="opportunity-auto-intake" type="checkbox"><span></span></span></label>
               </div>
             </div>
@@ -756,6 +756,25 @@
       <p class="prototype-send-note">Delivery is sent through CAGE's verified email service and recorded in the Hub.</p>
       <p class="form-error" id="send-form-error" role="alert"></p>
       <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Send now</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="contact-detail-dialog" class="app-dialog contact-detail-dialog">
+    <form method="dialog" id="contact-detail-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Relationship workspace</p><h2 id="contact-detail-title">Organisation</h2><p>Edit the relationship and open its linked opportunities or delivery projects.</p></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="contact-detail-layout">
+        <div class="form-grid">
+          <label class="field field-wide"><span>Organisation *</span><input name="company" required maxlength="100"></label>
+          <label class="field field-wide"><span>Primary contact or team</span><input name="contact" maxlength="100"></label>
+          <label class="field"><span>Relationship *</span><select name="relationship"><option>Prospect</option><option>Lead</option><option>Client</option><option>Partner</option><option>Supplier</option></select></label>
+          <label class="field"><span>Owner *</span><select name="owner" id="contact-owner-input" required></select></label>
+          <label class="field"><span>Last activity</span><input name="lastActivity" type="date"></label>
+          <label class="field"><span>Next action date</span><input name="nextAction" type="date"></label>
+          <label class="field field-wide"><span>Next action *</span><textarea name="note" rows="3" required></textarea></label>
+        </div>
+        <aside class="contact-linked-work" id="contact-linked-work"></aside>
+      </div>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" type="submit" value="default">Save relationship</button></div>
     </form>
   </dialog>
 

@@ -281,16 +281,17 @@ const seedData = {
   ],
   requestPurposes: [...CORE_REQUEST_PURPOSES],
   opportunityMatches: [
-    { id: "om-001", title: "Sample: Climate resilience mapping grant", organisation: "Regional development fund", type: "Grant", source: "Funding database", deadline: "2026-09-28", match: 92, reason: "Strong fit with disaster mapping, Geoportal and anticipatory-action experience.", status: "New" },
-    { id: "om-002", title: "Sample: Utility corridor drone survey RFQ", organisation: "Infrastructure procurement portal", type: "Tender / RFQ", source: "Procurement portal", deadline: "2026-09-21", match: 88, reason: "Matches CAGE mapping equipment, pilots, GIS processing and utility-sector experience.", status: "New" },
-    { id: "om-003", title: "Sample: Women in geospatial skills fund", organisation: "International skills funder", type: "Grant", source: "LinkedIn / funder page", deadline: "2026-10-10", match: 84, reason: "Fits CAGE RPL training, women-focused skills and employment pathway work.", status: "Reviewed" }
+    { id: "live-developpp-2026-q3", title: "develoPPP Classic — sustainable drone and geospatial services", organisation: "BMZ via GIZ / DEG Impulse", type: "Grant", source: "develoPPP official call", platform: "develoPPP", estimatedValue: "€100,000–€2,000,000; up to 50% public funding", deadline: "2026-09-30", url: "https://www.developpp.de/en/application/classic/", match: 92, matchLevel: "High", reason: "CAGE can combine commercial drone, Geoportal, agriculture and technical-training growth with measurable development benefits in Malawi.", requirements: ["Confirm CAGE meets the financial and staffing thresholds and provide two audited annual statements.", "Prepare a project with at least 50% company contribution, a lasting business interest and benefits beyond CAGE itself."], status: "New", verifiedAt: "2026-09-08" },
+    { id: "live-unicef-rolling-2026", title: "UNICEF Venture Fund rolling application — open-source technology for children", organisation: "UNICEF Venture Fund", type: "Grant", source: "UNICEF Venture Fund official portal", platform: "UNICEF", estimatedValue: "Up to US$100,000 equity-free", deadline: "Rolling", url: "https://www.unicefventurefund.org/apply-funding", match: 80, matchLevel: "High", reason: "CAGE's Geoportal, climate mapping and STEM work could qualify if the proposed product directly benefits children and is released under an approved open-source licence.", requirements: ["Submit a working prototype from a company registered in a UNICEF programme country.", "Commit the relevant software, hardware or content to an approved open-source licence and define a child-focused outcome."], status: "New", verifiedAt: "2026-09-08" },
+    { id: "live-sgci-stisa-2034", title: "STISA-2034 multilateral research call — agriculture, digital technologies and environment", organisation: "IDRC / Science Granting Councils Initiative", type: "Partnership", source: "SGCI official funding call", platform: "SGCI / IDRC", estimatedValue: "CAD 50,000–300,000 per consortium member", deadline: "2026-09-25", url: "https://sgciafrica.org/funding/supporting-stisa-2034-sgci-collaborative-research-call/", match: 75, matchLevel: "Medium", reason: "CAGE is a strong geospatial implementation and field-data partner, but the application must be led through an eligible research institution in a multi-country consortium.", requirements: ["Join an eligible lead and at least two co-applicant research institutions from participating SGCI countries.", "Position CAGE's drone data, AI/GIS, agriculture or environment work as a technical delivery and research-uptake contribution."], status: "New", verifiedAt: "2026-09-08" },
+    { id: "live-iucn-gis-tablets-2026", title: "IUCN-26-08 — supply of GIS-enabled rugged tablets", organisation: "IUCN ESARO Kenya", type: "Tender / RFQ", source: "IUCN procurement listing", platform: "IUCN / DevelopmentAid", estimatedValue: "Below CHF 25,000", deadline: "2026-09-18", url: "https://www.developmentaid.org/tenders/view/1708084/iucn-26-08-procurement-of-gis-enabled-tablets-509", match: 62, matchLevel: "Low", reason: "CAGE understands GIS field hardware and can bid as a supplier if it can source the exact rugged specification and deliver DDP to Nairobi on time.", requirements: ["Verify the complete specification and supplier-document requirements on the IUCN procurement portal.", "Confirm pricing, tax and logistics for DDP delivery of ten units to Nairobi by 30 September 2026."], status: "Review", verifiedAt: "2026-09-08" }
   ],
   opportunityMonitor: {
     enabled: true,
     autoIntake: false,
     lastScan: "2026-09-05T07:00:00+02:00",
-    nextScan: "2026-09-06T07:00:00+02:00",
-    sources: ["Funding databases", "Procurement portals", "LinkedIn posts", "UN & NGO portals", "Government e-procurement"]
+    nextScan: "2026-09-09T07:00:00+02:00",
+    sources: ["UNGM & UN portals", "World Bank Procurement", "DevelopmentAid", "Public LinkedIn, Facebook & X posts", "Official funder and tender pages"]
   },
   settings: {
     workspaceName: "Operations Hub",
@@ -323,6 +324,7 @@ let assetFilter = "all";
 let commercialFilter = "all";
 let requestFilter = "all";
 let activeRequestId = "";
+let activeContactId = "";
 let sendingDocument = null;
 let missingEvidenceOnly = false;
 let calendarCursor = new Date(`${TODAY.slice(0, 7)}-01T00:00:00Z`);
@@ -613,7 +615,18 @@ function loadState() {
       requestPurposes: Array.isArray(parsed.requestPurposes) && parsed.requestPurposes.length
         ? [...new Set([...CORE_REQUEST_PURPOSES, ...parsed.requestPurposes.map(value => String(value).trim()).filter(Boolean)])]
         : clone(seedData.requestPurposes),
-      opportunityMatches: Array.isArray(parsed.opportunityMatches) ? parsed.opportunityMatches : clone(seedData.opportunityMatches),
+      opportunityMatches: (() => {
+        const existing = Array.isArray(parsed.opportunityMatches)
+          ? parsed.opportunityMatches.filter(item => {
+              if (/^sample:/i.test(String(item?.title || ""))) return false;
+              if (item?.request || item?.deadline === "Rolling" || !item?.deadline) return true;
+              const deadline = new Date(`${item.deadline}T23:59:59Z`).getTime();
+              return Number.isFinite(deadline) && deadline > Date.now() + 48 * 60 * 60 * 1000;
+            })
+          : [];
+        const hasLiveResults = existing.some(item => item.url || item.source_url);
+        return hasLiveResults ? existing : clone(seedData.opportunityMatches);
+      })(),
       opportunityMonitor: parsed.opportunityMonitor && typeof parsed.opportunityMonitor === "object"
         ? { ...clone(seedData.opportunityMonitor), ...parsed.opportunityMonitor }
         : clone(seedData.opportunityMonitor),
@@ -631,9 +644,11 @@ function saveState() {
 
 function replaceStateFromCloud(nextState) {
   if (!nextState || typeof nextState !== "object") return;
+  const removedLegacySamples = Array.isArray(nextState.opportunityMatches) && nextState.opportunityMatches.some(item => /^sample:/i.test(String(item?.title || "")));
   localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
   state = loadState();
   renderAll();
+  if (removedLegacySamples) window.setTimeout(saveState, 0);
 }
 
 function escapeHtml(value = "") {
@@ -1166,6 +1181,7 @@ function renderOwnerOptions() {
   document.getElementById("approval-requester-input").innerHTML = `<option value="">Select requester</option>${assignableTeam().map(member => `<option value="${member.id}">${escapeHtml(member.name)}</option>`).join("")}`;
   document.getElementById("commercial-owner-input").innerHTML = `<option value="">Select owner</option>${assignableTeam().map(member => `<option value="${member.id}">${escapeHtml(member.name)}</option>`).join("")}`;
   document.getElementById("request-owner-input").innerHTML = `<option value="">Select owner</option>${assignableTeam().map(member => `<option value="${member.id}">${escapeHtml(member.name)}</option>`).join("")}`;
+  document.getElementById("contact-owner-input").innerHTML = `<option value="">Select owner</option>${assignableTeam().map(member => `<option value="${member.id}">${escapeHtml(member.name)}</option>`).join("")}`;
 }
 
 function renderProjectOptions() {
@@ -1413,8 +1429,62 @@ function renderCRM() {
     .sort((a, b) => a.nextAction.localeCompare(b.nextAction))
     .map(contact => {
       const owner = teamMember(contact.owner);
-      return `<tr><td><div class="project-cell"><span class="project-glyph">${initials(contact.company)}</span><span><strong>${escapeHtml(contact.company)}</strong><span>${escapeHtml(contact.contact)}</span></span></div></td><td><span class="status-pill ${contact.relationship === "Client" ? "done" : contact.relationship === "Partner" ? "on-track" : "to-do"}">${escapeHtml(contact.relationship)}</span></td><td><span class="owner-chip"><span class="owner-avatar">${owner.initials}</span>${escapeHtml(owner.name.split(" ")[0])}</span></td><td>${formatDate(contact.lastActivity)}</td><td><strong>${formatDate(contact.nextAction)}</strong><br><span class="project-client">${escapeHtml(contact.note)}</span></td></tr>`;
+      return `<tr class="clickable-contact-row" data-contact-detail="${contact.id}" tabindex="0" aria-label="Open ${escapeHtml(contact.company)} relationship"><td><button class="contact-name-button" data-contact-detail="${contact.id}"><span class="project-glyph">${initials(contact.company)}</span><span><strong>${escapeHtml(contact.company)}</strong><span>${escapeHtml(contact.contact)}</span></span></button></td><td><span class="status-pill ${contact.relationship === "Client" ? "done" : contact.relationship === "Partner" ? "on-track" : "to-do"}">${escapeHtml(contact.relationship)}</span></td><td><span class="owner-chip"><span class="owner-avatar">${owner.initials}</span>${escapeHtml(owner.name.split(" ")[0])}</span></td><td>${formatDate(contact.lastActivity)}</td><td><strong>${formatDate(contact.nextAction)}</strong><br><span class="project-client">${escapeHtml(contact.note)}</span></td></tr>`;
     }).join("");
+}
+
+function openContactDetail(contactId) {
+  const contact = state.contacts.find(item => item.id === contactId);
+  if (!contact) return;
+  activeContactId = contact.id;
+  const form = document.getElementById("contact-detail-form");
+  form.elements.company.value = contact.company;
+  form.elements.contact.value = contact.contact;
+  form.elements.relationship.value = contact.relationship;
+  form.elements.owner.value = contact.owner;
+  form.elements.lastActivity.value = contact.lastActivity;
+  form.elements.nextAction.value = contact.nextAction;
+  form.elements.note.value = contact.note;
+  document.getElementById("contact-detail-title").textContent = contact.company;
+  const deals = state.deals.filter(deal => deal.company === contact.company);
+  const projectIds = new Set(deals.map(deal => deal.project).filter(Boolean));
+  state.projects.filter(project => project.client === contact.company).forEach(project => projectIds.add(project.id));
+  const projects = [...projectIds].map(projectById).filter(Boolean);
+  document.getElementById("contact-linked-work").innerHTML = `
+    <div class="contact-linked-group"><strong>Opportunities</strong>${deals.length ? deals.map(deal => `<button type="button" data-contact-open-deal="${deal.id}"><span>${escapeHtml(deal.name)}</span><small>${escapeHtml(deal.stage)} · ${formatMoney(deal.value, true)}</small></button>`).join("") : `<p>No CRM opportunities linked yet.</p>`}</div>
+    <div class="contact-linked-group"><strong>Projects</strong>${projects.length ? projects.map(project => `<button type="button" data-project-detail="${project.id}"><span>${escapeHtml(project.name)}</span><small>${projectProgress(project.id)}% complete · due ${formatDate(project.deadline, { year: true })}</small></button>`).join("") : `<p>No delivery projects linked yet.</p>`}</div>`;
+  document.getElementById("contact-detail-dialog").showModal();
+}
+
+function saveContactDetail(event) {
+  event.preventDefault();
+  if (event.submitter?.value === "cancel") {
+    document.getElementById("contact-detail-dialog").close();
+    return;
+  }
+  const contact = state.contacts.find(item => item.id === activeContactId);
+  if (!contact) return;
+  const data = new FormData(event.currentTarget);
+  const previousCompany = contact.company;
+  const nextCompany = String(data.get("company") || "").trim();
+  if (!nextCompany) return;
+  Object.assign(contact, {
+    company: nextCompany,
+    contact: String(data.get("contact") || "").trim(),
+    relationship: String(data.get("relationship") || "Prospect"),
+    owner: String(data.get("owner") || "alexander"),
+    lastActivity: String(data.get("lastActivity") || TODAY),
+    nextAction: String(data.get("nextAction") || TODAY),
+    note: String(data.get("note") || "").trim()
+  });
+  if (previousCompany !== nextCompany) {
+    state.deals.filter(deal => deal.company === previousCompany).forEach(deal => { deal.company = nextCompany; });
+    state.projects.filter(project => project.client === previousCompany).forEach(project => { project.client = nextCompany; });
+  }
+  saveState();
+  document.getElementById("contact-detail-dialog").close();
+  renderAll();
+  showToast("Relationship updated.");
 }
 
 function addQuickDeal(stage, name, company) {
@@ -1673,15 +1743,23 @@ function renderOpportunityMonitor() {
   document.getElementById("opportunity-auto-intake").checked = monitor.autoIntake === true;
   document.getElementById("opportunity-monitor-status").innerHTML = `
     <span class="monitor-live-dot ${monitor.enabled === false ? "paused" : ""}"></span>
-    <div><strong>${monitor.enabled === false ? "Daily checking paused" : "Daily check scheduled"}</strong><small>Last: ${escapeHtml(formatMonitorTime(monitor.lastScan))}<br>Next: ${escapeHtml(formatMonitorTime(monitor.nextScan))}</small></div>
+    <div><strong>${monitor.enabled === false ? "Weekday checking paused" : "Weekday check scheduled"}</strong><small>Last: ${escapeHtml(formatMonitorTime(monitor.lastScan))}<br>Next: ${escapeHtml(formatMonitorTime(monitor.nextScan))}</small></div>
     <b>${matches.filter(item => item.status === "New").length} new</b>`;
   document.getElementById("opportunity-source-list").innerHTML = monitor.sources.map(source => `<span>${escapeHtml(source)}</span>`).join("");
-  document.getElementById("opportunity-match-list").innerHTML = matches.map(match => `
-    <article class="opportunity-match ${match.status === "Added" ? "added" : ""}">
-      <div class="match-score"><strong>${match.match}%</strong><span>fit</span></div>
-      <div class="match-copy"><div><span class="commercial-type ${match.type === "Grant" ? "grant" : "tender"}">${escapeHtml(match.type === "Tender / RFQ" ? "Tender" : match.type)}</span><small>${escapeHtml(match.source)}</small></div><h4>${escapeHtml(match.title)}</h4><p>${escapeHtml(match.reason)}</p><span>${escapeHtml(match.organisation)} · closes ${formatDate(match.deadline, { year: true })}</span></div>
-      <div class="match-action">${match.request ? `<button data-open-match-request="${match.id}">Open request</button>` : `<button class="primary" data-add-match-request="${match.id}">Send to Request centre</button>`}<small>${match.status === "Added" ? "Added to intake" : match.status}</small></div>
-    </article>`).join("");
+  const deadlineLabel = match => match.deadline === "Rolling" ? "Rolling" : formatDate(match.deadline, { year: true });
+  document.getElementById("opportunity-match-list").innerHTML = matches.length ? `
+    <div class="opportunity-table-wrap"><table class="opportunity-table"><thead><tr><th>Opportunity Title</th><th>Organization / Client</th><th>Source / Platform</th><th>Estimated Value / Budget</th><th>Deadline</th><th>Direct URL</th><th>Qualification Match Score</th></tr></thead><tbody>${matches.map(match => `
+      <tr class="${match.status === "Added" ? "added" : ""}">
+        <td><strong>${escapeHtml(match.title)}</strong><small>${escapeHtml(match.reason)}</small><button class="opportunity-intake-action" ${match.request ? `data-open-match-request="${match.id}"` : `data-add-match-request="${match.id}"`}>${match.request ? "Open linked request" : "Send to Request centre"}</button></td>
+        <td>${escapeHtml(match.organisation)}</td>
+        <td>${escapeHtml(match.platform || match.source)}</td>
+        <td>${escapeHtml(match.estimatedValue || "Not published")}</td>
+        <td><strong>${escapeHtml(deadlineLabel(match))}</strong></td>
+        <td>${match.url ? `<a href="${escapeHtml(match.url)}" target="_blank" rel="noopener noreferrer">Open source ↗</a>` : `<span class="muted">Source link unavailable</span>`}</td>
+        <td><span class="match-level ${String(match.matchLevel || (match.match >= 80 ? "High" : match.match >= 65 ? "Medium" : "Low")).toLowerCase()}">${escapeHtml(match.matchLevel || (match.match >= 80 ? "High" : match.match >= 65 ? "Medium" : "Low"))}</span><small>${Number(match.match || 0)}% fit</small></td>
+      </tr>`).join("")}</tbody></table></div>
+    <section class="opportunity-top-summary"><div class="opportunity-match-head"><div><strong>Top 3 match notes</strong><span>Why CAGE fits and what must be ready</span></div></div>${matches.slice(0, 3).map((match, index) => `<article><h4>${index + 1}. ${escapeHtml(match.title)}</h4><ul><li>${escapeHtml(match.reason)}</li><li>${escapeHtml((match.requirements || ["Verify the official notice, eligibility and submission documents before proceeding."])[0])}${match.requirements?.[1] ? ` ${escapeHtml(match.requirements[1])}` : ""}</li></ul></article>`).join("")}</section>`
+    : `<div class="empty-state"><div>⌕</div><h3>No verified open matches</h3><p>Run a live scan or review the configured sources.</p></div>`;
 }
 
 function createRequestFromMatch(matchId, silent = false) {
@@ -1701,12 +1779,12 @@ function createRequestFromMatch(matchId, silent = false) {
     priority: match.match >= 90 ? "High" : "Normal",
     location: "Malawi / Africa",
     received: TODAY,
-    deadline: match.deadline,
+    deadline: match.deadline === "Rolling" ? dateAfter(30) : match.deadline,
     deliveryDeadline: "",
     value: 0,
     stage: "New",
     summary: match.reason,
-    attachments: `${match.source} · source link to be verified before qualification`,
+    attachments: match.url || `${match.source} · source link to be verified before qualification`,
     nextAction: "Verify the source, full guidelines, eligibility and deadline before the go / no-go decision.",
     checklist: Object.fromEntries(requestTemplate(match.type).map(item => [item.key, false]))
   };
@@ -1724,11 +1802,59 @@ function createRequestFromMatch(matchId, silent = false) {
   return request;
 }
 
-function runOpportunityScan() {
+function nextWeekdayScan(from = new Date()) {
+  const candidate = new Date(from);
+  candidate.setUTCHours(5, 0, 0, 0);
+  if (candidate <= from) candidate.setUTCDate(candidate.getUTCDate() + 1);
+  while ([0, 6].includes(candidate.getUTCDay())) candidate.setUTCDate(candidate.getUTCDate() + 1);
+  return candidate.toISOString();
+}
+
+async function runOpportunityScan() {
   const now = new Date();
-  const next = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const button = document.getElementById("run-opportunity-scan");
+  const previousLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = "Searching live sources…";
+  let scannedCount = 0;
+  state.opportunityMatches = state.opportunityMatches.filter(item => {
+    if (item.request || item.deadline === "Rolling" || !item.deadline) return true;
+    const deadline = new Date(`${item.deadline}T23:59:59Z`).getTime();
+    return Number.isFinite(deadline) && deadline > now.getTime() + 48 * 60 * 60 * 1000;
+  });
+  try {
+    const result = await window.CAGE_BACKEND?.scanOpportunities?.();
+    if (Array.isArray(result?.opportunities) && result.opportunities.length) {
+      const existingByUrl = new Map(state.opportunityMatches.map(item => [item.url, item]));
+      result.opportunities.forEach(item => {
+        const normalized = {
+          id: item.id || `scan-${Date.now()}-${scannedCount}`,
+          title: item.title,
+          organisation: item.organisation || "Organisation to verify",
+          type: item.type || "Grant",
+          source: item.source || item.platform || "Live source",
+          platform: item.platform || item.source || "Live web",
+          estimatedValue: item.estimatedValue || "Not published",
+          deadline: item.deadline || "Rolling",
+          url: item.url,
+          match: Number(item.match || 0),
+          matchLevel: item.matchLevel || (Number(item.match || 0) >= 80 ? "High" : Number(item.match || 0) >= 65 ? "Medium" : "Low"),
+          reason: item.reason || "Matched CAGE capability and geography criteria.",
+          requirements: item.requirements || [],
+          status: "New",
+          verifiedAt: TODAY
+        };
+        const previous = existingByUrl.get(normalized.url);
+        if (previous) Object.assign(previous, normalized, { request: previous.request, status: previous.status });
+        else state.opportunityMatches.push(normalized);
+        scannedCount += 1;
+      });
+    }
+  } catch (error) {
+    showToast(error.message || "The live scan could not be completed.");
+  }
   state.opportunityMonitor.lastScan = now.toISOString();
-  state.opportunityMonitor.nextScan = next.toISOString();
+  state.opportunityMonitor.nextScan = nextWeekdayScan(now);
   state.opportunityMatches.forEach(match => { if (!match.request && match.match >= 80) match.status = "New"; });
   let created = 0;
   if (state.opportunityMonitor.autoIntake) {
@@ -1736,7 +1862,9 @@ function runOpportunityScan() {
   }
   saveState();
   renderAll();
-  showToast(created ? `${created} strong matches added to Request centre.` : "Opportunity scan complete. Strong matches are ready for review.");
+  button.disabled = false;
+  button.textContent = previousLabel;
+  showToast(created ? `${created} strong matches added to Request centre.` : scannedCount ? `${scannedCount} verified live matches refreshed.` : "Scan finished. No new verified matches were added.");
 }
 
 function renderCommercial() {
@@ -1977,6 +2105,7 @@ function sendChatMessage(text, attachment = "", attachmentPath = "") {
   document.getElementById("chat-message-type").value = "Update";
   hideChatMentionPicker();
   renderChat();
+  requestAnimationFrame(() => document.getElementById("chat-input")?.focus({ preventScroll: true }));
 }
 
 function chatMentionMatch() {
@@ -4435,7 +4564,19 @@ document.addEventListener("click", event => {
   }
 
   const projectDetail = event.target.closest("[data-project-detail]");
-  if (projectDetail) openProject(projectDetail.dataset.projectDetail);
+  if (projectDetail) {
+    document.getElementById("contact-detail-dialog")?.close();
+    openProject(projectDetail.dataset.projectDetail);
+  }
+
+  const contactDetail = event.target.closest("[data-contact-detail]");
+  if (contactDetail) openContactDetail(contactDetail.dataset.contactDetail);
+
+  const contactDeal = event.target.closest("[data-contact-open-deal]");
+  if (contactDeal) {
+    document.getElementById("contact-detail-dialog").close();
+    openDealDialog(contactDeal.dataset.contactOpenDeal);
+  }
 
   const projectTab = event.target.closest("[data-project-tab]");
   if (projectTab) {
@@ -4959,6 +5100,12 @@ document.querySelector(".settings-section-nav").addEventListener("click", event 
   document.querySelectorAll("[data-settings-panel]").forEach(panel => panel.classList.toggle("active", panel.dataset.settingsPanel === button.dataset.settingsSection));
 });
 document.addEventListener("keydown", event => {
+  const contactRow = event.target.closest?.(".clickable-contact-row");
+  if (contactRow && ["Enter", " "].includes(event.key)) {
+    event.preventDefault();
+    openContactDetail(contactRow.dataset.contactDetail);
+    return;
+  }
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
     event.preventDefault();
     document.getElementById("global-search").focus();
@@ -4985,6 +5132,7 @@ document.getElementById("new-approval-button").addEventListener("click", openApp
 document.getElementById("new-commercial-button").addEventListener("click", openCommercialDialog);
 document.getElementById("task-form").addEventListener("submit", createTask);
 document.getElementById("project-form").addEventListener("submit", createProject);
+document.getElementById("contact-detail-form").addEventListener("submit", saveContactDetail);
 document.getElementById("milestone-form").addEventListener("submit", createMilestone);
 document.getElementById("workspace-settings-form").addEventListener("submit", saveWorkspaceSettings);
 document.getElementById("deal-form").addEventListener("submit", createDeal);
@@ -5006,7 +5154,7 @@ document.getElementById("opportunity-alerts").addEventListener("change", event =
   state.opportunityMonitor.enabled = event.currentTarget.checked;
   saveState();
   renderOpportunityMonitor();
-  showToast(event.currentTarget.checked ? "Daily opportunity alerts enabled for 07:00 CAT." : "Daily opportunity alerts paused.");
+  showToast(event.currentTarget.checked ? "Weekday opportunity alerts enabled for 07:00 CAT." : "Weekday opportunity alerts paused.");
 });
 document.getElementById("opportunity-auto-intake").addEventListener("change", event => {
   state.opportunityMonitor.autoIntake = event.currentTarget.checked;

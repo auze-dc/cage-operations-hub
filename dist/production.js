@@ -366,6 +366,15 @@
     return data;
   }
 
+  async function scanOpportunities() {
+    if (!client || !profile) throw new Error("Sign in before running an opportunity scan.");
+    if (!['admin', 'manager'].includes(profile.role)) throw new Error("Only an Administrator or Manager can run a live scan.");
+    const { data, error } = await client.functions.invoke("opportunity-scan", { body: { organizationId: config.organizationId, manual: true } });
+    if (error) throw new Error(error.message || "Live opportunity search failed.");
+    if (!data?.ok) throw new Error(data?.error || "Live opportunity search failed.");
+    return data;
+  }
+
   async function uploadFile(file, recordType, recordId) {
     if (!client || !profile) throw new Error("Sign in before uploading files.");
     if (file.size > 50 * 1024 * 1024) throw new Error("Files must be 50 MB or smaller.");
@@ -544,6 +553,7 @@
     boot,
     scheduleSave,
     sendDocument,
+    scanOpportunities,
     uploadFile,
     openFile,
     loadHR,
