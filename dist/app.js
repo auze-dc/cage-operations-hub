@@ -292,7 +292,16 @@ const seedData = {
     nextScan: "2026-09-06T07:00:00+02:00",
     sources: ["Funding databases", "Procurement portals", "LinkedIn posts", "UN & NGO portals", "Government e-procurement"]
   },
-  settings: { autoReminders: true, complianceReminders: true }
+  settings: {
+    workspaceName: "Operations Hub",
+    defaultOwner: "alexander",
+    defaultRequestPurpose: "Drone mapping",
+    requireTaskEvidence: true,
+    autoReminders: true,
+    complianceReminders: true,
+    enterToSend: true,
+    mentionSuggestions: true
+  }
 };
 
 let state = loadState();
@@ -343,7 +352,8 @@ const viewMeta = {
   evidence: ["Evidence", "CAGE / Documents"],
   reports: ["Reports", "CAGE / Management"],
   hr: ["Recruitment & HR", "CAGE / People lifecycle"],
-  admin: ["User administration", "CAGE / Access control"]
+  admin: ["User administration", "CAGE / Access control"],
+  settings: ["Settings", "CAGE / Workspace administration"]
 };
 
 const REQUEST_STAGE_OPTIONS = [
@@ -830,8 +840,17 @@ function currentUserCanApprove() {
   return window.CAGE_BACKEND.canApprove?.() === true;
 }
 
+function currentUserIsAdmin() {
+  if (!window.CAGE_BACKEND?.isProduction) return true;
+  return window.CAGE_BACKEND.currentProfile?.()?.role === "admin";
+}
+
 function setView(view) {
   if (!viewMeta[view]) return;
+  if (["admin", "settings"].includes(view) && !currentUserIsAdmin()) {
+    showToast("Administrator access is required.");
+    return;
+  }
   activeView = view;
   document.querySelectorAll("[data-view-panel]").forEach(panel => panel.classList.toggle("active", panel.dataset.viewPanel === view));
   document.querySelectorAll(".nav-item[data-view]").forEach(button => button.classList.toggle("active", button.dataset.view === view));
@@ -855,6 +874,7 @@ function setView(view) {
   if (view === "team") renderTeam();
   if (view === "evidence") renderEvidence();
   if (view === "reports") renderReports();
+  if (view === "settings") renderSettings();
   if (view === "hr" || view === "admin") window.CAGE_HR_UI?.load(view === "admin");
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -1891,6 +1911,9 @@ function renderChat() {
     document.getElementById("chat-context").innerHTML = `<div class="chat-lifecycle">${lifecycle.map((step, index) => `<button class="${step.done ? "done" : ""} ${step.active ? "active" : ""}" data-thread-open-view="${step.view}"><span>${step.done ? "✓" : index + 1}</span><small>${escapeHtml(step.label)}</small></button>`).join("")}</div><div class="chat-context-meta"><span><small>Current stage</small><strong>${escapeHtml(thread.stage)}</strong></span><span><small>Next action</small><strong>${escapeHtml(thread.request?.nextAction || thread.commercial?.nextAction || thread.project?.outcome || "Agree the next action in chat")}</strong></span><span><small>Captured</small><strong>${decisions} decisions · ${files} files</strong></span></div>`;
   }
   document.getElementById("chat-input").placeholder = thread.teamWide ? "Write a routine enquiry or team question…" : "Write an update, decision or question…";
+  const mentionButton = document.getElementById("chat-mention");
+  mentionButton.disabled = state.settings.mentionSuggestions === false;
+  mentionButton.title = mentionButton.disabled ? "Staff mention suggestions are disabled in Settings" : "Mention a colleague";
   let lastDate = "";
   document.getElementById("chat-messages").innerHTML = messages.length ? messages.map(message => {
     const sender = teamMember(message.sender);
@@ -1952,7 +1975,49 @@ function sendChatMessage(text, attachment = "", attachmentPath = "") {
   saveState();
   document.getElementById("chat-input").value = "";
   document.getElementById("chat-message-type").value = "Update";
+  hideChatMentionPicker();
   renderChat();
+}
+
+function chatMentionMatch() {
+  const input = document.getElementById("chat-input");
+  const cursor = input.selectionStart ?? input.value.length;
+  const beforeCursor = input.value.slice(0, cursor);
+  const match = beforeCursor.match(/(?:^|\s)@([^@\s]*)$/);
+  return match ? { query: match[1].toLowerCase(), start: cursor - match[1].length - 1, end: cursor } : null;
+}
+
+function hideChatMentionPicker() {
+  const picker = document.getElementById("chat-mention-picker");
+  picker.hidden = true;
+  document.getElementById("chat-mention").setAttribute("aria-expanded", "false");
+}
+
+function showChatMentionPicker(query = "") {
+  const picker = document.getElementById("chat-mention-picker");
+  const cleanQuery = String(query || "").trim().toLowerCase();
+  const members = assignableTeam().filter(member => `${member.name} ${member.email || ""} ${member.role || ""}`.toLowerCase().includes(cleanQuery));
+  picker.innerHTML = members.length ? members.map(member => `<button type="button" class="chat-mention-option" role="option" data-chat-mention-id="${member.id}"><span class="owner-avatar">${escapeHtml(member.initials)}</span><span><strong>${escapeHtml(member.name)}</strong><small>${escapeHtml(member.role || member.email || "CAGE team")}</small></span></button>`).join("") : `<div class="empty-state compact"><p>No staff member matches “${escapeHtml(cleanQuery)}”.</p></div>`;
+  picker.hidden = false;
+  document.getElementById("chat-mention").setAttribute("aria-expanded", "true");
+}
+
+function insertChatMention(memberId) {
+  const member = teamMember(memberId);
+  if (!member?.name) return;
+  const input = document.getElementById("chat-input");
+  const match = chatMentionMatch();
+  const mention = `@${member.name} `;
+  if (match) {
+    input.value = `${input.value.slice(0, match.start)}${mention}${input.value.slice(match.end)}`;
+    input.setSelectionRange(match.start + mention.length, match.start + mention.length);
+  } else {
+    const spacer = input.value && !input.value.endsWith(" ") ? " " : "";
+    input.value = `${input.value}${spacer}${mention}`;
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+  hideChatMentionPicker();
+  input.focus();
 }
 
 function renderLeave() {
@@ -2176,8 +2241,8 @@ function openRequestDialog() {
   renderOwnerOptions();
   const form = document.getElementById("request-form");
   form.reset();
-  renderRequestPurposeOptions("Drone mapping");
-  form.elements.owner.value = "comfort";
+  renderRequestPurposeOptions(state.settings.defaultRequestPurpose || "Drone mapping");
+  form.elements.owner.value = state.settings.defaultOwner || "alexander";
   form.elements.priority.value = "Normal";
   form.elements.deadline.value = dateAfter(3);
   document.getElementById("request-form-error").textContent = "";
@@ -3272,6 +3337,43 @@ function openProject(projectId) {
   if (!dialog.open) dialog.showModal();
 }
 
+function openMilestoneDialog(projectId) {
+  const project = projectById(projectId);
+  if (!project) return;
+  ensureProjectWorkspace(project);
+  const form = document.getElementById("milestone-form");
+  form.reset();
+  form.elements.projectId.value = project.id;
+  form.elements.due.value = project.deadline;
+  form.elements.cost.value = "0";
+  document.getElementById("milestone-form-error").textContent = "";
+  document.getElementById("milestone-dialog").showModal();
+  requestAnimationFrame(() => form.elements.title.focus());
+}
+
+function createMilestone(event) {
+  event.preventDefault();
+  if (event.submitter?.value === "cancel") {
+    document.getElementById("milestone-dialog").close();
+    return;
+  }
+  const data = new FormData(event.currentTarget);
+  const project = projectById(String(data.get("projectId") || ""));
+  const title = String(data.get("title") || "").trim();
+  const due = String(data.get("due") || "");
+  const cost = Math.max(0, Number(data.get("cost") || 0));
+  if (!project || !title || !/^\d{4}-\d{2}-\d{2}$/.test(due)) {
+    document.getElementById("milestone-form-error").textContent = "Add a milestone name and valid due date.";
+    return;
+  }
+  project.milestones.push({ id: `milestone-${Date.now()}`, title, due, cost, complete: Boolean(data.get("complete")) });
+  saveState();
+  document.getElementById("milestone-dialog").close();
+  renderAll();
+  renderProjectWorkspace();
+  showToast("Milestone added.");
+}
+
 async function uploadProjectFile(input) {
   const project = projectById(input.dataset.projectFileInput);
   const file = input.files?.[0];
@@ -3315,7 +3417,7 @@ function changeTaskStatus(taskId, nextStatus, control) {
     }
     task.blocker = reason.trim();
   }
-  if (nextStatus === "Done" && !task.evidence) {
+  if (nextStatus === "Done" && state.settings.requireTaskEvidence !== false && !task.evidence) {
     const evidence = window.prompt("Add a completion note, file name or evidence link before closing this task.");
     if (!evidence?.trim()) {
       if (control) control.value = previous;
@@ -3355,8 +3457,9 @@ function openTaskDialog(projectId = "", taskId = "") {
     form.elements.status.value = task.status;
     form.elements.blocker.value = task.blocker || "";
     form.elements.evidence.value = task.evidence || "";
-  } else if (typeof projectId === "string" && projectId) {
-    form.elements.project.value = projectId;
+  } else {
+    form.elements.owner.value = state.settings.defaultOwner || "alexander";
+    if (typeof projectId === "string" && projectId) form.elements.project.value = projectId;
   }
   document.getElementById("blocker-field").hidden = form.elements.status.value !== "Blocked";
   document.getElementById("blocker-field").querySelector("input").required = form.elements.status.value === "Blocked";
@@ -4133,6 +4236,60 @@ function addEvidence(taskId) {
   showToast("Evidence linked to the task.");
 }
 
+function applyWorkspaceSettings() {
+  const workspaceName = String(state.settings.workspaceName || "Operations Hub").trim() || "Operations Hub";
+  const product = document.querySelector(".brand-product");
+  if (product) product.textContent = workspaceName;
+  document.title = `CAGE ${workspaceName}`;
+}
+
+function renderSettings() {
+  const form = document.getElementById("workspace-settings-form");
+  if (!form || !currentUserIsAdmin()) return;
+  document.getElementById("settings-default-owner").innerHTML = assignableTeam().map(member => `<option value="${member.id}">${escapeHtml(member.name)}</option>`).join("");
+  document.getElementById("settings-default-purpose").innerHTML = state.requestPurposes.map(purpose => `<option value="${escapeHtml(purpose)}">${escapeHtml(purpose)}</option>`).join("");
+  form.elements.workspaceName.value = state.settings.workspaceName || "Operations Hub";
+  form.elements.defaultOwner.value = state.settings.defaultOwner || "alexander";
+  form.elements.defaultRequestPurpose.value = state.settings.defaultRequestPurpose || "Drone mapping";
+  form.elements.requireTaskEvidence.checked = state.settings.requireTaskEvidence !== false;
+  form.elements.autoReminders.checked = state.settings.autoReminders !== false;
+  form.elements.complianceReminders.checked = state.settings.complianceReminders !== false;
+  form.elements.opportunityAlerts.checked = state.opportunityMonitor.enabled !== false;
+  form.elements.enterToSend.checked = state.settings.enterToSend !== false;
+  form.elements.mentionSuggestions.checked = state.settings.mentionSuggestions !== false;
+}
+
+function saveWorkspaceSettings(event) {
+  event.preventDefault();
+  if (!currentUserIsAdmin()) {
+    showToast("Administrator access is required.");
+    return;
+  }
+  const data = new FormData(event.currentTarget);
+  const workspaceName = String(data.get("workspaceName") || "").trim();
+  if (!workspaceName) {
+    document.getElementById("workspace-settings-error").textContent = "Enter a workspace name.";
+    return;
+  }
+  state.settings = {
+    ...state.settings,
+    workspaceName,
+    defaultOwner: String(data.get("defaultOwner") || "alexander"),
+    defaultRequestPurpose: String(data.get("defaultRequestPurpose") || "Drone mapping"),
+    requireTaskEvidence: Boolean(data.get("requireTaskEvidence")),
+    autoReminders: Boolean(data.get("autoReminders")),
+    complianceReminders: Boolean(data.get("complianceReminders")),
+    enterToSend: Boolean(data.get("enterToSend")),
+    mentionSuggestions: Boolean(data.get("mentionSuggestions"))
+  };
+  state.opportunityMonitor.enabled = Boolean(data.get("opportunityAlerts"));
+  document.getElementById("workspace-settings-error").textContent = "";
+  saveState();
+  applyWorkspaceSettings();
+  renderAll();
+  showToast("Workspace settings saved for the team.");
+}
+
 function openSidebar() {
   document.getElementById("sidebar").classList.add("open");
   document.getElementById("sidebar-overlay").classList.add("open");
@@ -4144,6 +4301,7 @@ function closeSidebar() {
 }
 
 function renderAll() {
+  applyWorkspaceSettings();
   renderOwnerOptions();
   renderProjectOptions();
   renderRequestPurposeOptions();
@@ -4165,6 +4323,7 @@ function renderAll() {
   renderTeam();
   renderEvidence();
   renderReports();
+  renderSettings();
   window.CAGE_HR_UI?.render();
   window.CAGE_BACKEND?.applyPermissions?.();
 }
@@ -4313,23 +4472,7 @@ document.addEventListener("click", event => {
   }
 
   const addMilestoneButton = event.target.closest("[data-add-project-milestone]");
-  if (addMilestoneButton) {
-    const project = projectById(addMilestoneButton.dataset.addProjectMilestone);
-    const title = window.prompt("Milestone name");
-    if (!project || !title?.trim()) return;
-    ensureProjectWorkspace(project);
-    const due = window.prompt("Due date (YYYY-MM-DD)", project.deadline);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(due || "")) {
-      showToast("Use a valid milestone date in YYYY-MM-DD format.");
-      return;
-    }
-    const costInput = window.prompt("Milestone budget in MWK (optional)", "0");
-    const cost = Math.max(0, Number(String(costInput || "0").replaceAll(",", "")) || 0);
-    project.milestones.push({ id: `milestone-${Date.now()}`, title: title.trim(), due, cost, complete: false });
-    saveState();
-    renderProjectWorkspace();
-    showToast("Milestone added.");
-  }
+  if (addMilestoneButton) openMilestoneDialog(addMilestoneButton.dataset.addProjectMilestone);
 
   const addProjectExpenseButton = event.target.closest("[data-new-project-expense]");
   if (addProjectExpenseButton) openExpenseDialog(addProjectExpenseButton.dataset.newProjectExpense);
@@ -4717,9 +4860,33 @@ document.getElementById("chat-form").addEventListener("submit", event => {
   sendChatMessage(document.getElementById("chat-input").value);
 });
 document.getElementById("chat-input").addEventListener("keydown", event => {
+  const picker = document.getElementById("chat-mention-picker");
+  if (!picker.hidden && event.key === "Escape") {
+    event.preventDefault();
+    hideChatMentionPicker();
+    return;
+  }
+  if (!picker.hidden && event.key === "Enter" && !event.shiftKey) {
+    const first = picker.querySelector("[data-chat-mention-id]");
+    if (first) {
+      event.preventDefault();
+      insertChatMention(first.dataset.chatMentionId);
+      return;
+    }
+  }
   if (event.key !== "Enter" || event.shiftKey) return;
+  if (state.settings.enterToSend === false) return;
   event.preventDefault();
   sendChatMessage(event.currentTarget.value);
+});
+document.getElementById("chat-input").addEventListener("input", () => {
+  if (state.settings.mentionSuggestions === false) {
+    hideChatMentionPicker();
+    return;
+  }
+  const match = chatMentionMatch();
+  if (match) showChatMentionPicker(match.query);
+  else hideChatMentionPicker();
 });
 document.getElementById("chat-attach").addEventListener("click", () => document.getElementById("chat-file-input").click());
 document.getElementById("chat-file-input").addEventListener("change", async event => {
@@ -4737,14 +4904,26 @@ document.getElementById("chat-file-input").addEventListener("change", async even
   }
 });
 document.getElementById("chat-mention").addEventListener("click", () => {
-  const choices = assignableTeam().map((member, index) => `${index + 1}. ${member.name}`).join("\n");
-  const selected = Number(window.prompt(`Mention which colleague?\n${choices}`));
-  const member = assignableTeam()[selected - 1];
-  if (!member) return;
+  if (state.settings.mentionSuggestions === false) return;
+  const picker = document.getElementById("chat-mention-picker");
   const input = document.getElementById("chat-input");
-  const mention = `@${member.name.split(" ")[0]} `;
-  input.value = `${input.value}${input.value && !input.value.endsWith(" ") ? " " : ""}${mention}`;
+  if (!picker.hidden) {
+    hideChatMentionPicker();
+    input.focus();
+    return;
+  }
+  const spacer = input.value && !input.value.endsWith(" ") ? " " : "";
+  input.value = `${input.value}${spacer}@`;
+  input.setSelectionRange(input.value.length, input.value.length);
+  showChatMentionPicker();
   input.focus();
+});
+document.getElementById("chat-mention-picker").addEventListener("click", event => {
+  const option = event.target.closest("[data-chat-mention-id]");
+  if (option) insertChatMention(option.dataset.chatMentionId);
+});
+document.addEventListener("click", event => {
+  if (!event.target.closest(".chat-compose-main")) hideChatMentionPicker();
 });
 document.addEventListener("keydown", event => {
   if (event.target.matches("[data-inline-deal-title], [data-inline-deal-company]") && event.key === "Enter") {
@@ -4773,6 +4952,12 @@ document.addEventListener("click", event => {
   document.getElementById("global-search-results").hidden = true;
   document.getElementById("global-search").setAttribute("aria-expanded", "false");
 });
+document.querySelector(".settings-section-nav").addEventListener("click", event => {
+  const button = event.target.closest("[data-settings-section]");
+  if (!button) return;
+  document.querySelectorAll("[data-settings-section]").forEach(item => item.classList.toggle("active", item === button));
+  document.querySelectorAll("[data-settings-panel]").forEach(panel => panel.classList.toggle("active", panel.dataset.settingsPanel === button.dataset.settingsSection));
+});
 document.addEventListener("keydown", event => {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
     event.preventDefault();
@@ -4800,6 +4985,8 @@ document.getElementById("new-approval-button").addEventListener("click", openApp
 document.getElementById("new-commercial-button").addEventListener("click", openCommercialDialog);
 document.getElementById("task-form").addEventListener("submit", createTask);
 document.getElementById("project-form").addEventListener("submit", createProject);
+document.getElementById("milestone-form").addEventListener("submit", createMilestone);
+document.getElementById("workspace-settings-form").addEventListener("submit", saveWorkspaceSettings);
 document.getElementById("deal-form").addEventListener("submit", createDeal);
 document.getElementById("event-form").addEventListener("submit", createEvent);
 document.getElementById("invoice-form").addEventListener("submit", createInvoice);

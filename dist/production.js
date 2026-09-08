@@ -22,6 +22,21 @@
   let realtimeChannel = null;
   let applyingRemote = false;
   let lastAccessRefresh = 0;
+  let greetingLanguage = "English";
+
+  const GREETINGS = {
+    English: { morning: "Good morning", afternoon: "Good afternoon", evening: "Good evening" },
+    Chichewa: { morning: "Mwadzuka bwanji", afternoon: "Mwaswera bwanji", evening: "Madzulo abwino" },
+    Yao: { morning: "Ajimwiche uli", afternoon: "Kusweele", evening: "Subayeedi" },
+    Tumbuka: { morning: "Mwawuka uli", afternoon: "Mwatandala uli", evening: "Mwatandala uli" }
+  };
+
+  function chooseGreetingLanguage() {
+    const previous = localStorage.getItem("cage-last-greeting-language");
+    const choices = Object.keys(GREETINGS).filter(language => language !== previous);
+    greetingLanguage = choices[Math.floor(Math.random() * choices.length)] || "English";
+    localStorage.setItem("cage-last-greeting-language", greetingLanguage);
+  }
 
   function configured() {
     return config.mode === "production" && config.supabaseUrl && config.supabaseAnonKey && config.organizationId;
@@ -37,6 +52,7 @@
   }
 
   function showLogin(message = "") {
+    document.body.classList.remove("session-checking");
     document.body.classList.add("auth-pending");
     gate.hidden = false;
     loginForm.hidden = false;
@@ -47,6 +63,7 @@
   }
 
   function showPasswordSetup(message = "") {
+    document.body.classList.remove("session-checking");
     document.body.classList.add("auth-pending");
     gate.hidden = false;
     loginForm.hidden = true;
@@ -59,6 +76,7 @@
 
   function hideLogin() {
     gate.hidden = true;
+    document.body.classList.remove("session-checking");
     document.body.classList.remove("auth-pending");
   }
 
@@ -76,23 +94,18 @@
 
   function updateDashboardWelcome() {
     const now = new Date();
-    const timeZone = "Africa/Blantyre";
     const date = document.getElementById("today-label");
     const greeting = document.getElementById("dashboard-greeting");
-    const hour = Number(new Intl.DateTimeFormat("en-GB", {
-      hour: "2-digit",
-      hourCycle: "h23",
-      timeZone
-    }).formatToParts(now).find(part => part.type === "hour")?.value || 0);
-    const salutation = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+    const hour = now.getHours();
+    const period = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+    const salutation = GREETINGS[greetingLanguage]?.[period] || GREETINGS.English[period];
     const firstName = profile?.full_name?.trim().split(/\s+/)[0] || "there";
     if (date) {
       date.textContent = new Intl.DateTimeFormat("en-GB", {
         weekday: "long",
         day: "numeric",
         month: "long",
-        year: "numeric",
-        timeZone
+        year: "numeric"
       }).format(now);
     }
     if (greeting) greeting.textContent = `${salutation}, ${firstName}.`;
@@ -112,6 +125,8 @@
     });
     const adminNav = document.getElementById("admin-nav-item");
     if (adminNav) adminNav.hidden = !isAdmin;
+    const settingsNav = document.getElementById("settings-nav-item");
+    if (settingsNav) settingsNav.hidden = !isAdmin;
     document.querySelectorAll(".hr-privileged").forEach(element => { element.hidden = !["admin", "manager", "hr"].includes(profile?.role); });
     if (isViewer) document.querySelectorAll("button.primary-button, .mobile-add-button").forEach(button => { if (!button.closest(".auth-card")) button.disabled = true; });
   }
@@ -225,6 +240,7 @@
     try {
       profile = await loadProfile(session.user.id);
       await loadWorkspace();
+      chooseGreetingLanguage();
       setCurrentUser();
       applyPermissions();
       subscribe();

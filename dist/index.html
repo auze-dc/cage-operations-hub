@@ -10,7 +10,8 @@
   <link rel="stylesheet" href="./styles.css">
   <link rel="stylesheet" href="./monday-theme.css">
 </head>
-<body>
+<body class="session-checking">
+  <div class="session-loader" role="status" aria-live="polite"><span></span><strong>Opening CAGE Operations Hub…</strong></div>
   <section class="auth-gate" id="auth-gate" aria-labelledby="auth-title">
     <div class="auth-card">
       <img src="./cage-logo-new.png" alt="CAGE — It can be done" class="auth-logo">
@@ -74,6 +75,7 @@
         <button class="nav-item" data-view="team"><span class="nav-icon">◎</span><span>Team</span></button>
         <button class="nav-item" data-view="hr"><span class="nav-icon">HR</span><span>Recruitment & HR</span><span class="nav-count" id="hr-nav-count">0</span></button>
         <button class="nav-item" data-view="admin" id="admin-nav-item"><span class="nav-icon">⚙</span><span>User administration</span></button>
+        <button class="nav-item" data-view="settings" id="settings-nav-item"><span class="nav-icon">◫</span><span>Settings</span></button>
       </nav>
 
       <div class="sidebar-divider"></div>
@@ -392,7 +394,7 @@
               <form class="chat-composer" id="chat-form">
                 <button type="button" class="chat-tool" id="chat-attach" aria-label="Attach a file">＋</button>
                 <input id="chat-file-input" type="file" hidden>
-                <div class="chat-compose-main"><div class="chat-compose-tools"><select id="chat-message-type" aria-label="Message type"><option value="Update">Update</option><option value="Decision">Decision</option><option value="Question">Question</option><option value="Approval">Approval</option><option value="Client communication">Client communication</option></select><button type="button" id="chat-mention" aria-label="Mention a colleague">@ Mention</button></div><textarea id="chat-input" rows="1" maxlength="1200" placeholder="Write an update, decision or question…" aria-label="Work message"></textarea></div>
+                <div class="chat-compose-main"><div id="chat-mention-picker" class="chat-mention-picker" role="listbox" aria-label="Mention a colleague" hidden></div><div class="chat-compose-tools"><select id="chat-message-type" aria-label="Message type"><option value="Update">Update</option><option value="Decision">Decision</option><option value="Question">Question</option><option value="Approval">Approval</option><option value="Client communication">Client communication</option></select><button type="button" id="chat-mention" aria-label="Mention a colleague" aria-controls="chat-mention-picker" aria-expanded="false">@ Mention</button></div><textarea id="chat-input" rows="1" maxlength="1200" placeholder="Write an update, decision or question…" aria-label="Work message" autocomplete="off"></textarea></div>
                 <button type="submit" class="chat-send">Send</button>
               </form>
             </section>
@@ -519,6 +521,26 @@
           <article class="surface role-guide"><div class="surface-heading"><div><p class="section-kicker">Role guide</p><h3>What each role is for</h3></div></div><div class="role-grid"><div><strong>Administrator</strong><span>Accounts, roles and all company functions</span></div><div><strong>Manager</strong><span>Operational decisions and HR oversight</span></div><div><strong>HR</strong><span>Recruitment and employee records</span></div><div><strong>Finance</strong><span>Finance workflows and reporting</span></div><div><strong>Member</strong><span>Normal project and operational work</span></div><div><strong>Viewer</strong><span>Read-only access</span></div><div><strong>Shared</strong><span>Company mailbox; not assignable</span></div></div></article>
         </section>
 
+        <section class="view-panel" data-view-panel="settings">
+          <div class="page-intro"><div><p class="date-line">Administrator only</p><h2>Workspace settings</h2><p>Control how the CAGE Operations Hub behaves for the whole team.</p></div><button class="primary-button" type="submit" form="workspace-settings-form">Save settings</button></div>
+          <div class="settings-layout">
+            <nav class="settings-section-nav" aria-label="Settings sections">
+              <button class="active" type="button" data-settings-section="workspace">Workspace</button>
+              <button type="button" data-settings-section="workflow">Workflow controls</button>
+              <button type="button" data-settings-section="notifications">Notifications</button>
+              <button type="button" data-settings-section="collaboration">Chat & collaboration</button>
+            </nav>
+            <form id="workspace-settings-form" class="settings-form surface">
+              <section class="settings-panel active" data-settings-panel="workspace"><div class="settings-panel-heading"><h3>Workspace</h3><p>Company-wide names and defaults.</p></div><div class="form-grid"><label class="field field-wide"><span>Workspace name</span><input name="workspaceName" maxlength="60" value="Operations Hub"></label><label class="field"><span>Default task owner</span><select name="defaultOwner" id="settings-default-owner"></select></label><label class="field"><span>Default request purpose</span><select name="defaultRequestPurpose" id="settings-default-purpose"></select></label><div class="settings-info field-wide"><strong>Dates and greeting time</strong><span>The Hub automatically uses each person’s phone or computer time zone.</span></div></div></section>
+              <section class="settings-panel" data-settings-panel="workflow"><div class="settings-panel-heading"><h3>Workflow controls</h3><p>Set the controls that protect work quality and approvals.</p></div><div class="settings-toggle-list"><label><span><strong>Require evidence before completing tasks</strong><small>Users must add a completion note, file or evidence link before marking work Done.</small></span><input name="requireTaskEvidence" type="checkbox"></label><div class="settings-info"><strong>Approval authority</strong><span>Only Managers and Administrators can approve or return requests. This control cannot be weakened here.</span></div></div></section>
+              <section class="settings-panel" data-settings-panel="notifications"><div class="settings-panel-heading"><h3>Notifications</h3><p>Choose the reminders that should run for the team.</p></div><div class="settings-toggle-list"><label><span><strong>Payment reminders</strong><small>Prepare follow-ups for overdue invoices.</small></span><input name="autoReminders" type="checkbox"></label><label><span><strong>Compliance reminders</strong><small>Highlight licences and records approaching renewal.</small></span><input name="complianceReminders" type="checkbox"></label><label><span><strong>Opportunity alerts</strong><small>Notify administrators when the monitor finds a strong match.</small></span><input name="opportunityAlerts" type="checkbox"></label></div></section>
+              <section class="settings-panel" data-settings-panel="collaboration"><div class="settings-panel-heading"><h3>Chat & collaboration</h3><p>Control how team conversations behave.</p></div><div class="settings-toggle-list"><label><span><strong>Enter sends a message</strong><small>Shift + Enter will always create a new line.</small></span><input name="enterToSend" type="checkbox"></label><label><span><strong>Staff mention suggestions</strong><small>Typing @ opens the staff picker.</small></span><input name="mentionSuggestions" type="checkbox"></label><div class="settings-info"><strong>Official work record</strong><span>Project, request and general enquiry chats remain part of the shared workspace history.</span></div></div></section>
+              <p class="form-error" id="workspace-settings-error" role="alert"></p>
+              <div class="dialog-actions settings-save-row"><button class="primary-button" type="submit">Save settings</button></div>
+            </form>
+          </div>
+        </section>
+
         <section class="view-panel" data-view-panel="evidence">
           <div class="page-intro">
             <div><p class="date-line">Completion evidence</p><h2>Documents & deliverables</h2><p>Signed contracts, reports and client deliverables stay connected to the work.</p></div>
@@ -613,6 +635,21 @@
 
   <dialog id="project-dialog" class="app-dialog project-dialog" aria-label="Project workspace">
     <div id="project-dialog-content"></div>
+  </dialog>
+
+  <dialog id="milestone-dialog" class="app-dialog">
+    <form method="dialog" id="milestone-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Project schedule</p><h2>Add milestone</h2><p>Record a major approval, delivery or completion checkpoint.</p></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <input type="hidden" name="projectId">
+      <div class="form-grid">
+        <label class="field field-wide"><span>Milestone name *</span><input name="title" required maxlength="100" placeholder="e.g. Client approves final survey plan"></label>
+        <label class="field"><span>Due date *</span><input name="due" type="date" required></label>
+        <label class="field"><span>Budget (MWK)</span><input name="cost" type="number" min="0" step="1000" value="0" placeholder="0"></label>
+        <label class="check-field field-wide"><input name="complete" type="checkbox"><span><strong>Already completed</strong><small>Mark this only when the milestone has already been achieved.</small></span></label>
+      </div>
+      <p class="form-error" id="milestone-form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Add milestone</button></div>
+    </form>
   </dialog>
 
   <dialog id="new-project-dialog" class="app-dialog">
