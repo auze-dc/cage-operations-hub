@@ -70,6 +70,31 @@
     const labels = { admin: "Administrator", manager: "Manager", hr: "HR", finance: "Finance", member: "Team member", viewer: "Viewer", shared: "Shared account" };
     role.textContent = labels[profile.role] || "Team member";
     avatar.textContent = profile.initials || profile.full_name.split(/\s+/).slice(0, 2).map(part => part[0]).join("");
+    updateDashboardWelcome();
+  }
+
+  function updateDashboardWelcome() {
+    const now = new Date();
+    const timeZone = "Africa/Blantyre";
+    const date = document.getElementById("today-label");
+    const greeting = document.getElementById("dashboard-greeting");
+    const hour = Number(new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      hourCycle: "h23",
+      timeZone
+    }).formatToParts(now).find(part => part.type === "hour")?.value || 0);
+    const salutation = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+    const firstName = profile?.full_name?.trim().split(/\s+/)[0] || "there";
+    if (date) {
+      date.textContent = new Intl.DateTimeFormat("en-GB", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        timeZone
+      }).format(now);
+    }
+    if (greeting) greeting.textContent = `${salutation}, ${firstName}.`;
   }
 
   function applyPermissions() {

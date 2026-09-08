@@ -313,7 +313,7 @@ let requestFilter = "all";
 let activeRequestId = "";
 let sendingDocument = null;
 let missingEvidenceOnly = false;
-let calendarCursor = new Date("2026-09-01T00:00:00Z");
+let calendarCursor = new Date(`${TODAY.slice(0, 7)}-01T00:00:00Z`);
 let draggedTaskId = null;
 let draggedDealId = null;
 let toastTimer;
@@ -4541,7 +4541,7 @@ document.getElementById("calendar-next").addEventListener("click", () => {
   renderCalendar();
 });
 document.getElementById("calendar-today").addEventListener("click", () => {
-  calendarCursor = new Date("2026-09-01T00:00:00Z");
+  calendarCursor = new Date(`${TODAY.slice(0, 7)}-01T00:00:00Z`);
   renderCalendar();
 });
 document.getElementById("show-all-clients").addEventListener("click", () => showToast("All CRM organisations are already shown."));
