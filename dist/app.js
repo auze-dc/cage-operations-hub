@@ -336,6 +336,7 @@ let activeProjectTab = "overview";
 let toastTimer;
 
 const viewMeta = {
+  training: ["Training Academy", "CAGE / Learning delivery"],
   dashboard: ["Dashboard", "CAGE / Operations"],
   requests: ["Request centre", "CAGE / Intake & qualification"],
   projects: ["Projects", "CAGE / Portfolio"],
@@ -873,6 +874,10 @@ function setView(view) {
   document.getElementById("view-title").textContent = viewMeta[view][0];
   document.getElementById("view-eyebrow").textContent = viewMeta[view][1];
   closeSidebar();
+  if (view === "training") {
+    window.CAGE_TRAINING_UI?.render();
+    window.CAGE_TRAINING_UI?.load();
+  }
   if (view === "requests") renderRequests();
   if (view === "projects") renderProjects();
   if (view === "tasks") renderTasks();
