@@ -1,5 +1,5 @@
 import {createClient} from 'https://esm.sh/@supabase/supabase-js@2';
-import {defaults,local,eligible,summary,email} from '../_shared/staff-email-rules.ts';
+import {defaults,local,eligible,summary,email,mentionContent} from '../_shared/staff-email-rules.ts';
 const reply=(body:any,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
 Deno.serve(async(req)=>{
  if(req.method!=='POST')return reply({error:'POST required'},405);
@@ -15,7 +15,7 @@ Deno.serve(async(req)=>{
  try{
  const profiles=await all('profiles',q=>q.eq('active',true));let queued=0,sent=0,cancelled=0;
  for(const p of profiles){const c=await context(p);const events=await all('staff_email_events',q=>q.eq('user_id',p.id).eq('organization_id',p.organization_id).is('batched_at',null).lte('available_at',now.toISOString()).order('created_at'));const immediate:any[]=[],deferred:any[]=[];
- for(const e of events){if(e.kind==='opportunity'&&![1,2,3,4,5].includes(local(now,c.pref.time_zone).day))continue;e.items=e.items.map((i:any)=>({...i,kind:e.kind,notice:e.notification_id}));const items=e.items.filter((i:any)=>permitted(e.kind,c.pref)&&eligible(i,e.kind,c));if(!items.length){await checked(db.from('staff_email_events').update({batched_at:now.toISOString()}).eq('id',e.id).is('batched_at',null));continue;}e.items=items;if(e.kind==='delivery_failure'||e.kind==='reminder'||(c.pref.delivery==='immediate'&&e.kind!=='opportunity'))immediate.push(e);else deferred.push(e);}
+ for(const e of events){if(e.kind==='opportunity'&&![1,2,3,4,5].includes(local(now,c.pref.time_zone).day))continue;e.items=e.items.map((i:any)=>({...i,kind:e.kind,notice:e.notification_id}));const items=e.items.filter((i:any)=>permitted(e.kind,c.pref)&&eligible(i,e.kind,c));if(!items.length){await checked(db.from('staff_email_events').update({batched_at:now.toISOString()}).eq('id',e.id).is('batched_at',null));continue;}e.items=items.map((i:any)=>mentionContent(i,c,profiles));if(e.kind==='delivery_failure'||e.kind==='reminder'||(c.pref.delivery==='immediate'&&e.kind!=='opportunity'))immediate.push(e);else deferred.push(e);}
  const enqueue=async(list:any[],extras:any[],date:string|null)=>{const items=[...list.flatMap(e=>e.items),...extras.map((i:any)=>({...i,scheduled:true}))];const unique=items.filter((i,n)=>items.findIndex(x=>x.kind===i.kind&&x.target===i.target&&x.title===i.title)===n);if(!unique.length)return;const subject=date?`Your day at CAGE — ${date}`:unique.length===1?`CAGE: ${unique[0].title}`:`CAGE: ${unique.length} work updates`;const id=await checked(db.rpc('enqueue_staff_email',{recipient_id:p.id,event_keys:list.map(e=>e.id),digest_day:date,mail_subject:subject,mail_html:email(p.full_name,unique,base,!!date),mail_context:unique}));if(id)queued++;};
  await enqueue(immediate,[],null);const clock=local(now,c.pref.time_zone);
  if(clock.hour===7&&c.pref.workdays.includes(clock.day)&&(c.pref.daily_digest||c.pref.delivery==='digest'||(c.pref.delivery==='immediate'&&deferred.some(e=>e.kind==='opportunity'))))await enqueue(deferred,c.pref.daily_digest?summary(c):[],clock.date);
