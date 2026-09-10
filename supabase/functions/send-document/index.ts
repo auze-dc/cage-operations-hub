@@ -53,9 +53,11 @@ Deno.serve(async req => {
   const from = Deno.env.get("EMAIL_FROM") || "CAGE Operations <operations@cagemw.com>";
   if (!resendKey) return json({ ok: false, error: "Email delivery has not been configured" }, 503);
 
+  const sendingAt=new Date();
+  const stampDate=(globalThis as any).CagePDF.stampDateAt(sendingAt);
   let pdfBytes: Uint8Array;
   try {
-    pdfBytes=await (globalThis as any).CagePDF.createDocumentPDF(PDFLib,record,type,Uint8Array.from(atob(logoBase64),c=>c.charCodeAt(0)));
+    pdfBytes=await (globalThis as any).CagePDF.createDocumentPDF(PDFLib,record,type,Uint8Array.from(atob(logoBase64),c=>c.charCodeAt(0)),sendingAt);
   } catch(error) { return json({ok:false,error:"The PDF could not be generated: "+String(error)},400); }
   let binary=""; for(const byte of pdfBytes) binary+=String.fromCharCode(byte);
   const filename=String(record.number).replace(/[^a-zA-Z0-9_-]/g,"-")+".pdf";
@@ -79,7 +81,7 @@ Deno.serve(async req => {
   try { response = await fetch("https://api.resend.com/emails", {
     method: "POST", signal: AbortSignal.timeout(15000),
     headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json",
-      "Idempotency-Key": Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify([record.id,record.sentAt||"first",recipient,subject,message,record.amount]))))).map(b=>b.toString(16).padStart(2,"0")).join("")
+      "Idempotency-Key": Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify([record.id,record.sentAt||"first",recipient,subject,message,record.amount,stampDate]))))).map(b=>b.toString(16).padStart(2,"0")).join("")
     },
     body: JSON.stringify({ from, to: [recipient], subject, html, attachments:[{filename,content:btoa(binary)}] }),
   });
