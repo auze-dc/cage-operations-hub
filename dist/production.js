@@ -373,13 +373,19 @@
     workspaceVersion=prepared.data.version;
     await loadWorkspace();
     payload={...payload,record:prepared.data.record};
-    const { data, error } = await client.functions.invoke("send-document", { body: payload });
+    const attemptKey=`cage-send-attempt:${profile.id}:${payload.type}:${payload.record.id}`;
+    const fingerprint=JSON.stringify([payload.type,payload.record,payload.recipient,payload.subject,payload.message]);
+    let attempt;try{attempt=JSON.parse(localStorage.getItem(attemptKey)||'null');}catch{}
+    if(!attempt||attempt.fingerprint!==fingerprint)attempt={id:crypto.randomUUID(),fingerprint};
+    localStorage.setItem(attemptKey,JSON.stringify(attempt));
+    const { data, error } = await client.functions.invoke("send-document", { body: {...payload,deliveryAttempt:attempt.id} });
     if (error) {
       let message=error.message || "Email delivery failed.";
       try { const response=await error.context?.json(); message=response?.error || message; } catch {}
       throw new Error(message);
     }
     if (!data?.ok) throw new Error(data?.error || "Email delivery failed.");
+    localStorage.removeItem(attemptKey);
     return data;
   }
 

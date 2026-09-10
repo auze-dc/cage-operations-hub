@@ -43,7 +43,7 @@ async function createDocumentPDF(PDFLib,record,type,logoBytes,sendingAt=new Date
  ensure(110);paragraph('Payment Details',525,12,bold);paragraph(record.paymentDetails||'CAGE\n1013608314\nGateway Mall Branch\nNational Bank');y-=24;
  // Keep the approval area together, moving to a fresh page if needed.
  ensure(154);const approvalTop=y;
- for(const line of lines('Prepared By: '+(record.preparedBy||'CAGE'),285,11).slice(0,3)){text(line,35,y,11);y-=16;}
+ if(type!=='quote')for(const line of lines('Prepared By: '+(record.preparedBy||'CAGE'),285,11).slice(0,3)){text(line,35,y,11);y-=16;}
  text('Signature: __________________',35,Math.min(y-18,approvalTop-48),11);
  const scale=0.5,sx=425,sy=approvalTop-125;
  page.drawImage(stamp,{x:sx,y:sy,width:236*scale,height:242*scale});
@@ -55,7 +55,7 @@ async function createDocumentPDF(PDFLib,record,type,logoBytes,sendingAt=new Date
  for(let angle=132;angle>=48;angle-=2){const a=angle*Math.PI/180;points.push([cx+inner*Math.cos(a),cy-inner*Math.sin(a)]);}
  const mask=points.map((p,i)=>`${i?'L':'M'} ${p[0]} ${p[1]}`).join(' ')+' Z';
  page.drawSvgPath(mask,{x:sx,y:sy+242*scale,scale,color:rgb(1,1,1)});
- const radius=78*scale,fontSize=18*scale,tracking=0.5*scale;
+ const radius=78*scale,fontSize=20*scale,tracking=0.8*scale;
  const widths=[...stampDate].map(ch=>stampFont.widthOfTextAtSize(ch,fontSize));
  const totalWidth=widths.reduce((a,b)=>a+b,0)+tracking*(widths.length-1);
  let offset=-totalWidth/2;

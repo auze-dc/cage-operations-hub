@@ -858,6 +858,10 @@ function showToast(message) {
   toastTimer = setTimeout(() => toast.classList.remove("show"), 2600);
 }
 
+function currentUserCanSelfApprove() {
+ const p=window.CAGE_BACKEND?.currentProfile?.();
+ return p?.active!==false && p?.role==='admin' && ['alexander@cagemw.com','ndapile@cagemw.com'].includes(String(p?.email||'').toLowerCase());
+}
 function currentUserCanApprove() {
   if (!window.CAGE_BACKEND?.isProduction) return true;
   return window.CAGE_BACKEND.canApprove?.() === true;
@@ -1131,7 +1135,7 @@ function requestActionButtons(request) {
   if (request.stage === "Qualified") buttons.push(`<button data-request-action="scope" data-request-id="${request.id}">Start scoping</button>`);
   if (request.stage === "Scoping") {
     if (!["Tender / RFQ", "Grant"].includes(request.type)) buttons.push(`<button data-request-action="quote" data-request-id="${request.id}">Prepare quote</button>`);
-    buttons.push(`<button class="primary" data-request-action="review" data-request-id="${request.id}" ${requestPreReviewComplete(request) ? "" : "disabled"}>Request internal approval</button>`);
+    buttons.push(`<button class="primary" data-request-action="review" data-request-id="${request.id}" ${requestPreReviewComplete(request) ? "" : "disabled"}>${currentUserCanSelfApprove() ? 'Approve for sending' : 'Request internal approval'}</button>`);
   }
   if (request.stage === "Internal review") buttons.push(`<button disabled>Awaiting approval</button>`);
   if (request.stage === "Approved to send") buttons.push(`<button class="primary" data-request-action="submit" data-request-id="${request.id}">Record submission</button>`);
@@ -2120,6 +2124,7 @@ function sendChatMessage(text, attachment = "", attachmentPath = "", extra = {})
     attachmentPath,
     createdAt: now.toISOString(),
     mentions: assignableTeam().filter(person => cleanText.includes("@" + person.name)).map(person => person.id),
+    mentionAll: /(^|\s)@all(?=\s|[.,!?:;]|$)/i.test(cleanText),
     ...extra
   });
   saveState();
@@ -2149,12 +2154,13 @@ function showChatMentionPicker(query = "") {
   const cleanQuery = String(query || "").trim().toLowerCase();
   const members = assignableTeam().filter(member => `${member.name} ${member.email || ""} ${member.role || ""}`.toLowerCase().includes(cleanQuery));
   picker.innerHTML = members.length ? members.map(member => `<button type="button" class="chat-mention-option" role="option" data-chat-mention-id="${member.id}"><span class="owner-avatar">${escapeHtml(member.initials)}</span><span><strong>${escapeHtml(member.name)}</strong><small>${escapeHtml(member.role || member.email || "CAGE team")}</small></span></button>`).join("") : `<div class="empty-state compact"><p>No staff member matches “${escapeHtml(cleanQuery)}”.</p></div>`;
+  if(!cleanQuery || 'all'.startsWith(cleanQuery))picker.insertAdjacentHTML('afterbegin','<button type="button" class="chat-mention-option" role="option" data-chat-mention-id="__all"><span class="owner-avatar">@</span><span><strong>@all</strong><small>Everyone in this conversation</small></span></button>');
   picker.hidden = false;
   document.getElementById("chat-mention").setAttribute("aria-expanded", "true");
 }
 
 function insertChatMention(memberId) {
-  const member = teamMember(memberId);
+  const member = memberId === "__all" ? {name:"all"} : teamMember(memberId);
   if (!member?.name) return;
   const input = document.getElementById("chat-input");
   const match = chatMentionMatch();
@@ -2643,6 +2649,11 @@ function requestInternalReview(requestId) {
   if (!requestPreReviewComplete(request)) {
     showToast("Complete the scope, evidence and costing checks first.");
     return;
+  }
+  if(currentUserCanSelfApprove()){
+    let approval=state.approvals.find(item=>item.linkedType==='request'&&item.linkedId===request.id&&item.status==='Pending');
+    if(!approval){approval={id:'ap-'+crypto.randomUUID(),type:request.type==='Grant'?'Grant':'Quote',title:'Release '+request.title,requester:window.CAGE_BACKEND.currentMemberId(),submitted:TODAY,due:request.deadline||dateAfter(1),amount:request.value,status:'Pending',summary:'Scope and costing reviewed by the approving administrator.',linkedType:'request',linkedId:request.id};state.approvals.push(approval);}
+    decideApproval(approval.id,'Approved');document.getElementById('request-detail-dialog').close();return;
   }
   const pending = state.approvals.some(item => item.linkedType === "request" && item.linkedId === request.id && item.status === "Pending");
   if (pending) {
@@ -3283,6 +3294,7 @@ async function decideApproval(approvalId, decision) {
   }
   item.status = decision;
   item.decided = TODAY;
+  item.decidedBy = window.CAGE_BACKEND.currentMemberId();
   item.decisionNote = String(note || "").trim();
   applyApprovalOutcome(item);
   const approvalThread = item.linkedType === "request"
@@ -4049,8 +4061,13 @@ async function createQuote(event) {
     quote.sentAt = new Date().toISOString();
     quote.automaticFollowUp = true;
   }
-  if (requestId) quote.status = "Draft";
+  if (requestId && (!currentUserCanSelfApprove() || (!requestById(requestId) || !requestPreReviewComplete(requestById(requestId))))) quote.status = "Draft";
   const savedQuote=state.quotes.find(q=>q.id===quote.id);if(savedQuote)Object.assign(savedQuote,quote);else state.quotes.push(quote);
+  if(quote.status==='Approved'&&requestId&&currentUserCanSelfApprove()){
+    const request=requestById(requestId);request.quote=quote.id;
+    const approval={id:'ap-'+crypto.randomUUID(),type:'Quote',title:'Approve '+quote.number,requester:window.CAGE_BACKEND.currentMemberId(),submitted:TODAY,decided:TODAY,decidedBy:window.CAGE_BACKEND.currentMemberId(),due:dateAfter(1),amount:quote.amount,status:'Approved',summary:quote.description,decisionNote:'Approved by the authorised administrator.',linkedType:'request',linkedId:requestId};
+    state.approvals.push(approval);applyApprovalOutcome(approval);
+  }
   if (quote.status === "Draft") {
     const linkedRequest = requestById(requestId);
     if (linkedRequest) {
@@ -4086,7 +4103,7 @@ async function createQuote(event) {
   setView("finance");
   quoteForm.dataset.requestId = "";
   const linkedRequest = requestById(requestId);
-  showToast(quote.sentAt ? `${quote.number} created and sent to ${quote.recipient}.` : requestId && linkedRequest && requestPreReviewComplete(linkedRequest) ? `${quote.number} created and sent for internal approval.` : requestId ? `${quote.number} saved as a draft; complete the request controls before approval.` : `${quote.number} created.`);
+  showToast(quote.sentAt ? `${quote.number} created and sent to ${quote.recipient}.` : quote.status === "Approved" ? `${quote.number} approved and ready to send.` : requestId && linkedRequest && requestPreReviewComplete(linkedRequest) ? `${quote.number} created and sent for internal approval.` : requestId ? `${quote.number} saved as a draft; complete the request controls before approval.` : `${quote.number} created.`);
   } finally {
     delete submittingForm.dataset.submitting;
     if(actionButton) actionButton.disabled=false;
