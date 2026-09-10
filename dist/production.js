@@ -18,10 +18,14 @@
   let workspaceVersion = 0;
   let saveTimer = null;
   let pendingState = null;
+  let cloudBase = {}, syncConflicts = [], savingNow=false;
+  const draftKey=()=>"cage-unsynced-"+profile?.id;
   let saveChain = Promise.resolve();
   let realtimeChannel = null;
   let applyingRemote = false;
   let lastAccessRefresh = 0;
+  let moduleAccess = {};
+  let workspacePoll = null;
   let greetingLanguage = "English";
 
   const GREETINGS = {
@@ -43,6 +47,7 @@
   }
 
   function showBanner(message, tone = "") {
+    if (tone !== "error" && /^(All changes saved|Saving changes|Workspace updated|Connected to)/.test(message)) return;
     banner.textContent = message;
     banner.className = `sync-banner visible ${tone}`.trim();
   }
@@ -128,6 +133,7 @@
     const settingsNav = document.getElementById("settings-nav-item");
     if (settingsNav) settingsNav.hidden = !isAdmin;
     document.querySelectorAll(".hr-privileged").forEach(element => { element.hidden = !["admin", "manager", "hr"].includes(profile?.role); });
+    window.CAGE_PERSONAL?.applyAccess();
     if (isViewer) document.querySelectorAll("button.primary-button, .mobile-add-button").forEach(button => { if (!button.closest(".auth-card")) button.disabled = true; });
   }
 
@@ -143,11 +149,7 @@
   }
 
   async function loadWorkspace() {
-    const { data, error } = await client
-      .from("workspace_states")
-      .select("data, version, updated_at")
-      .eq("organization_id", config.organizationId)
-      .maybeSingle();
+    const { data, error } = await client.rpc("get_my_workspace");
     if (error) throw error;
     if (!data) {
       if (profile.role !== "admin") throw new Error("The workspace has not been initialized. Ask an administrator to sign in first.");
@@ -155,74 +157,71 @@
       const result = await client.from("workspace_states").insert(initial).select("data, version").single();
       if (result.error) throw result.error;
       workspaceVersion = result.data.version;
+      cloudBase=structuredClone(result.data.data);
       app.replaceState(result.data.data);
       return;
     }
     workspaceVersion = data.version || 0;
+    cloudBase=structuredClone(data.data);
     app.replaceState(data.data);
   }
 
   function subscribe() {
-    if (realtimeChannel) client.removeChannel(realtimeChannel);
-    realtimeChannel = client
-      .channel(`cage-workspace-${config.organizationId}`)
-      .on("postgres_changes", {
-        event: "UPDATE",
-        schema: "public",
-        table: "workspace_states",
-        filter: `organization_id=eq.${config.organizationId}`
-      }, payload => {
-        const incoming = payload.new;
-        if (!incoming || incoming.version <= workspaceVersion) return;
-        workspaceVersion = incoming.version;
-        applyingRemote = true;
-        app.replaceState(incoming.data);
-        applyingRemote = false;
-        applyPermissions();
-        showBanner("Workspace updated by a teammate", "success");
-        hideBanner();
-      })
-      .subscribe(status => {
-        if (status === "SUBSCRIBED") {
-          showBanner("Connected to the shared workspace", "success");
-          hideBanner();
+    if (workspacePoll) clearInterval(workspacePoll);
+    workspacePoll = setInterval(async () => {
+      if (!profile || document.hidden || pendingState) return;
+      try {
+        await loadModuleAccess();
+        const result = await client.rpc("get_my_workspace");
+        if (result.error) throw result.error;
+        if (result.data && result.data.version !== workspaceVersion) {
+          workspaceVersion = result.data.version;
+          applyingRemote = true;
+          cloudBase=structuredClone(result.data.data);
+          app.replaceState(result.data.data);
+          applyingRemote = false;
         }
-      });
+        applyPermissions();
+      } catch (error) { applyingRemote = false; showBanner(error.message || "Connection interrupted", "error"); }
+    }, 8000);
   }
 
   async function flushSave() {
-    if (!pendingState || !profile || applyingRemote) return;
-    const snapshot = pendingState;
-    pendingState = null;
-    const expectedVersion = workspaceVersion;
-    showBanner("Saving changes…");
-    const { data, error } = await client
-      .from("workspace_states")
-      .update({ data: snapshot, version: expectedVersion + 1, updated_by: profile.id })
-      .eq("organization_id", config.organizationId)
-      .eq("version", expectedVersion)
-      .select("version")
-      .maybeSingle();
-    if (error) {
-      showBanner("Changes are saved on this device; cloud sync will retry", "error");
-      pendingState = snapshot;
-      window.setTimeout(() => scheduleSave(snapshot), 4000);
-      return;
-    }
-    if (!data) {
-      showBanner("A teammate changed this record. Refreshing the latest workspace…", "error");
+    if(!pendingState||!profile||applyingRemote||savingNow||syncConflicts.length)return;
+    const snapshot=structuredClone(pendingState),base=structuredClone(cloudBase),patches=window.CAGE_SYNC.changes(base,snapshot);
+    if(!patches.length){pendingState=null;localStorage.removeItem(draftKey());return;}
+    savingNow=true;showBanner("Saving changes…");
+    try {
+      const {data,error}=await client.rpc("save_workspace_changes",{changes:patches});
+      if(error)throw error;
+      if(data?.conflicts?.length){syncConflicts=data.conflicts;window.dispatchEvent(new CustomEvent("cage:conflicts",{detail:{conflicts:syncConflicts,patches}}));showBanner("Your draft is safe. Review the conflicting changes.","error");return;}
       await loadWorkspace();
-      hideBanner(2200);
-      return;
-    }
-    workspaceVersion = data.version;
-    showBanner("All changes saved", "success");
-    hideBanner();
+      const newer=window.CAGE_SYNC.changes(snapshot,pendingState||snapshot);
+      pendingState=null;
+      if(newer.length){pendingState=window.CAGE_SYNC.apply(cloudBase,newer);app.replaceState(pendingState);localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));}
+      else localStorage.removeItem(draftKey());
+      showBanner(newer.length?"Saving your latest changes…":"All changes synced");window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:!!pendingState}}));
+    } catch(error){showBanner("Not synced: "+error.message+". Your draft is kept on this device.","error");window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:true,error:error.message}}));}
+    finally {savingNow=false;if(pendingState&&!syncConflicts.length)setTimeout(()=>{if(navigator.onLine)flushSave();},6000);}
   }
+  async function resolveSync(choices) {
+    for(const c of syncConflicts){const choice=choices.find(x=>x.key===c.key&&x.id===c.id)?.choice;if(!choice)throw new Error("Choose which version to keep for every conflict");cloudBase=window.CAGE_SYNC.apply(cloudBase,[{...c,after:c.current}]);if(choice==='theirs')pendingState=window.CAGE_SYNC.apply(pendingState,[{...c,after:c.current}]);}
+    syncConflicts=[];localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));app.replaceState(pendingState);await flushSave();
+  }
+
+  function reviewSync() {if(syncConflicts.length)window.dispatchEvent(new CustomEvent("cage:conflicts",{detail:{conflicts:syncConflicts,patches:window.CAGE_SYNC.changes(cloudBase,pendingState)}}));return window.CAGE_SYNC.changes(cloudBase,pendingState||cloudBase);}
+  async function discardDraftRecord(key,id) {pendingState=window.CAGE_SYNC.apply(pendingState,[{key,id,after:id===null?cloudBase[key]:cloudBase[key]?.find(r=>r.id===id)||null}]);syncConflicts=syncConflicts.filter(c=>c.key!==key||c.id!==id);localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));app.replaceState(pendingState);await flushSave();}
+  async function restoreDraft() {
+    const saved=JSON.parse(localStorage.getItem(draftKey())||"null");if(!saved)return;
+    const patches=window.CAGE_SYNC.changes(saved.base,saved.next);pendingState=window.CAGE_SYNC.apply(cloudBase,patches);cloudBase=window.CAGE_SYNC.apply(cloudBase,patches.map(c=>({...c,after:c.before})));app.replaceState(pendingState);await flushSave();
+  }
+  window.addEventListener("online",()=>flushSave());
 
   function scheduleSave(nextState) {
     if (!configured() || !profile || applyingRemote) return;
     pendingState = JSON.parse(JSON.stringify(nextState));
+    localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));
+    window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:true}}));
     window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => {
       saveChain = saveChain.then(flushSave).catch(error => {
@@ -239,6 +238,7 @@
     showBanner("Opening the secure CAGE workspace…");
     try {
       profile = await loadProfile(session.user.id);
+      await loadModuleAccess();
       await loadWorkspace();
       chooseGreetingLanguage();
       setCurrentUser();
@@ -259,6 +259,8 @@
     lastAccessRefresh = Date.now();
     try {
       profile = await loadProfile(profile.id);
+      await loadModuleAccess();
+      if(!pendingState) await loadWorkspace();
       setCurrentUser();
       app?.renderAll?.();
       applyPermissions();
@@ -356,12 +358,27 @@
   });
 
   document.getElementById("sign-out-button").addEventListener("click", async () => {
+    localStorage.removeItem("cage-operations-hub-production-cache-v1");
     if (client) await client.auth.signOut();
   });
 
   async function sendDocument(payload) {
+    if(moduleLevel("finance")!=="edit") throw new Error("Finance edit access is required.");
+    clearTimeout(saveTimer);
+    await saveChain;
+    if(pendingState) await flushSave();
+    if(pendingState) throw new Error("Wait for cloud sync before sending this document.");
+    const prepared=await client.rpc("prepare_document_delivery",{doc_type:payload.type,doc_record:payload.record});
+    if(prepared.error) throw prepared.error;
+    workspaceVersion=prepared.data.version;
+    await loadWorkspace();
+    payload={...payload,record:prepared.data.record};
     const { data, error } = await client.functions.invoke("send-document", { body: payload });
-    if (error) throw new Error(error.message || "Email delivery failed.");
+    if (error) {
+      let message=error.message || "Email delivery failed.";
+      try { const response=await error.context?.json(); message=response?.error || message; } catch {}
+      throw new Error(message);
+    }
     if (!data?.ok) throw new Error(data?.error || "Email delivery failed.");
     return data;
   }
@@ -549,7 +566,132 @@
     if (!document.hidden) refreshAccess();
   });
 
+  async function loadModuleAccess() {
+    const result = await client.from("module_access").select("module,access").eq("user_id",profile.id);
+    if(result.error) throw new Error("Install the Hub 14 database update before using this version. " + result.error.message);
+    const previous = JSON.stringify(moduleAccess);
+    moduleAccess = Object.fromEntries((result.data||[]).map(row=>[row.module,row.access]));
+    if(previous !== JSON.stringify(moduleAccess)) workspaceVersion = -1;
+  }
+  function moduleLevel(module) {
+    if (!profile) return "none";
+    if(profile.role === "admin") return "edit";
+    if(["admin","settings"].includes(module)) return "none";
+    if(profile.role === "viewer") return moduleAccess[module] === "none" ? "none" : "view";
+    if(moduleAccess[module]) return moduleAccess[module];
+    if(module === "approvals") return profile.role === "manager" ? "edit" : "none";
+    if(module === "hr") return ["manager","hr"].includes(profile.role) ? "edit" : "view";
+    return profile.role === "viewer" ? "view" : "edit";
+  }
+  async function plannerData(userId = profile.id) {
+    const results=await Promise.all([
+      client.from("task_plans").select("*").eq("user_id",userId),
+      client.from("planner_preferences").select("daily_minutes").eq("user_id",userId).maybeSingle(),
+      client.from("profiles").select("id,full_name,email,role").eq("organization_id",config.organizationId).eq("active",true)
+    ]);
+    for(const r of results) if(r.error) throw r.error;
+    return {plans:results[0].data,capacity:results[1].data?.daily_minutes||480,users:results[2].data};
+  }
+  async function saveTaskPlan(plan) {
+    const allowed=Object.fromEntries(Object.entries(plan).filter(([k])=>["task_id","bucket","plan_date","estimate_minutes","start_at","end_at","time_zone"].includes(k)));
+    const r=await client.from("task_plans").upsert({...allowed,user_id:profile.id},{onConflict:"user_id,task_id"});
+    if(r.error)throw r.error;
+  }
+  async function savePlanningCapacity(minutes) {
+    const r=await client.from("planner_preferences").upsert({user_id:profile.id,daily_minutes:minutes});if(r.error)throw r.error;
+  }
+  async function updatePlannedTask(payload) {
+    clearTimeout(saveTimer);await saveChain;if(pendingState)await flushSave();
+    if(pendingState)throw new Error("Wait for cloud sync before updating this task.");
+    const r=await client.rpc("update_planned_task",payload);if(r.error)throw r.error;
+    await loadWorkspace();
+  }
+  async function personalData() {
+    const results=await Promise.all([
+      client.from("personal_reminders").select("*").order("due_at"),
+      client.from("personal_notifications").select("*").order("created_at",{ascending:false}).limit(150)
+    ]);
+    for(const r of results) if(r.error) throw r.error;
+    return {reminders:results[0].data,notifications:results[1].data};
+  }
+  async function saveReminder(data,id) {
+    const allowed = Object.fromEntries(Object.entries(data).filter(([k])=>["title","due_at","lead_minutes","completed_at","target_view","target_id"].includes(k)));
+    if(allowed.due_at) { allowed.before_sent=false; allowed.last_nudged_at=null; }
+    const r=id ? await client.from("personal_reminders").update(allowed).eq("id",id).eq("user_id",profile.id) : await client.from("personal_reminders").insert({...allowed,user_id:profile.id});
+    if(r.error) throw r.error;
+  }
+  async function readNotification(id) {
+    let q=client.from("personal_notifications").update({read_at:new Date().toISOString()}).eq("user_id",profile.id);
+    if(id) q=q.eq("id",id); else q=q.is("read_at",null);
+    const r=await q; if(r.error) throw r.error;
+  }
+  async function accessAccounts() {
+    if(profile.role!=="admin") throw new Error("Administrator access required.");
+    const result=await client.from("profiles").select("id,full_name,email,role").eq("organization_id",config.organizationId).eq("active",true);
+    if(result.error) throw result.error;
+    const rules=await client.from("module_access").select("*"); if(rules.error) throw rules.error;
+    return {users:result.data,rules:rules.data};
+  }
+  async function saveModuleAccess(userId, rules) {
+    if(profile.role!=="admin") throw new Error("Administrator access required.");
+    const result=await client.from("module_access").upsert(Object.entries(rules).map(([module,access])=>({user_id:userId,module,access})),{onConflict:"user_id,module"});
+    if(result.error) throw result.error;
+  }
+  async function fileUrl(path) {
+    const r=await client.storage.from("cage-files").createSignedUrl(path,3600);
+    if(r.error) throw r.error; return r.data.signedUrl;
+  }
+
+  async function emailPreferences() {
+    const result=await client.from("staff_email_preferences").select("*").eq("user_id",profile.id).maybeSingle();
+    if(result.error)throw result.error;return result.data;
+  }
+  async function saveEmailPreferences(values) {
+    const result=await client.from("staff_email_preferences").upsert({...values,user_id:profile.id});if(result.error)throw result.error;
+  }
+  async function emailRouting() {
+    if(profile.role!=="admin")throw new Error("Administrator access required");
+    const results=await Promise.all([client.from("staff_email_routing").select("*").eq("organization_id",profile.organization_id).maybeSingle(),client.from("profiles").select("id,full_name,role").eq("organization_id",profile.organization_id).eq("active",true),client.from("staff_email_outbox").select("id,user_id,subject,status,created_at,error").order("created_at",{ascending:false}).limit(30)]);
+    for(const r of results)if(r.error)throw r.error;return {routing:results[0].data||{},users:results[1].data,history:results[2].data};
+  }
+  async function saveEmailRouting(values) {
+    if(profile.role!=="admin")throw new Error("Administrator access required");
+    const r=await client.from("staff_email_routing").upsert({...values,organization_id:profile.organization_id});if(r.error)throw r.error;
+  }
+  async function readChatNotifications(thread) {
+    const r=await client.from("personal_notifications").update({read_at:new Date().toISOString()}).eq("user_id",profile.id).eq("target_view","chat").eq("target_id",thread).is("read_at",null);if(r.error)throw r.error;
+  }
+  async function requestTaskHelp(taskId) {
+    const r=await client.rpc("request_task_help",{task_key:taskId});if(r.error)throw r.error;await loadWorkspace();
+  }
+
+
+  async function opsData(table,filters={}) {
+    const allowed=['staff_work_settings','record_access','equipment_reservations','invoice_payments','daily_priorities','equipment_kits','training_sessions','learner_attendance','training_assessments','cohort_messages'];
+    if(!allowed.includes(table))throw new Error('Unknown work data');let q=client.from(table).select('*');for(const [k,v] of Object.entries(filters))q=q.eq(k,v);const r=await q;if(r.error)throw r.error;return r.data;
+  }
+  async function opsSave(table,values,conflict) {
+    const scoped=['equipment_kits','training_sessions','training_assessments','cohort_messages'];
+    if(![...scoped,'staff_work_settings','record_access','daily_priorities','learner_attendance'].includes(table))throw new Error('Unknown work data');
+    if(scoped.includes(table))values={...values,organization_id:profile.organization_id};
+    if(table==='training_sessions'||table==='training_assessments')values={...values,created_by:profile.id};
+    if(table==='cohort_messages')values={...values,sender_id:profile.id};
+    if(table==='learner_attendance')values={...values,recorded_by:profile.id};
+    if(table==='daily_priorities')values={...values,user_id:profile.id};
+    const r=await client.from(table).upsert(values,table==='cohort_messages'?{onConflict:'id',ignoreDuplicates:true}:conflict?{onConflict:conflict}:undefined).select();if(r.error)throw r.error;return r.data;
+  }
+  async function opsRpc(name,args) {
+    if(!['reserve_equipment','cancel_reservation','record_payment','equipment_busy'].includes(name))throw new Error('Unknown action');
+    if(name==='equipment_busy'){const r=await client.rpc(name,args);if(r.error)throw r.error;return r.data;}
+    await flushSave();if(pendingState)throw new Error('Sync your draft before continuing');const r=await client.rpc(name,args);if(r.error)throw r.error;await loadWorkspace();return r.data;
+  }
+  async function sendCohort(payload) {const r=await client.functions.invoke('send-cohort-message',{body:payload});if(r.error)throw r.error;if(!r.data?.ok)throw new Error(r.data?.error||'Email failed');return r.data;}
   window.CAGE_BACKEND = {
+    opsData,opsSave,opsRpc,sendCohort,
+    resolveSync, restoreDraft, flushSave, reviewSync, discardDraftRecord, syncState:()=>({pending:!!pendingState,conflicts:syncConflicts.length}),
+    emailPreferences, saveEmailPreferences, emailRouting, saveEmailRouting, readChatNotifications, requestTaskHelp,
+    plannerData, saveTaskPlan, savePlanningCapacity, updatePlannedTask,
+    moduleLevel, personalData, saveReminder, readNotification, accessAccounts, saveModuleAccess, fileUrl,
     boot,
     scheduleSave,
     sendDocument,

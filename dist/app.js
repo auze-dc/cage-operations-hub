@@ -336,6 +336,9 @@ let activeProjectTab = "overview";
 let toastTimer;
 
 const viewMeta = {
+  mywork: ["My work", "CAGE / My responsibilities"],
+  notifications: ["Notifications", "CAGE / For you"],
+  access: ["Module access", "CAGE / Administration"],
   training: ["Training Academy", "CAGE / Learning delivery"],
   dashboard: ["Dashboard", "CAGE / Operations"],
   requests: ["Request centre", "CAGE / Intake & qualification"],
@@ -641,6 +644,7 @@ function loadState() {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  window.CAGE_PERSONAL?.refreshView();
   window.CAGE_BACKEND?.scheduleSave(state);
 }
 
@@ -649,7 +653,9 @@ function replaceStateFromCloud(nextState) {
   const removedLegacySamples = Array.isArray(nextState.opportunityMatches) && nextState.opportunityMatches.some(item => /^sample:/i.test(String(item?.title || "")));
   localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
   state = loadState();
+  for (const [key,value] of Object.entries(nextState)) state[key] = value;
   renderAll();
+  window.CAGE_PERSONAL?.refreshView();
   if (removedLegacySamples) window.setTimeout(saveState, 0);
 }
 
@@ -864,16 +870,19 @@ function currentUserIsAdmin() {
 
 function setView(view) {
   if (!viewMeta[view]) return;
+  if (window.CAGE_BACKEND?.moduleLevel && window.CAGE_BACKEND.moduleLevel(view) === "none") { showToast("You do not have access to this module. Ask your administrator."); return; }
   if (["admin", "settings"].includes(view) && !currentUserIsAdmin()) {
     showToast("Administrator access is required.");
     return;
   }
+  if (view === "access" && !currentUserIsAdmin()) return;
   activeView = view;
   document.querySelectorAll("[data-view-panel]").forEach(panel => panel.classList.toggle("active", panel.dataset.viewPanel === view));
   document.querySelectorAll(".nav-item[data-view]").forEach(button => button.classList.toggle("active", button.dataset.view === view));
   document.getElementById("view-title").textContent = viewMeta[view][0];
   document.getElementById("view-eyebrow").textContent = viewMeta[view][1];
   closeSidebar();
+  window.CAGE_PERSONAL?.view(view);
   if (view === "training") {
     window.CAGE_TRAINING_UI?.render();
     window.CAGE_TRAINING_UI?.load();
@@ -909,7 +918,7 @@ function renderMetrics() {
     { label: "Active projects", value: state.projects.filter(p => projectHealth(p) !== "complete").length, unit: "projects", note: `${state.projects.filter(p => projectHealth(p) === "attention").length} need attention`, icon: "▦", tone: "#008fc8", tint: "#e6f7fe" },
     { label: "Overdue tasks", value: active.filter(isOverdue).length, unit: "tasks", note: "Review owners and dates", icon: "!", tone: "#d64e4b", tint: "#feeceb" },
     { label: "Open pipeline", value: formatMoney(openDeals.reduce((sum, deal) => sum + deal.value, 0), true), unit: "", note: `${openDeals.length} active opportunities`, icon: "◇", tone: "#7357c8", tint: "#f0edfb" },
-    { label: "Outstanding", value: formatMoney(openInvoices.reduce((sum, invoice) => sum + invoice.amount, 0), true), unit: "", note: `${openInvoices.filter(invoice => effectiveInvoiceStatus(invoice) === "Overdue").length} overdue invoices`, icon: "¤", tone: "#e99a24", tint: "#fff4df" },
+    { label: "Outstanding", value: formatMoney(openInvoices.reduce((sum, invoice) => sum + Math.max(0, invoice.amount - Number(invoice.paidAmount || 0)), 0), true), unit: "", note: `${openInvoices.filter(invoice => effectiveInvoiceStatus(invoice) === "Overdue").length} overdue invoices`, icon: "¤", tone: "#e99a24", tint: "#fff4df" },
     { label: "Today’s calendar", value: todayEvents.length, unit: "events", note: `${state.events.filter(event => event.date > TODAY && event.date <= "2026-09-11").length} more this week`, icon: "□", tone: "#168a65", tint: "#e5f5ef" },
     { label: "Blocked", value: active.filter(task => task.status === "Blocked").length, unit: "tasks", note: "Management decision needed", icon: "⊘", tone: "#d64e4b", tint: "#feeceb" }
   ];
@@ -1012,7 +1021,7 @@ function renderDashboard() {
   document.getElementById("projects-nav-count").textContent = state.projects.length;
   document.getElementById("tasks-nav-count").textContent = activeTasks().length;
   document.getElementById("crm-nav-count").textContent = state.deals.filter(deal => !["Won", "Lost"].includes(deal.stage)).length;
-  document.getElementById("calendar-nav-count").textContent = state.events.filter(event => event.date >= TODAY && event.date <= "2026-09-11").length + state.missions.filter(mission => !["Complete", "Cancelled"].includes(mission.status) && mission.start >= TODAY && mission.start <= "2026-09-11").length;
+  document.getElementById("calendar-nav-count").textContent = state.events.filter(event => event.date >= (window.CAGE_OPS?.period().from || TODAY) && event.date <= (window.CAGE_OPS?.period().to || TODAY)).length + state.missions.filter(mission => !["Complete", "Cancelled"].includes(mission.status) && mission.start >= TODAY && mission.start <= "2026-09-11").length;
   document.getElementById("missions-nav-count").textContent = state.missions.filter(mission => !["Complete", "Cancelled"].includes(mission.status)).length;
   document.getElementById("assets-nav-count").textContent = state.assets.filter(assetNeedsAttention).length;
   document.getElementById("compliance-nav-count").textContent = state.compliance.filter(record => ["Due soon", "Review required", "Expired"].includes(complianceDisplayStatus(record))).length;
@@ -1023,7 +1032,7 @@ function renderDashboard() {
   document.getElementById("leave-nav-count").textContent = state.leaveRequests.filter(request => request.status === "Pending").length;
   document.getElementById("knowledge-nav-count").textContent = state.knowledge.length;
   document.getElementById("evidence-nav-count").textContent = state.tasks.filter(task => task.status === "Done" && !task.evidence).length;
-  document.getElementById("notification-count").textContent = state.requests.filter(requestNeedsAction).length + state.approvals.filter(item => item.status === "Pending").length + state.compliance.filter(record => ["Review required", "Expired"].includes(complianceDisplayStatus(record))).length + state.assets.filter(asset => asset.status === "Maintenance").length;
+  window.CAGE_PERSONAL?.updateBadge();
 }
 
 function renderRequests() {
@@ -1346,27 +1355,30 @@ function updateBoardListTitle(listId, title) {
   showToast("Heading renamed.");
 }
 
-function moveTaskToList(taskId, listId) {
-  const task = state.tasks.find(item => item.id === taskId);
+async function moveTaskToList(taskId, listId) {
+  let task = state.tasks.find(item => item.id === taskId);
   const list = boardListById(listId);
   if (!task || !list || taskListId(task) === listId) return;
   if (list.status === "Blocked" && !task.blocker) {
-    const reason = window.prompt("What is preventing this card from progressing?");
+    const reason = await window.CAGE_OPS.ask("What is preventing this card from progressing?");
     if (!reason?.trim()) {
       showToast("A blocker reason is required.");
       renderTasks();
       return;
     }
+    task=state.tasks.find(t=>t.id===taskId);if(!task)return;
     task.blocker = reason.trim();
   }
   if (list.status === "Done" && !task.evidence) {
-    const evidence = window.prompt("Add a completion note, file name or evidence link before moving this card to Done.");
+    const evidence = await window.CAGE_OPS.ask("Add a completion note, file name or evidence link before moving this card to Done.",{task:task.id});
     if (!evidence?.trim()) {
       showToast("Completion evidence is required.");
       renderTasks();
       return;
     }
-    task.evidence = evidence.trim();
+    task=state.tasks.find(t=>t.id===taskId);if(!task)return;
+    task=state.tasks.find(t=>t.id===taskId);if(!task)return;
+  task.evidence = evidence.trim();
   }
   task.list = list.id;
   task.status = list.status || "To Do";
@@ -1682,7 +1694,7 @@ function renderAssets() {
     const serviceLabel = !asset.nextService ? "Not scheduled" : due < 0 ? `${Math.abs(due)} days overdue` : due === 0 ? "Due today" : `In ${due} days`;
     return `<article class="asset-card ${assetNeedsAttention(asset) ? "attention" : ""}">
       <div class="asset-card-top"><span class="asset-glyph">${asset.category === "Aircraft" ? "DR" : asset.category === "Battery" ? "BT" : asset.category === "Survey equipment" ? "SV" : "EQ"}</span><div><span>${escapeHtml(asset.category)}</span><strong>${escapeHtml(asset.name)}</strong></div><span class="condition-pill ${statusClass(asset.condition)}">${escapeHtml(asset.condition)}</span></div>
-      <div class="asset-tag">${escapeHtml(asset.tag)}</div>
+      <div class="asset-tag">${escapeHtml(asset.tag)} · ${escapeHtml(asset.serial || "No serial")} · ${escapeHtml(asset.location || "No location")}${asset.returnDate ? ` · Return: ${escapeHtml(asset.returnDate)}` : ""}</div><div class="hr-row-actions"><button data-edit-equipment="${asset.id}">Edit details</button><button data-equipment-action="${asset.status === "Assigned" ? "return" : "checkout"}" data-equipment-id="${asset.id}">${asset.status === "Assigned" ? "Return equipment" : "Check out"}</button><button data-equipment-history="${asset.id}">History</button></div>
       <div class="asset-stats"><span><small>Use</small><strong>${escapeHtml(asset.usage)} ${escapeHtml(asset.unit || "uses")}</strong></span><span><small>Next check</small><strong class="${due <= 14 ? "warning-text" : ""}">${escapeHtml(serviceLabel)}</strong></span></div>
       <div class="asset-controls"><label><span>Status</span><select data-asset-status="${asset.id}">${["Available", "Assigned", "Maintenance"].map(status => `<option ${status === asset.status ? "selected" : ""}>${status}</option>`).join("")}</select></label><label><span>Project</span><select data-asset-project="${asset.id}">${projectOptions}</select></label></div>
       <div class="asset-footer"><span class="owner-chip"><span class="owner-avatar">${teamMember(asset.custodian).initials}</span>${escapeHtml(teamMember(asset.custodian).name)}</span>${asset.status === "Maintenance" ? `<button data-asset-ready="${asset.id}">Mark service complete</button>` : ""}</div>
@@ -1900,12 +1912,12 @@ function renderFinance() {
   const openInvoices = state.invoices.filter(invoice => !["Paid", "Draft"].includes(effectiveInvoiceStatus(invoice)));
   const overdueInvoices = state.invoices.filter(invoice => effectiveInvoiceStatus(invoice) === "Overdue");
   const paidInvoices = state.invoices.filter(invoice => effectiveInvoiceStatus(invoice) === "Paid");
-  const expensesThisMonth = state.expenses.filter(expense => expense.date.startsWith("2026-09"));
+  const expensesThisMonth = state.expenses.filter(expense => expense.date.startsWith(TODAY.slice(0,7)));
   renderMetricCards("finance-metric-grid", [
-    { label: "Outstanding", value: formatMoney(openInvoices.reduce((sum, invoice) => sum + invoice.amount, 0), true), unit: "", note: `${openInvoices.length} invoices awaiting payment`, icon: "¤", tone: "#008fc8", tint: "#e6f7fe" },
-    { label: "Overdue", value: formatMoney(overdueInvoices.reduce((sum, invoice) => sum + invoice.amount, 0), true), unit: "", note: `${overdueInvoices.length} invoices need follow-up`, icon: "!", tone: "#d64e4b", tint: "#feeceb" },
-    { label: "Paid invoices", value: formatMoney(paidInvoices.reduce((sum, invoice) => sum + invoice.amount, 0), true), unit: "", note: "Recorded cash received", icon: "✓", tone: "#168a65", tint: "#e5f5ef" },
-    { label: "September costs", value: formatMoney(expensesThisMonth.reduce((sum, expense) => sum + expense.amount, 0), true), unit: "", note: `${expensesThisMonth.length} expenses recorded`, icon: "−", tone: "#e99a24", tint: "#fff4df" }
+    { label: "Outstanding", value: formatMoney(openInvoices.reduce((sum, invoice) => sum + Math.max(0, invoice.amount - Number(invoice.paidAmount || 0)), 0), true), unit: "", note: `${openInvoices.length} invoices awaiting payment`, icon: "¤", tone: "#008fc8", tint: "#e6f7fe" },
+    { label: "Overdue", value: formatMoney(overdueInvoices.reduce((sum, invoice) => sum + Math.max(0, invoice.amount - Number(invoice.paidAmount || 0)), 0), true), unit: "", note: `${overdueInvoices.length} invoices need follow-up`, icon: "!", tone: "#d64e4b", tint: "#feeceb" },
+    { label: "Paid invoices", value: formatMoney(paidInvoices.reduce((sum, invoice) => sum + invoice.amount, 0), true), unit: "", note: "Fully paid invoice value", icon: "✓", tone: "#168a65", tint: "#e5f5ef" },
+    { label: new Date().toLocaleDateString("en-GB",{month:"long"}) + " costs", value: formatMoney(expensesThisMonth.reduce((sum, expense) => sum + expense.amount, 0), true), unit: "", note: `${expensesThisMonth.length} expenses recorded`, icon: "−", tone: "#e99a24", tint: "#fff4df" }
   ]);
   document.getElementById("auto-reminders").checked = state.settings.autoReminders !== false;
 
@@ -1942,7 +1954,7 @@ function renderFinance() {
     return `<div class="profit-row"><div class="profit-row-head"><strong>${escapeHtml(item.project.name)}</strong><span class="${item.net < 0 ? "negative" : ""}">${formatMoney(item.net, true)}</span></div><div class="profit-row-meta"><span>Revenue ${formatMoney(item.revenue, true)}</span><span>Costs ${formatMoney(item.costs, true)}</span></div><div class="profit-bar"><span style="width:${item.revenue / total * 100}%"></span><span style="width:${item.costs / total * 100}%"></span></div></div>`;
   }).join("")}</div>`;
 
-  document.getElementById("expense-list").innerHTML = [...state.expenses].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 7).map(expense => `<div class="expense-row"><span class="expense-icon">−</span><span class="expense-main"><strong>${escapeHtml(expense.description)}</strong><span>${escapeHtml(expense.receipt || "No receipt reference")}</span></span><span>${escapeHtml(projectById(expense.project)?.name || "Unlinked")}</span><span>${escapeHtml(expense.category)} · ${formatDate(expense.date)}</span><strong class="money-cell">${formatMoney(expense.amount)}</strong></div>`).join("");
+  document.getElementById("expense-list").innerHTML = [...state.expenses].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 7).map(expense => `<div class="expense-row"><span class="expense-icon">−</span><span class="expense-main"><strong>${escapeHtml(expense.description)}</strong><span>${expense.receiptPath ? `<button type="button" data-open-receipt="${expense.id}">Open receipt</button>` : escapeHtml(expense.receipt || "No receipt attached")}</span></span><span>${escapeHtml(projectById(expense.project)?.name || "Unlinked")}</span><span>${escapeHtml(expense.category)} · ${formatDate(expense.date)}</span><strong class="money-cell">${formatMoney(expense.amount)}</strong></div>`).join("");
 }
 
 function threadIdForMessage(message) {
@@ -2057,7 +2069,7 @@ function renderChat() {
     if (message.type === "System") return `${day}<div class="message-system"><span>↻</span>${escapeHtml(message.text)}<small>${escapeHtml(message.time)}</small></div>`;
     const type = message.type || "Update";
     const currentMember = window.CAGE_BACKEND?.currentMemberId?.() || "alexander";
-    return `${day}<div class="message-row ${message.sender === currentMember ? "mine" : ""} ${type === "Decision" ? "decision" : ""}">${message.sender !== currentMember ? `<span class="owner-avatar">${sender.initials}</span>` : ""}<div class="message-bubble"><div class="message-bubble-head"><span class="message-author">${escapeHtml(sender.name)}</span><span class="message-type ${type.toLowerCase().replaceAll(" ", "-")}">${escapeHtml(type)}</span></div><p>${escapeHtml(message.text)}</p>${message.attachment ? `<button class="message-attachment" data-preview-chat-file="${message.id}">⌁ ${escapeHtml(message.attachment)}</button>` : ""}<span class="message-meta">${escapeHtml(message.time)} ${message.pinned ? "· Pinned decision" : ""} ${message.sender === currentMember ? "✓✓" : ""}</span></div></div>`;
+    return `${day}<div class="message-row ${message.sender === currentMember ? "mine" : ""} ${type === "Decision" ? "decision" : ""}">${message.sender !== currentMember ? `<span class="owner-avatar">${sender.initials}</span>` : ""}<div class="message-bubble"><div class="message-bubble-head"><span class="message-author">${escapeHtml(sender.name)}</span><span class="message-type ${type.toLowerCase().replaceAll(" ", "-")}">${escapeHtml(type)}</span></div><p>${escapeHtml(message.text)}</p>${message.audio ? `<button type="button" class="message-attachment" data-play-voice="${message.id}">▶ Voice message · ${Math.ceil(message.audioDuration || 0)}s</button><div data-voice-player="${message.id}"></div>` : message.attachment ? `<button class="message-attachment" data-preview-chat-file="${message.id}">⌁ ${escapeHtml(message.attachment)}</button>` : ""}<span class="message-meta">${escapeHtml(message.time)} ${message.pinned ? "· Pinned decision" : ""} ${message.sender === currentMember ? "✓✓" : ""}</span></div></div>`;
   }).join("") : thread.teamWide
     ? `<div class="empty-state"><div>◎</div><h3>Start the team conversation</h3><p>Ask a routine question or share an enquiry that does not yet belong to a specific work record.</p></div>`
     : `<div class="empty-state"><div>◌</div><h3>Start the official work record</h3><p>Use this conversation for updates, files, decisions, approvals and handovers from intake to closure.</p></div>`;
@@ -2090,7 +2102,7 @@ function addSystemWorkMessage(threadId, text) {
   state.messages.push({ id: `msg-${Date.now()}-${state.messages.length}`, thread: threadId, sender: "", date: TODAY, time: now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }), type: "System", text });
 }
 
-function sendChatMessage(text, attachment = "", attachmentPath = "") {
+function sendChatMessage(text, attachment = "", attachmentPath = "", extra = {}) {
   const cleanText = String(text || "").trim();
   if ((!cleanText && !attachment) || !threadById(activeChatThread)) return;
   const now = new Date();
@@ -2105,7 +2117,10 @@ function sendChatMessage(text, attachment = "", attachmentPath = "") {
     pinned: type === "Decision",
     text: cleanText || "Shared a reference",
     attachment,
-    attachmentPath
+    attachmentPath,
+    createdAt: now.toISOString(),
+    mentions: assignableTeam().filter(person => cleanText.includes("@" + person.name)).map(person => person.id),
+    ...extra
   });
   saveState();
   document.getElementById("chat-input").value = "";
@@ -2160,7 +2175,7 @@ function renderLeave() {
   const approved = state.leaveRequests.filter(request => request.status === "Approved");
   const pending = state.leaveRequests.filter(request => request.status === "Pending");
   const awayToday = approved.filter(request => isDateWithin(TODAY, request.start, request.end));
-  const upcoming = approved.filter(request => request.start > TODAY && request.start <= "2026-10-04");
+  const upcoming = approved.filter(request => request.start > TODAY && request.start <= window.CAGE_OPS?.addDays(TODAY,30));
   renderMetricCards("leave-metric-grid", [
     { label: "Away today", value: String(awayToday.length), unit: "people", note: awayToday.length ? "Handover plans are active" : "Full team available", icon: "☼", tone: "#008fc8", tint: "#e6f7fe" },
     { label: "Upcoming leave", value: String(upcoming.length), unit: "requests", note: "Next 30 days", icon: "□", tone: "#168a65", tint: "#e5f5ef" },
@@ -2168,13 +2183,14 @@ function renderLeave() {
     { label: "Coverage risks", value: String(approved.filter(request => !request.handover).length), unit: "requests", note: "Every approved leave needs handover", icon: "◎", tone: "#7357c8", tint: "#f0edfb" }
   ]);
 
-  const timelineDates = Array.from({ length: 15 }, (_, index) => `2026-09-${String(index + 14).padStart(2, "0")}`);
+  const timelineDates = Array.from({ length: 15 }, (_, index) => window.CAGE_OPS?.addDays(TODAY,index) || TODAY);
   document.getElementById("leave-timeline").innerHTML = `<div class="leave-timeline-head"><span>Team member</span>${timelineDates.map(date => `<span>${asDate(date).getUTCDate()}</span>`).join("")}</div>${assignableTeam().map(member => `<div class="leave-person-row"><span class="leave-person-label"><span class="owner-avatar">${member.initials}</span>${escapeHtml(member.name.split(" ")[0])}</span>${timelineDates.map(date => { const request = state.leaveRequests.find(item => item.person === member.id && item.status !== "Rejected" && isDateWithin(date, item.start, item.end)); return `<span class="leave-cell ${request ? request.status.toLowerCase() : ""}" title="${request ? `${escapeHtml(request.type)} · ${escapeHtml(request.status)}` : "Available"}"></span>`; }).join("")}</div>`).join("")}`;
 
   document.getElementById("leave-balances").innerHTML = `<div class="leave-balance-list">${assignableTeam().map(member => {
-    const used = approved.filter(request => request.person === member.id && request.type === "Annual leave").reduce((sum, request) => sum + workdayCount(request.start, request.end), 0);
-    const remaining = Math.max(0, 20 - used);
-    return `<div class="leave-balance-row"><div class="leave-balance-head"><span>${escapeHtml(member.name)}</span><strong>${remaining} days left</strong></div><div class="leave-balance-track"><span style="width:${remaining / 20 * 100}%"></span></div></div>`;
+    const used = approved.filter(request => request.person === member.id && request.type === "Annual leave" && request.end>=TODAY.slice(0,4)+"-01-01" && request.start<=TODAY.slice(0,4)+"-12-31").reduce((sum, request) => sum + workdayCount(request.start<TODAY.slice(0,4)+"-01-01"?TODAY.slice(0,4)+"-01-01":request.start,request.end>TODAY.slice(0,4)+"-12-31"?TODAY.slice(0,4)+"-12-31":request.end), 0);
+    const entitlement=window.CAGE_OPS?.leaveDays(member.id)??20;
+    const remaining = Math.max(0, entitlement - used);
+    return `<div class="leave-balance-row"><div class="leave-balance-head"><span>${escapeHtml(member.name)}</span><strong>${remaining} days left</strong></div><div class="leave-balance-track"><span style="width:${remaining / Math.max(1,entitlement) * 100}%"></span></div></div>`;
   }).join("")}</div>`;
 
   document.getElementById("leave-request-list").innerHTML = [...state.leaveRequests].sort((a, b) => b.submitted.localeCompare(a.submitted)).map(request => {
@@ -2252,12 +2268,12 @@ function renderReports() {
   const overdue = active.filter(isOverdue);
   const blocked = active.filter(task => task.status === "Blocked");
   const dueSoon = active.filter(task => dueWithin(task, 7)).sort((a,b) => a.due.localeCompare(b.due));
-  const recentlyDone = state.tasks.filter(task => task.status === "Done" && task.updated >= "2026-08-29");
+  const recentlyDone = state.tasks.filter(task => task.status === "Done" && task.updated >= (window.CAGE_OPS?.period().from || TODAY) && task.updated <= (window.CAGE_OPS?.period().to || TODAY));
   const attentionProjects = state.projects.filter(project => projectHealth(project) === "attention");
   const activeDeals = state.deals.filter(deal => !["Won", "Lost"].includes(deal.stage));
   const overdueInvoices = state.invoices.filter(invoice => effectiveInvoiceStatus(invoice) === "Overdue");
-  const outstandingValue = state.invoices.filter(invoice => !["Paid", "Draft"].includes(effectiveInvoiceStatus(invoice))).reduce((sum, invoice) => sum + invoice.amount, 0);
-  const upcomingEvents = state.events.filter(event => event.date >= TODAY && event.date <= "2026-09-11").sort((a, b) => `${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`));
+  const outstandingValue = state.invoices.filter(invoice => !["Paid", "Draft"].includes(effectiveInvoiceStatus(invoice))).reduce((sum, invoice) => sum + Math.max(0, invoice.amount - Number(invoice.paidAmount || 0)), 0);
+  const upcomingEvents = state.events.filter(event => event.date >= (window.CAGE_OPS?.period().from || TODAY) && event.date <= (window.CAGE_OPS?.period().to || TODAY)).sort((a, b) => `${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`));
   const activeMissions = state.missions.filter(mission => !["Complete", "Cancelled"].includes(mission.status));
   const pendingApprovals = state.approvals.filter(item => item.status === "Pending");
   const complianceActions = state.compliance.filter(record => complianceDisplayStatus(record) !== "Active");
@@ -2820,6 +2836,7 @@ function convertRequest(requestId) {
       commercial: commercial.id
     };
     state.projects.push(project);
+  window.CAGE_OPS?.applyTemplate(project,new FormData(event.currentTarget).get("workflowTemplate"));
     const workflow = requestDeliveryTasks(request);
     workflow.forEach((task, index) => state.tasks.push({
       id: `t-${Date.now() + index + 2}`,
@@ -3018,13 +3035,17 @@ function openMissionCalendar(missionId) {
   showToast("Mission dates are shown automatically in the shared calendar.");
 }
 
-function openAssetDialog() {
+function openAssetDialog(assetId = "") {
   renderOwnerOptions();
   renderProjectOptions();
   const form = document.getElementById("asset-form");
   form.reset();
-  form.elements.custodian.value = "ian";
+  form.dataset.editId = typeof assetId === "string" ? assetId : "";
+  form.elements.custodian.value = window.CAGE_BACKEND.currentMemberId();
   form.elements.usage.value = "0";
+  const existing=state.assets.find(a=>a.id===form.dataset.editId);
+  if(existing) for(const [key,value] of Object.entries(existing)) if(form.elements[key] && typeof value!=="object") form.elements[key].value=value;
+  document.querySelector("#asset-dialog h2").textContent=existing ? "Edit equipment" : "Add equipment";
   document.getElementById("asset-form-error").textContent = "";
   document.getElementById("asset-dialog").showModal();
 }
@@ -3039,7 +3060,7 @@ function createAsset(event) {
   const category = String(data.get("category") || "Aircraft");
   const project = String(data.get("project") || "");
   const asset = {
-    id: `as-${Date.now()}`,
+    id: event.currentTarget.dataset.editId || `as-${Date.now()}`,
     name: String(data.get("name") || "").trim(),
     category,
     tag: String(data.get("tag") || "").trim().toUpperCase(),
@@ -3055,7 +3076,7 @@ function createAsset(event) {
     document.getElementById("asset-form-error").textContent = "Add the equipment name, unique asset tag and custodian.";
     return;
   }
-  if (state.assets.some(item => item.tag.toLowerCase() === asset.tag.toLowerCase())) {
+  if (state.assets.some(item => item.id !== asset.id && item.tag.toLowerCase() === asset.tag.toLowerCase())) {
     document.getElementById("asset-form-error").textContent = "That asset tag is already in use.";
     return;
   }
@@ -3064,7 +3085,9 @@ function createAsset(event) {
     document.getElementById("asset-form-error").textContent = "Select a linked project for assigned equipment.";
     return;
   }
-  state.assets.push(asset);
+  const index=state.assets.findIndex(a=>a.id===asset.id);
+  asset.serial=String(data.get("serial")||""); asset.location=String(data.get("location")||""); asset.notes=String(data.get("notes")||"");
+  if(index>=0) state.assets[index]={...state.assets[index],...asset}; else state.assets.push(asset);
   saveState();
   document.getElementById("asset-dialog").close();
   renderAll();
@@ -3246,14 +3269,14 @@ function applyApprovalOutcome(item) {
   }
 }
 
-function decideApproval(approvalId, decision) {
+async function decideApproval(approvalId, decision) {
   if (!currentUserCanApprove()) {
     showToast("Only a manager or administrator can approve or return requests.");
     return;
   }
   const item = state.approvals.find(record => record.id === approvalId);
   if (!item || item.status !== "Pending") return;
-  let note = decision === "Approved" ? "Approved from the CAGE decision inbox." : window.prompt("What must be changed before this can be approved?");
+  let note = decision === "Approved" ? "Approved from the CAGE decision inbox." : await window.CAGE_OPS.ask("What must be changed before this can be approved?");
   if (decision === "Returned" && !note?.trim()) {
     showToast("Add a return reason so the requester knows what to fix.");
     return;
@@ -3442,7 +3465,7 @@ function projectWorkspaceTab(project, context) {
 
   if (activeProjectTab === "quotes") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Commercial record</span><h3>${quotes.length} linked quotations</h3></div>${context.primaryDeal ? `<button data-new-quote-deal="${context.primaryDeal.id}">＋ Create quotation</button>` : ""}</div><div class="project-finance-list">${quotes.map(quote => `<div><span><strong>${escapeHtml(quote.number)}</strong><small>${escapeHtml(quote.description)}</small></span><span><strong>${formatMoney(quote.amount, true)}</strong><small>Valid to ${formatDate(quote.validUntil)}</small></span><span class="status-pill ${statusClass(quote.status)}">${escapeHtml(quote.status)}</span><button data-send-document="quote" data-document-id="${quote.id}">${quote.sentAt ? "Resend" : "Send"}</button></div>`).join("") || `<div class="project-empty"><strong>No linked quotations</strong><span>${context.primaryDeal ? "Create a quotation for the linked opportunity." : "This project has no linked CRM opportunity."}</span></div>`}</div></section>`;
 
-  return `<section class="project-panel"><div class="project-panel-heading"><div><span>Project spending</span><h3>${context.expenses.length} recorded expenses</h3></div><button data-new-project-expense="${project.id}">＋ Add expense</button></div><div class="project-expense-summary"><span><small>Total project expenses</small><strong>${formatMoney(costs, true)}</strong></span><span><small>Approved</small><strong>${formatMoney(context.expenses.filter(item => (item.status || "Pending") === "Approved").reduce((sum, item) => sum + item.amount, 0), true)}</strong></span><span><small>Pending review</small><strong>${context.expenses.filter(item => (item.status || "Pending") === "Pending").length}</strong></span></div><div class="project-expense-list">${context.expenses.slice().sort((a,b) => b.date.localeCompare(a.date)).map(expense => `<div><span><strong>${escapeHtml(expense.description)}</strong><small>${escapeHtml(expense.category)} · ${formatDate(expense.date)}${expense.receipt ? ` · ${escapeHtml(expense.receipt)}` : ""}</small></span><strong>${formatMoney(expense.amount, true)}</strong><select data-expense-status="${expense.id}" aria-label="Status for ${escapeHtml(expense.description)}">${["Pending", "Approved", "Rejected"].map(status => `<option ${status === (expense.status || "Pending") ? "selected" : ""}>${status}</option>`).join("")}</select></div>`).join("") || `<div class="project-empty"><strong>No expenses recorded</strong><span>Add field, equipment, travel or administrative costs against this project.</span></div>`}</div></section>`;
+  return `<section class="project-panel"><div class="project-panel-heading"><div><span>Project spending</span><h3>${context.expenses.length} recorded expenses</h3></div><button data-new-project-expense="${project.id}">＋ Add expense</button></div><div class="project-expense-summary"><span><small>Total project expenses</small><strong>${formatMoney(costs, true)}</strong></span><span><small>Approved</small><strong>${formatMoney(context.expenses.filter(item => (item.status || "Pending") === "Approved").reduce((sum, item) => sum + item.amount, 0), true)}</strong></span><span><small>Pending review</small><strong>${context.expenses.filter(item => (item.status || "Pending") === "Pending").length}</strong></span></div><div class="project-expense-list">${context.expenses.slice().sort((a,b) => b.date.localeCompare(a.date)).map(expense => `<div><span><strong>${escapeHtml(expense.description)}</strong><small>${expense.receiptPath ? `<button type="button" data-open-receipt="${expense.id}">Open receipt</button> · ` : ""}${escapeHtml(expense.category)} · ${formatDate(expense.date)}${expense.receipt ? ` · ${escapeHtml(expense.receipt)}` : ""}</small></span><strong>${formatMoney(expense.amount, true)}</strong><select data-expense-status="${expense.id}" aria-label="Status for ${escapeHtml(expense.description)}">${["Pending", "Approved", "Rejected"].map(status => `<option ${status === (expense.status || "Pending") ? "selected" : ""}>${status}</option>`).join("")}</select></div>`).join("") || `<div class="project-empty"><strong>No expenses recorded</strong><span>Add field, equipment, travel or administrative costs against this project.</span></div>`}</div></section>`;
 }
 
 function renderProjectWorkspace() {
@@ -3540,27 +3563,30 @@ function openTask(taskId) {
   openTaskDialog("", taskId);
 }
 
-function changeTaskStatus(taskId, nextStatus, control) {
-  const task = state.tasks.find(item => item.id === taskId);
+async function changeTaskStatus(taskId, nextStatus, control) {
+  let task = state.tasks.find(item => item.id === taskId);
   if (!task) return;
   const previous = task.status;
   if (nextStatus === "Blocked" && !task.blocker) {
-    const reason = window.prompt("What is preventing this task from progressing?");
+    const reason = await window.CAGE_OPS.ask("What is preventing this task from progressing?");
     if (!reason?.trim()) {
       if (control) control.value = previous;
       showToast("A blocker reason is required.");
       return;
     }
+    task=state.tasks.find(t=>t.id===taskId);if(!task)return;
     task.blocker = reason.trim();
   }
   if (nextStatus === "Done" && state.settings.requireTaskEvidence !== false && !task.evidence) {
-    const evidence = window.prompt("Add a completion note, file name or evidence link before closing this task.");
+    const evidence = await window.CAGE_OPS.ask("Add a completion note, file name or evidence link before closing this task.",{task:task.id});
     if (!evidence?.trim()) {
       if (control) control.value = previous;
       showToast("Completion evidence is required.");
       return;
     }
-    task.evidence = evidence.trim();
+    task=state.tasks.find(t=>t.id===taskId);if(!task)return;
+    task=state.tasks.find(t=>t.id===taskId);if(!task)return;
+  task.evidence = evidence.trim();
   }
   task.status = nextStatus;
   const matchingList = state.boardLists.find(list => list.status === nextStatus);
@@ -3639,6 +3665,7 @@ function createTask(event) {
   } else {
     state.tasks.push({ id: `t-${Date.now()}`, project, title, owner, due, priority: String(data.get("priority") || "Medium"), status, list: matchingList?.id, output, blocker: status === "Blocked" ? blocker : undefined, evidence, updated: TODAY });
   }
+  const savedTask=existing||state.tasks[state.tasks.length-1];Object.assign(savedTask,window.CAGE_OPS?.taskFields()||{});
   saveState();
   document.getElementById("task-dialog").close();
   renderAll();
@@ -3675,6 +3702,7 @@ function createProject(event) {
   }
   const data = new FormData(event.currentTarget);
   const project = {
+    createdBy:window.CAGE_BACKEND.currentMemberId(),
     id: `p-${Date.now()}`,
     name: String(data.get("name") || "").trim(),
     client: String(data.get("client") || "").trim(),
@@ -3843,6 +3871,8 @@ function openInvoiceDialog(projectId = "") {
   renderProjectOptions();
   const form = document.getElementById("invoice-form");
   form.reset();
+  delete form.dataset.pendingInvoiceId;
+  delete form.dataset.pendingInvoiceNumber;
   const due = new Date(`${TODAY}T00:00:00Z`);
   due.setUTCDate(due.getUTCDate() + 14);
   form.elements.issued.value = TODAY;
@@ -3864,14 +3894,21 @@ function nextInvoiceNumber() {
 
 async function createInvoice(event) {
   event.preventDefault();
+  const submittingForm=event.currentTarget;
+  if(submittingForm.dataset.submitting) return;
+  submittingForm.dataset.submitting="true";
+  const actionButton=event.submitter;
+  if(actionButton) actionButton.disabled=true;
+  try {
   if (event.submitter?.value === "cancel") {
     document.getElementById("invoice-dialog").close();
     return;
   }
   const data = new FormData(event.currentTarget);
   const invoice = {
-    id: `inv-${Date.now()}`,
-    number: nextInvoiceNumber(),
+    createdBy:window.CAGE_BACKEND.currentMemberId(),
+    id: submittingForm.dataset.pendingInvoiceId ||= `inv-${Date.now()}`,
+    number: submittingForm.dataset.pendingInvoiceNumber ||= nextInvoiceNumber(),
     client: String(data.get("client") || "").trim(),
     project: String(data.get("project") || ""),
     issued: String(data.get("issued") || ""),
@@ -3881,6 +3918,7 @@ async function createInvoice(event) {
     recipient: String(data.get("recipient") || "").trim(),
     description: String(data.get("description") || "").trim()
   };
+  try { Object.assign(invoice,window.CAGE_DOCUMENTS.fields(event.currentTarget)); } catch(error) { document.getElementById("invoice-form-error").textContent=error.message; return; }
   if (!invoice.client || !invoice.project || !invoice.issued || !invoice.due || !invoice.amount || !invoice.recipient || !invoice.description) {
     document.getElementById("invoice-form-error").textContent = "Complete the client, recipient, project, dates, amount and description.";
     return;
@@ -3905,12 +3943,16 @@ async function createInvoice(event) {
     invoice.sentAt = new Date().toISOString();
     invoice.automaticFollowUp = true;
   }
-  state.invoices.push(invoice);
+  const savedInvoice=state.invoices.find(i=>i.id===invoice.id);if(savedInvoice)Object.assign(savedInvoice,invoice);else state.invoices.push(invoice);
   saveState();
   document.getElementById("invoice-dialog").close();
   renderAll();
   setView("finance");
   showToast(invoice.sentAt ? `${invoice.number} created and sent to ${invoice.recipient}.` : `${invoice.number} created and linked to the project.`);
+  } finally {
+    delete submittingForm.dataset.submitting;
+    if(actionButton) actionButton.disabled=false;
+  }
 }
 
 function changeInvoiceStatus(invoiceId, status) {
@@ -3951,6 +3993,13 @@ function nextQuoteNumber() {
 
 async function createQuote(event) {
   event.preventDefault();
+  const submittingForm=event.currentTarget;
+  if(submittingForm.dataset.submitting) return;
+  submittingForm.dataset.submitting="true";
+  const actionButton=event.submitter;
+  if(actionButton) actionButton.disabled=true;
+  try {
+  const quoteForm = event.currentTarget;
   if (event.submitter?.value === "cancel") {
     document.getElementById("quote-dialog").close();
     return;
@@ -3958,6 +4007,7 @@ async function createQuote(event) {
   const data = new FormData(event.currentTarget);
   const requestId = event.currentTarget.dataset.requestId || "";
   const quote = {
+    createdBy:window.CAGE_BACKEND.currentMemberId(),
     id: `q-${Date.now()}`,
     number: nextQuoteNumber(),
     client: String(data.get("client") || "").trim(),
@@ -3970,6 +4020,8 @@ async function createQuote(event) {
     description: String(data.get("description") || "").trim(),
     request: requestId
   };
+  try { Object.assign(quote,window.CAGE_DOCUMENTS.fields(event.currentTarget)); } catch(error) { document.getElementById("quote-form-error").textContent=error.message; return; }
+  if(quote.status === "Approved" && !currentUserCanApprove()) { document.getElementById("quote-form-error").textContent="A manager or administrator must approve quotations. Save this as a draft."; return; }
   if (!quote.client || !quote.issued || !quote.validUntil || !quote.amount || !quote.recipient || !quote.description) {
     document.getElementById("quote-form-error").textContent = "Complete the client, recipient, dates, amount and scope summary.";
     return;
@@ -3998,7 +4050,7 @@ async function createQuote(event) {
     quote.automaticFollowUp = true;
   }
   if (requestId) quote.status = "Draft";
-  state.quotes.push(quote);
+  const savedQuote=state.quotes.find(q=>q.id===quote.id);if(savedQuote)Object.assign(savedQuote,quote);else state.quotes.push(quote);
   if (quote.status === "Draft") {
     const linkedRequest = requestById(requestId);
     if (linkedRequest) {
@@ -4017,7 +4069,7 @@ async function createQuote(event) {
         id: `ap-${Date.now() + 1}`,
         type: "Quote",
         title: `Approve ${quote.number} for ${quote.client}`,
-        requester: dealById(quote.deal)?.owner || "comfort",
+        requester:window.CAGE_BACKEND.currentMemberId(),
         submitted: TODAY,
         due: dateAfter(1),
         amount: quote.amount,
@@ -4032,9 +4084,13 @@ async function createQuote(event) {
   document.getElementById("quote-dialog").close();
   renderAll();
   setView("finance");
-  event.currentTarget.dataset.requestId = "";
+  quoteForm.dataset.requestId = "";
   const linkedRequest = requestById(requestId);
   showToast(quote.sentAt ? `${quote.number} created and sent to ${quote.recipient}.` : requestId && linkedRequest && requestPreReviewComplete(linkedRequest) ? `${quote.number} created and sent for internal approval.` : requestId ? `${quote.number} saved as a draft; complete the request controls before approval.` : `${quote.number} created.`);
+  } finally {
+    delete submittingForm.dataset.submitting;
+    if(actionButton) actionButton.disabled=false;
+  }
 }
 
 function openSendDocument(type, id) {
@@ -4125,7 +4181,7 @@ function openExpenseDialog(projectId = "") {
   document.getElementById("expense-dialog").showModal();
 }
 
-function createExpense(event) {
+async function createExpense(event) {
   event.preventDefault();
   if (event.submitter?.value === "cancel") {
     document.getElementById("expense-dialog").close();
@@ -4133,6 +4189,7 @@ function createExpense(event) {
   }
   const data = new FormData(event.currentTarget);
   const expense = {
+    createdBy:window.CAGE_BACKEND.currentMemberId(),
     id: `ex-${Date.now()}`,
     description: String(data.get("description") || "").trim(),
     project: String(data.get("project") || ""),
@@ -4146,6 +4203,15 @@ function createExpense(event) {
     document.getElementById("expense-form-error").textContent = "Complete the project, date, amount and expense description.";
     return;
   }
+  const file = data.get("receiptFile");
+  const submit=event.submitter;
+  if(file?.size) {
+    if (!/^(image\/(jpeg|png|webp|heic|heif)|application\/pdf)$/.test(file.type) || file.size > 20*1024*1024) { document.getElementById("expense-form-error").textContent="Choose a PDF or receipt image up to 20 MB."; return; }
+    try { if(submit) submit.disabled=true; const upload=await window.CAGE_BACKEND.uploadFile(file,"expense",expense.id); expense.receiptPath=upload.path; expense.receipt=upload.name; }
+    catch(error) { document.getElementById("expense-form-error").textContent=error.message; return; }
+    finally { if(submit) submit.disabled=false; }
+  }
+  expense.owner=window.CAGE_BACKEND.currentMemberId();
   state.expenses.push(expense);
   saveState();
   document.getElementById("expense-dialog").close();
@@ -4162,6 +4228,7 @@ function createExpense(event) {
 function changeExpenseStatus(expenseId, status) {
   const expense = state.expenses.find(item => item.id === expenseId);
   if (!expense || !["Pending", "Approved", "Rejected"].includes(status)) return;
+  if(!currentUserCanApprove()) { showToast("Only a manager or administrator can approve expenses."); renderAll(); return; }
   expense.status = status;
   saveState();
   renderAll();
@@ -4232,6 +4299,7 @@ function createLeaveRequest(event) {
 }
 
 function changeLeaveStatus(requestId, status) {
+  if(!currentUserCanApprove()){showToast("Only a manager or administrator can decide leave.");renderLeave();return;}
   const request = state.leaveRequests.find(item => item.id === requestId);
   if (!request) return;
   request.status = status;
@@ -4359,11 +4427,12 @@ function renderGlobalSearchSuggestions() {
   input.setAttribute("aria-expanded", "true");
 }
 
-function addEvidence(taskId) {
-  const task = state.tasks.find(item => item.id === taskId);
+async function addEvidence(taskId) {
+  let task = state.tasks.find(item => item.id === taskId);
   if (!task) return;
-  const evidence = window.prompt("Paste an evidence link or enter the document name.");
+  const evidence = await window.CAGE_OPS.ask("Paste an evidence link or enter the document name.",{task:task.id});
   if (!evidence?.trim()) return;
+  task=state.tasks.find(t=>t.id===taskId);if(!task)return;
   task.evidence = evidence.trim();
   task.updated = TODAY;
   saveState();
@@ -5042,8 +5111,11 @@ document.getElementById("chat-file-input").addEventListener("change", async even
   if (!file) return;
   try {
     showToast("Uploading file…");
-    const uploaded = await window.CAGE_BACKEND.uploadFile(file, "chat", activeChatThread);
-    sendChatMessage(document.getElementById("chat-input").value, file.name, uploaded.path);
+    const originalThread=activeChatThread;
+    const draft=document.getElementById("chat-input").value;
+    const uploaded = await window.CAGE_BACKEND.uploadFile(file, "chat", originalThread);
+    if(activeChatThread!==originalThread) selectChatThread(originalThread);
+    sendChatMessage(draft, file.name, uploaded.path);
     showToast("File attached to the official work record.");
   } catch (error) {
     showToast(error.message || "The file could not be uploaded.");
