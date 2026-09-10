@@ -25,5 +25,26 @@ export function summary(c:any){const {p,s,pref,plans,now}=c;const day=local(now,
 
  return items.filter(i=>eligible(i,i.kind,c));
 }
+// Resolve mention copy only from the recipient's already scoped workspace.
+export function mentionContent(item:any,c:any,profiles:any[]=[]){
+ if(item.kind!=='mention')return item;
+ const notice=c.notices.find((n:any)=>n.id===item.notice);
+ const message=(c.s.messages||[]).find((m:any)=>notice?.event_key===`mention:${m.id}:${c.p.id}`);
+ if(!message)return {...item,title:'You were mentioned',body:'A colleague mentioned you in a conversation.',actionLabel:'Open conversation'};
+ const sender=profiles.find((p:any)=>p.organization_id===c.p.organization_id&&owns(p,message.sender));
+ const teamMember=(c.s.team||[]).find((p:any)=>p.id===message.sender);
+ const senderName=sender?.full_name||teamMember?.name||'A colleague';
+ const thread=item.target;
+ let conversation='';
+ if(thread==='team:general-enquiries')conversation='General Enquiries';
+ else {
+ const request=(c.s.requests||[]).find((r:any)=>r.id===thread);
+ if(request)conversation=request.title;
+ else for(const [prefix,key,field] of [['project:','projects','name'],['deal:','deals','name'],['commercial:','commercialRecords','title']]){
+ if(typeof thread==='string'&&thread.startsWith(prefix))conversation=(c.s[key]||[]).find((r:any)=>r.id===thread.slice(prefix.length))?.[field]||'';
+ }
+ }
+ return {...item,title:`${senderName} mentioned you${conversation?' in '+conversation:''}`,body:'',messageExcerpt:String(message.text||'').slice(0,600)||'Open the conversation to view the message.',actionLabel:'Open conversation'};
+}
 export const esc=(s:any)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-export function email(name:string,items:any[],base:string,digest:boolean){const first=name?.trim().split(/\s+/)[0]||'there';const link=(i:any)=>{const u=new URL(base);u.searchParams.set('view',i.view);u.searchParams.set('record',i.target||'');return esc(u.href);};return `<html><body style="font-family:Arial,sans-serif;color:#181B34;margin:0"><div style="max-width:640px;margin:auto;border:1px solid #E6E9EF"><div style="background:#181B34;color:white;padding:20px"><b>CAGE</b> · ${digest?'Your day at CAGE':'Work update'}</div><div style="padding:24px"><p>Hello ${esc(first)},</p><p>${digest?'Here is what needs your attention today.':'You have an update on your work.'}</p>${items.map(i=>`<div style="padding:16px 0;border-bottom:1px solid #E6E9EF"><b>${esc(i.title)}</b><p>${esc(i.body)}</p><a style="color:#007EAF" href="${link(i)}">Open in CAGE →</a></div>`).join('')}<p>You can adjust routine emails in <a href="${link({view:'notifications'})}">Notification preferences</a>.</p></div></div></body></html>`;}
+export function email(name:string,items:any[],base:string,digest:boolean){const first=name?.trim().split(/\s+/)[0]||'there';const link=(i:any)=>{const u=new URL(base);u.searchParams.set('view',i.view);u.searchParams.set('record',i.target||'');return esc(u.href);};return `<html><body style="font-family:Arial,sans-serif;color:#181B34;margin:0"><div style="max-width:640px;margin:auto;border:1px solid #E6E9EF"><div style="background:#181B34;color:white;padding:20px"><b>CAGE</b> · ${digest?'Your day at CAGE':'Work update'}</div><div style="padding:24px"><p>Hello ${esc(first)},</p><p>${digest?'Here is what needs your attention today.':'You have an update on your work.'}</p>${items.map(i=>`<div style="padding:16px 0;border-bottom:1px solid #E6E9EF"><b>${esc(i.title)}</b>${i.messageExcerpt!==undefined?`<blockquote style="margin:16px 0;padding:12px 16px;border-left:3px solid #00ADEF;background:#F5FAFC;white-space:pre-wrap">${esc(i.messageExcerpt)}</blockquote>`:`<p>${esc(i.body)}</p>`}<a style="color:#007EAF" href="${link(i)}">${esc(i.actionLabel||'Open in CAGE')} →</a></div>`).join('')}<p>You can adjust routine emails in <a href="${link({view:'notifications'})}">Notification preferences</a>.</p></div></div></body></html>`;}
