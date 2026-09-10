@@ -196,13 +196,7 @@ Deno.serve(async req => {
     }, { onConflict: "organization_id,external_key" });
   }
 
-  if (isCron && opportunities.length && Deno.env.get("RESEND_API_KEY") && Deno.env.get("OPPORTUNITY_ALERT_TO")) {
-    const recipients = Deno.env.get("OPPORTUNITY_ALERT_TO")!.split(",").map(v => v.trim()).filter(Boolean);
-    await fetch("https://api.resend.com/emails", {
-      method: "POST", headers: { Authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: Deno.env.get("EMAIL_FROM") || "CAGE Operations <noreply@notifications.cagemw.com>", to: recipients, subject: `${opportunities.length} verified CAGE opportunity match${opportunities.length === 1 ? "" : "es"}`, html: `<h2>CAGE Opportunity Monitor</h2><p>New live matches were found in the weekday 07:00 CAT scan across the configured public sources.</p><ul>${opportunities.slice(0, 10).map(item => `<li><a href="${esc(item.url)}">${esc(item.title)}</a> — ${item.match}% fit — ${esc(item.deadline)}<br><small>${esc(item.reason)}</small></li>`).join("")}</ul>` }),
-    });
-  }
+  // Staff email routing is handled by staff-email-dispatch; never broadcast to an environment email list.
 
   return new Response(JSON.stringify({ ok: true, scannedFeeds: feeds.length, coveredSources: 47, opportunities, nextScan: nextWeekdayAtSevenCAT() }), { headers: { ...cors, "Content-Type": "application/json" } });
 });
