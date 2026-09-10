@@ -7,11 +7,11 @@
   <meta name="description" content="CAGE Operations Hub for request intake, projects, missions, equipment, compliance, approvals, CRM, calendar, finance, chat, leave and knowledge.">
   <title>CAGE Operations Hub</title>
   <link rel="icon" href="./cage-logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=15.2.0">
   <link rel="stylesheet" href="./monday-theme.css">
-<link rel="stylesheet" href="./personal-work.css?v=14.0.0">
+<link rel="stylesheet" href="./personal-work.css?v=15.2.0">
   <link rel="stylesheet" href="./mobile.css?v=14.1.0">
-<link rel="stylesheet" href="./daily-planner.css?v=14.2.0">
+<link rel="stylesheet" href="./daily-planner.css?v=15.2.0">
 <link rel="stylesheet" href="./workflows.css?v=15.0.0">
 </head>
 <body class="session-checking">
@@ -138,18 +138,16 @@
             </div>
           </div>
 
-          <div class="metric-grid" id="metric-grid"></div>
+          <div class="executive-metrics" id="metric-grid"></div>
 
-          <div class="control-strip" id="control-strip" aria-label="Operations control centre"></div>
-
-          <div class="dashboard-grid">
-            <article class="surface priority-surface">
+          <div class="dashboard-grid executive-grid">
+            <article class="surface priority-surface executive-priorities">
               <div class="surface-heading">
                 <div>
-                  <p class="section-kicker">Priority queue</p>
-                  <h3>Needs attention</h3>
+                  <p class="section-kicker">Management priorities</p>
+                  <h3>What needs a decision</h3>
                 </div>
-                <button class="text-button" data-go-view="tasks" data-preset-filter="attention">View all</button>
+                <button class="text-button" data-go-view="approvals">Open approval inbox</button>
               </div>
               <div id="attention-list" class="attention-list"></div>
             </article>
@@ -157,35 +155,17 @@
             <article class="surface pulse-surface">
               <div class="surface-heading">
                 <div>
-                  <p class="section-kicker">Operations pulse</p>
-                  <h3>Today’s focus</h3>
+                  <p class="section-kicker">Your day</p>
+                  <h3>Today</h3>
                 </div>
                 <span class="live-pill"><span></span> Live</span>
               </div>
-              <div class="focus-date">
-                <strong>04</strong>
-                <div><span>SEPTEMBER</span><b>FRIDAY</b></div>
-              </div>
+              <div class="focus-date" id="dashboard-focus-date"></div>
               <div id="focus-list" class="focus-list"></div>
               <button class="full-width-button" data-go-view="calendar">Open team calendar</button>
             </article>
           </div>
 
-          <article class="surface project-overview">
-            <div class="surface-heading">
-              <div>
-                <p class="section-kicker">Portfolio health</p>
-                <h3>Active projects</h3>
-              </div>
-              <button class="text-button" data-go-view="projects">See all projects</button>
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>Project</th><th>Owner</th><th>Health</th><th>Deadline</th><th>Progress</th><th></th></tr></thead>
-                <tbody id="dashboard-projects"></tbody>
-              </table>
-            </div>
-          </article>
         </section>
 
         <section class="view-panel" data-view-panel="requests">
@@ -381,14 +361,15 @@
 
         <section class="view-panel" data-view-panel="chat">
           <div class="page-intro">
-            <div><p class="date-line">Company communication</p><h2>Work chat</h2><p>Team-wide enquiries and continuous work conversations from first request through delivery and closure.</p></div>
+            <div><p class="date-line">Company communication</p><h2>Work chat</h2><p>Private staff inboxes, team groups and work-linked conversations in one searchable place.</p></div>
             <span class="prototype-note">Press Enter to send · Shift + Enter for a new line</span>
           </div>
           <div class="communication-rule surface"><span class="communication-rule-icon">◎</span><span><strong>Use Work chat for CAGE work</strong><small>Requests, decisions, files, approvals and handovers stay searchable and linked to the work. WhatsApp is not the official work record.</small></span></div>
           <div class="chat-workspace surface">
             <aside class="chat-channels">
+              <div class="chat-create-actions"><button type="button" id="new-direct-chat">＋ Message</button><button type="button" id="new-group-chat">＋ Group</button></div>
               <label class="chat-search"><span>⌕</span><input id="chat-search" type="search" placeholder="Search work or messages" aria-label="Search work conversations"></label>
-              <div class="chat-filter" id="chat-filter"><button class="active" data-chat-filter="all">All</button><button data-chat-filter="team">Team</button><button data-chat-filter="intake">Intake</button><button data-chat-filter="commercial">Grants & tenders</button><button data-chat-filter="delivery">Delivery</button></div>
+              <div class="chat-filter" id="chat-filter"><button class="active" data-chat-filter="all">All</button><button data-chat-filter="direct">Inbox</button><button data-chat-filter="group">Groups</button><button data-chat-filter="work">Work</button></div>
               <div id="chat-channel-list" class="chat-channel-list"></div>
             </aside>
             <section class="chat-main">
@@ -969,17 +950,17 @@
   <script src="./vendor/supabase.js" defer></script>
   <script src="./reliable-sync.js?v=15.0.0" defer></script>
   <script src="./production.js?v=15.1.0" defer></script>
-  <script src="./app.js?v=15.1.0" defer></script>
+  <script src="./app.js?v=15.2.0" defer></script>
   <script src="./hr.js" defer></script>
   <script src="./training.js?v=15.0.0" defer></script>
 <script src="./vendor/pdf-lib.min.js" defer></script>
 <script src="./document-pdf.js?v=15.1.0" defer></script>
 <script src="./documents-ui.js?v=15.1.0" defer></script>
-<script src="./personal-work.js?v=14.3.0" defer></script>
+<script src="./personal-work.js?v=15.2.0" defer></script>
   <script src="./mobile.js?v=14.1.0" defer></script>
-<script src="./daily-planner.js?v=15.0.0" defer></script>
-<script src="./staff-email.js?v=14.3.0" defer></script>
-<script src="./workflows.js?v=15.1.0" defer></script>
+<script src="./daily-planner.js?v=15.2.0" defer></script>
+<script src="./staff-email.js?v=15.2.0" defer></script>
+<script src="./workflows.js?v=15.2.0" defer></script>
 <script src="./refresh-recovery.js?v=15.1.0" defer></script>
 </body>
 </html>

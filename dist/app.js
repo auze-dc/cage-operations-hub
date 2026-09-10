@@ -214,6 +214,7 @@ const seedData = {
     { id: "kb-005", title: "Area 47 mapping QA lessons", category: "Lesson learned", owner: "bonifancio", updated: "2026-09-04", project: "p-area47", summary: "Processing bottlenecks, coverage checks and metadata improvements identified during the Area 47 capture.", link: "Drive / Area 47 / Lessons Learned.md", pinned: false },
     { id: "kb-006", title: "Emergency response and lost-link procedure", category: "SOP", owner: "alexander", updated: "2026-07-15", project: "", summary: "Immediate actions, escalation contacts and documentation required after abnormal flight events.", link: "Drive / Safety / Emergency Procedure.pdf", pinned: false }
   ],
+  chatGroups: [],
   messages: [
     { id: "msg-general-001", thread: GENERAL_CHAT_THREAD_ID, sender: "", date: TODAY, time: "08:00", type: "System", text: "General Enquiries is the shared CAGE team space for routine enquiries, quick coordination and company-wide questions that are not linked to a specific work record." },
     { id: "msg-001", project: "p-geoportal", sender: "alexander", date: "2026-09-03", time: "08:42", text: "Let us lock the first-release dataset structure today. We need one standard that works for Area 47 and future global datasets." },
@@ -606,6 +607,7 @@ function loadState() {
       quotes: Array.isArray(parsed.quotes) ? parsed.quotes : clone(seedData.quotes),
       leaveRequests: Array.isArray(parsed.leaveRequests) ? parsed.leaveRequests : clone(seedData.leaveRequests),
       knowledge: Array.isArray(parsed.knowledge) ? parsed.knowledge : clone(seedData.knowledge),
+      chatGroups: Array.isArray(parsed.chatGroups) ? parsed.chatGroups : [],
       messages: (() => {
         const existing = Array.isArray(parsed.messages) ? parsed.messages : clone(seedData.messages);
         const additions = seedData.messages.filter(message => ["msg-general-001", "msg-040", "msg-041", "msg-042", "msg-043"].includes(message.id) && !existing.some(item => item.id === message.id));
@@ -915,24 +917,23 @@ function setView(view) {
 
 function renderMetrics() {
   const active = activeTasks();
-  const openDeals = state.deals.filter(deal => !["Won", "Lost"].includes(deal.stage));
   const openInvoices = state.invoices.filter(invoice => !["Paid", "Draft"].includes(effectiveInvoiceStatus(invoice)));
-  const todayEvents = state.events.filter(event => event.date === TODAY);
+  const pendingApprovals = state.approvals.filter(item => item.status === "Pending");
+  const deliveryRisks = state.projects.filter(project => projectHealth(project) === "attention");
+  const operationalAlerts = state.compliance.filter(record => ["Due soon", "Review required", "Expired"].includes(complianceDisplayStatus(record))).length + state.assets.filter(assetNeedsAttention).length;
   const metrics = [
-    { label: "Active projects", value: state.projects.filter(p => projectHealth(p) !== "complete").length, unit: "projects", note: `${state.projects.filter(p => projectHealth(p) === "attention").length} need attention`, icon: "▦", tone: "#008fc8", tint: "#e6f7fe" },
-    { label: "Overdue tasks", value: active.filter(isOverdue).length, unit: "tasks", note: "Review owners and dates", icon: "!", tone: "#d64e4b", tint: "#feeceb" },
-    { label: "Open pipeline", value: formatMoney(openDeals.reduce((sum, deal) => sum + deal.value, 0), true), unit: "", note: `${openDeals.length} active opportunities`, icon: "◇", tone: "#7357c8", tint: "#f0edfb" },
-    { label: "Outstanding", value: formatMoney(openInvoices.reduce((sum, invoice) => sum + Math.max(0, invoice.amount - Number(invoice.paidAmount || 0)), 0), true), unit: "", note: `${openInvoices.filter(invoice => effectiveInvoiceStatus(invoice) === "Overdue").length} overdue invoices`, icon: "¤", tone: "#e99a24", tint: "#fff4df" },
-    { label: "Today’s calendar", value: todayEvents.length, unit: "events", note: `${state.events.filter(event => event.date > TODAY && event.date <= "2026-09-11").length} more this week`, icon: "□", tone: "#168a65", tint: "#e5f5ef" },
-    { label: "Blocked", value: active.filter(task => task.status === "Blocked").length, unit: "tasks", note: "Management decision needed", icon: "⊘", tone: "#d64e4b", tint: "#feeceb" }
+    { view: "approvals", label: "Decisions waiting", value: pendingApprovals.length, note: pendingApprovals.length ? "Open the approval inbox" : "Nothing waiting", icon: "✓", tone: "#b76e00", tint: "#fff7e6" },
+    { view: "projects", label: "Delivery at risk", value: deliveryRisks.length, note: `${active.filter(task => task.status === "Blocked").length} blocked · ${active.filter(isOverdue).length} overdue tasks`, icon: "!", tone: "#c83c3c", tint: "#fff0ef" },
+    { view: "finance", label: "Outstanding invoices", value: formatMoney(openInvoices.reduce((sum, invoice) => sum + Math.max(0, invoice.amount - Number(invoice.paidAmount || 0)), 0), true), note: `${openInvoices.filter(invoice => effectiveInvoiceStatus(invoice) === "Overdue").length} overdue`, icon: "¤", tone: "#6b4bc3", tint: "#f3f0ff" },
+    { view: operationalAlerts ? "compliance" : "assets", label: "Operational alerts", value: operationalAlerts, note: operationalAlerts ? "Compliance or equipment action" : "Operations ready", icon: "◈", tone: operationalAlerts ? "#007fae" : "#168a65", tint: operationalAlerts ? "#eaf8fd" : "#eaf8f2" }
   ];
   document.getElementById("metric-grid").innerHTML = metrics.map(metric => `
-    <article class="metric-card" style="--tone:${metric.tone};--tint:${metric.tint}">
+    <button class="executive-metric" data-go-view="${metric.view}" style="--tone:${metric.tone};--tint:${metric.tint}">
       <span class="metric-label">${metric.label}</span>
       <span class="metric-icon">${metric.icon}</span>
-      <div class="metric-value"><strong>${metric.value}</strong>${metric.unit ? `<span>${metric.unit}</span>` : ""}</div>
+      <div class="metric-value"><strong>${metric.value}</strong></div>
       <span class="metric-trend">${escapeHtml(metric.note)}</span>
-    </article>
+    </button>
   `).join("");
 }
 
@@ -941,18 +942,11 @@ function attentionScore(task) {
 }
 
 function renderAttention() {
-  const tasks = activeTasks().sort((a, b) => attentionScore(b) - attentionScore(a) || a.due.localeCompare(b.due)).slice(0, 5);
-  document.getElementById("attention-list").innerHTML = tasks.map(task => {
-    const owner = teamMember(task.owner);
-    const barClass = task.status === "Blocked" ? "blocked" : task.priority === "High" ? "high" : "";
-    return `
-      <button class="attention-item" data-task-detail="${task.id}">
-        <span class="attention-bar ${barClass}"></span>
-        <span class="attention-copy"><strong>${escapeHtml(task.title)}</strong><span>${escapeHtml(projectById(task.project)?.name || "Internal")} · ${escapeHtml(owner.name)}</span></span>
-        <span class="attention-meta"><strong>${escapeHtml(dueLabel(task))}</strong><span>${escapeHtml(task.status)}</span></span>
-      </button>
-    `;
-  }).join("");
+  const decisions = state.approvals.filter(item => item.status === "Pending").map(item => ({ title: item.title, detail: `Approval requested by ${teamMember(item.requester).name}`, label: "Decision", view: "approvals", tone: "decision" }));
+  const blockers = activeTasks().filter(task => task.status === "Blocked" || isOverdue(task)).sort((a,b) => attentionScore(b)-attentionScore(a)).map(task => ({ title: task.title, detail: `${teamMember(task.owner).name} · ${dueLabel(task)}`, label: task.status === "Blocked" ? "Blocked" : "Overdue", task: task.id, tone: "risk" }));
+  const receivables = state.invoices.filter(invoice => effectiveInvoiceStatus(invoice) === "Overdue").map(invoice => ({ title: `${invoice.number} · ${invoice.client}`, detail: `${formatMoney(Math.max(0, invoice.amount - Number(invoice.paidAmount || 0)))} outstanding`, label: "Payment", view: "finance", tone: "money" }));
+  const items = [...decisions, ...blockers, ...receivables].slice(0,6);
+  document.getElementById("attention-list").innerHTML = items.length ? items.map(item => `<button class="attention-item executive-action ${item.tone}" ${item.task ? `data-task-detail="${item.task}"` : `data-go-view="${item.view}"`}><span class="attention-copy"><span class="action-kind">${escapeHtml(item.label)}</span><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></span><span class="action-arrow">›</span></button>`).join("") : `<div class="empty-state compact"><div>✓</div><h3>No urgent decisions</h3><p>The management queue is clear.</p></div>`;
 }
 
 function renderFocus() {
@@ -961,7 +955,7 @@ function renderFocus() {
     .sort((a, b) => a.due.localeCompare(b.due))
     .map(task => ({ time: "Due", title: task.title, detail: `${teamMember(task.owner).name} · ${dueLabel(task)}`, sort: `${task.due}T23:59` }));
   const focusEvents = state.events
-    .filter(event => event.date >= TODAY && event.date <= "2026-09-06")
+    .filter(event => event.date === TODAY)
     .map(event => ({ time: event.start, title: event.title, detail: `${event.type} · ${teamMember(event.owner).name}`, sort: `${event.date}T${event.start}` }));
   const focusItems = [...focusEvents, ...focusTasks].sort((a, b) => a.sort.localeCompare(b.sort)).slice(0, 4);
   document.getElementById("focus-list").innerHTML = focusItems.length ? focusItems.map(item => `
@@ -970,6 +964,8 @@ function renderFocus() {
       <span class="focus-copy"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></span>
     </div>
   `).join("") : `<div class="empty-state"><p>No work due in the next two days.</p></div>`;
+  const current = asDate(TODAY);
+  document.getElementById("dashboard-focus-date").innerHTML = `<strong>${String(current.getUTCDate()).padStart(2,"0")}</strong><div><span>${current.toLocaleDateString("en-GB",{month:"long",timeZone:"UTC"}).toUpperCase()}</span><b>${current.toLocaleDateString("en-GB",{weekday:"long",timeZone:"UTC"}).toUpperCase()}</b></div>`;
 }
 
 function projectRow(project) {
@@ -1017,10 +1013,8 @@ function renderControlStrip() {
 
 function renderDashboard() {
   renderMetrics();
-  renderControlStrip();
   renderAttention();
   renderFocus();
-  renderDashboardProjects();
   document.getElementById("requests-nav-count").textContent = state.requests.filter(requestNeedsAction).length;
   document.getElementById("projects-nav-count").textContent = state.projects.length;
   document.getElementById("tasks-nav-count").textContent = activeTasks().length;
@@ -1029,7 +1023,8 @@ function renderDashboard() {
   document.getElementById("missions-nav-count").textContent = state.missions.filter(mission => !["Complete", "Cancelled"].includes(mission.status)).length;
   document.getElementById("assets-nav-count").textContent = state.assets.filter(assetNeedsAttention).length;
   document.getElementById("compliance-nav-count").textContent = state.compliance.filter(record => ["Due soon", "Review required", "Expired"].includes(complianceDisplayStatus(record))).length;
-  document.getElementById("chat-nav-count").textContent = state.messages.filter(message => message.unread && message.sender !== "alexander").length;
+  const currentMember = window.CAGE_BACKEND?.currentMemberId?.() || "alexander";
+  document.getElementById("chat-nav-count").textContent = window.CAGE_PERSONAL?.chatUnreadTotal?.() || state.messages.filter(message => message.unread && message.sender !== currentMember && threadById(threadIdForMessage(message))).length;
   document.getElementById("finance-nav-count").textContent = state.invoices.filter(invoice => effectiveInvoiceStatus(invoice) === "Overdue").length;
   document.getElementById("approvals-nav-count").textContent = state.approvals.filter(item => item.status === "Pending").length;
   document.getElementById("commercial-nav-count").textContent = state.commercialRecords.filter(commercialNeedsAttention).length;
@@ -1968,7 +1963,24 @@ function threadIdForMessage(message) {
 }
 
 function workThreads() {
-  const threads = [{
+  const currentMember = window.CAGE_BACKEND?.currentMemberId?.() || "alexander";
+  const privateThreads = (state.chatGroups || []).filter(group => Array.isArray(group.members) && group.members.includes(currentMember)).map(group => {
+    const direct = group.type === "direct";
+    const other = direct ? teamMember(group.members.find(id => id !== currentMember)) : null;
+    return {
+      id: group.id,
+      title: direct ? other.name : group.name,
+      organisation: direct ? "Private conversation" : `${group.members.length} members`,
+      owner: group.createdBy,
+      type: direct ? "Direct message" : "Staff group",
+      stage: direct ? "Private" : "Group",
+      category: direct ? "direct" : "group",
+      memberIds: group.members,
+      customChat: true,
+      direct
+    };
+  });
+  const threads = [...privateThreads, {
     id: GENERAL_CHAT_THREAD_ID,
     title: "General Enquiries",
     organisation: "All CAGE team",
@@ -2002,6 +2014,13 @@ function messagesForThread(threadId) {
   return state.messages.filter(message => threadIdForMessage(message) === threadId).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
 }
 
+function threadMemberIds(thread) {
+  if (Array.isArray(thread?.memberIds)) return [...new Set(thread.memberIds)];
+  if (thread?.teamWide) return assignableTeam().map(member => member.id);
+  if (thread?.project?.team?.length) return [...new Set(thread.project.team)];
+  return thread?.owner ? [thread.owner] : [];
+}
+
 function threadLifecycle(thread) {
   const request = thread.request;
   const requestOrder = ["New", "Needs information", "Qualified", "Scoping", "Internal review", "Approved to send", "Submitted", "Negotiation", "Won / Awarded", "Converted"];
@@ -2023,7 +2042,7 @@ function renderChat() {
   const query = document.getElementById("chat-search").value.trim().toLowerCase();
   const threads = allThreads.filter(thread => {
     const messages = messagesForThread(thread.id);
-    const matchesFilter = chatFilter === "all" || thread.category === chatFilter;
+    const matchesFilter = chatFilter === "all" || thread.category === chatFilter || (chatFilter === "work" && !["direct", "group", "team"].includes(thread.category));
     const matchesSearch = !query || `${thread.title} ${thread.organisation} ${thread.type} ${messages.map(message => message.text).join(" ")}`.toLowerCase().includes(query);
     return matchesFilter && matchesSearch;
   }).sort((a, b) => {
@@ -2036,32 +2055,35 @@ function renderChat() {
     const messages = messagesForThread(thread.id);
     const last = messages.at(-1);
     const currentMember = window.CAGE_BACKEND?.currentMemberId?.() || "alexander";
-    const unread = messages.filter(message => message.unread && message.sender !== currentMember).length;
-    const glyph = thread.teamWide ? "GE" : thread.type === "Grant" ? "GR" : thread.type === "Tender / RFQ" ? "TD" : thread.project ? "PR" : "RQ";
+    const unread = window.CAGE_PERSONAL?.chatUnread?.(thread.id) || messages.filter(message => message.unread && message.sender !== currentMember).length;
+    const glyph = thread.direct ? "DM" : thread.customChat ? "GP" : thread.teamWide ? "GE" : thread.type === "Grant" ? "GR" : thread.type === "Tender / RFQ" ? "TD" : thread.project ? "PR" : "RQ";
     return `<button class="chat-channel ${thread.id === activeChatThread ? "active" : ""}" data-chat-thread="${thread.id}"><span class="chat-channel-icon ${thread.category}">${glyph}</span><span class="chat-channel-copy"><strong>${escapeHtml(thread.title)}</strong><em>${escapeHtml(thread.stage)} · ${escapeHtml(thread.organisation)}</em><span>${escapeHtml(last?.text || "Start the work conversation")}</span></span>${unread ? `<span class="unread-count">${unread}</span>` : ""}</button>`;
   }).join("") : `<div class="chat-list-empty">No conversations match this view.</div>`;
 
   const thread = threadById(activeChatThread);
   if (!thread) return;
-  const memberIds = thread.teamWide ? state.team.map(member => member.id) : thread.project?.team?.length ? thread.project.team : [thread.owner];
+  const memberIds = threadMemberIds(thread);
   const members = [...new Set(memberIds)].map(id => teamMember(id));
-  const glyph = thread.teamWide ? "GE" : thread.type === "Grant" ? "GR" : thread.type === "Tender / RFQ" ? "TD" : thread.project ? "PR" : "RQ";
+  const glyph = thread.direct ? "DM" : thread.customChat ? "GP" : thread.teamWide ? "GE" : thread.type === "Grant" ? "GR" : thread.type === "Tender / RFQ" ? "TD" : thread.project ? "PR" : "RQ";
   const headerDetail = thread.teamWide
     ? `${thread.type} · ${members.length} team accounts`
+    : thread.customChat ? `${thread.type} · ${thread.organisation}`
     : `${thread.type} · ${thread.organisation} · Owner: ${teamMember(thread.owner).name}`;
-  const openRecordButton = thread.teamWide ? "" : `<button data-thread-open-view="${thread.request ? "requests" : thread.project ? "projects" : "commercial"}">Open record</button>`;
+  const openRecordButton = thread.teamWide || thread.customChat ? "" : `<button data-thread-open-view="${thread.request ? "requests" : thread.project ? "projects" : "commercial"}">Open record</button>`;
   const extraMembers = members.length > 5 ? `<span class="chat-member-more" title="${members.slice(5).map(member => escapeHtml(member.name)).join(", ")}">+${members.length - 5}</span>` : "";
   document.getElementById("chat-header").innerHTML = `<div class="chat-header-main"><span class="chat-channel-icon ${thread.category}">${glyph}</span><span><strong>${escapeHtml(thread.title)}</strong><span>${escapeHtml(headerDetail)}</span></span></div><div class="chat-header-actions">${openRecordButton}<div class="chat-header-members">${members.slice(0, 5).map(member => `<span class="owner-avatar" title="${escapeHtml(member.name)}">${member.initials}</span>`).join("")}${extraMembers}</div></div>`;
   const messages = messagesForThread(thread.id);
   const decisions = messages.filter(message => message.type === "Decision" || message.pinned).length;
   const files = messages.filter(message => message.attachment).length;
-  if (thread.teamWide) {
+  if (thread.customChat) {
+    document.getElementById("chat-context").innerHTML = `<div class="private-chat-purpose"><span class="team-chat-purpose-icon">${thread.direct ? "↔" : "◎"}</span><span><strong>${thread.direct ? "Private staff conversation" : "Private staff group"}</strong><small>Only ${members.length === 2 ? "the two people in this conversation" : "the selected group members"} can open or search these messages.</small></span></div><div class="chat-context-meta"><span><small>Members</small><strong>${members.map(member => escapeHtml(member.name.split(" ")[0])).join(", ")}</strong></span><span><small>Captured</small><strong>${decisions} decisions · ${files} files</strong></span></div>`;
+  } else if (thread.teamWide) {
     document.getElementById("chat-context").innerHTML = `<div class="team-chat-purpose"><span class="team-chat-purpose-icon">◎</span><span><strong>Shared company conversation</strong><small>Use this group for routine enquiries, quick coordination and questions that do not belong to a specific project, contract, grant or tender.</small></span></div><div class="chat-context-meta team-chat-meta"><span><small>Access</small><strong>All active team members</strong></span><span><small>When work becomes specific</small><strong>Continue it in the relevant request or project chat</strong></span><span><small>Captured</small><strong>${decisions} decisions · ${files} files</strong></span></div>`;
   } else {
     const lifecycle = threadLifecycle(thread);
     document.getElementById("chat-context").innerHTML = `<div class="chat-lifecycle">${lifecycle.map((step, index) => `<button class="${step.done ? "done" : ""} ${step.active ? "active" : ""}" data-thread-open-view="${step.view}"><span>${step.done ? "✓" : index + 1}</span><small>${escapeHtml(step.label)}</small></button>`).join("")}</div><div class="chat-context-meta"><span><small>Current stage</small><strong>${escapeHtml(thread.stage)}</strong></span><span><small>Next action</small><strong>${escapeHtml(thread.request?.nextAction || thread.commercial?.nextAction || thread.project?.outcome || "Agree the next action in chat")}</strong></span><span><small>Captured</small><strong>${decisions} decisions · ${files} files</strong></span></div>`;
   }
-  document.getElementById("chat-input").placeholder = thread.teamWide ? "Write a routine enquiry or team question…" : "Write an update, decision or question…";
+  document.getElementById("chat-input").placeholder = thread.direct ? `Message ${thread.title}…` : thread.customChat ? `Message ${thread.title}…` : thread.teamWide ? "Write a routine enquiry or team question…" : "Write an update, decision or question…";
   const mentionButton = document.getElementById("chat-mention");
   mentionButton.disabled = state.settings.mentionSuggestions === false;
   mentionButton.title = mentionButton.disabled ? "Staff mention suggestions are disabled in Settings" : "Mention a colleague";
@@ -2074,9 +2096,11 @@ function renderChat() {
     const type = message.type || "Update";
     const currentMember = window.CAGE_BACKEND?.currentMemberId?.() || "alexander";
     return `${day}<div class="message-row ${message.sender === currentMember ? "mine" : ""} ${type === "Decision" ? "decision" : ""}">${message.sender !== currentMember ? `<span class="owner-avatar">${sender.initials}</span>` : ""}<div class="message-bubble"><div class="message-bubble-head"><span class="message-author">${escapeHtml(sender.name)}</span><span class="message-type ${type.toLowerCase().replaceAll(" ", "-")}">${escapeHtml(type)}</span></div><p>${escapeHtml(message.text)}</p>${message.audio ? `<button type="button" class="message-attachment" data-play-voice="${message.id}">▶ Voice message · ${Math.ceil(message.audioDuration || 0)}s</button><div data-voice-player="${message.id}"></div>` : message.attachment ? `<button class="message-attachment" data-preview-chat-file="${message.id}">⌁ ${escapeHtml(message.attachment)}</button>` : ""}<span class="message-meta">${escapeHtml(message.time)} ${message.pinned ? "· Pinned decision" : ""} ${message.sender === currentMember ? "✓✓" : ""}</span></div></div>`;
-  }).join("") : thread.teamWide
-    ? `<div class="empty-state"><div>◎</div><h3>Start the team conversation</h3><p>Ask a routine question or share an enquiry that does not yet belong to a specific work record.</p></div>`
-    : `<div class="empty-state"><div>◌</div><h3>Start the official work record</h3><p>Use this conversation for updates, files, decisions, approvals and handovers from intake to closure.</p></div>`;
+  }).join("") : thread.customChat
+    ? `<div class="empty-state"><div>${thread.direct ? "↔" : "◎"}</div><h3>${thread.direct ? "Start your private conversation" : "Start the group conversation"}</h3><p>Messages and files here are available only to the selected members.</p></div>`
+    : thread.teamWide
+      ? `<div class="empty-state"><div>◎</div><h3>Start the team conversation</h3><p>Ask a routine question or share an enquiry that does not yet belong to a specific work record.</p></div>`
+      : `<div class="empty-state"><div>◌</div><h3>Start the official work record</h3><p>Use this conversation for updates, files, decisions, approvals and handovers from intake to closure.</p></div>`;
   if (activeView === "chat") requestAnimationFrame(() => { const panel = document.getElementById("chat-messages"); panel.scrollTop = panel.scrollHeight; });
 }
 
@@ -2152,7 +2176,8 @@ function hideChatMentionPicker() {
 function showChatMentionPicker(query = "") {
   const picker = document.getElementById("chat-mention-picker");
   const cleanQuery = String(query || "").trim().toLowerCase();
-  const members = assignableTeam().filter(member => `${member.name} ${member.email || ""} ${member.role || ""}`.toLowerCase().includes(cleanQuery));
+  const allowed = new Set(threadMemberIds(threadById(activeChatThread)));
+  const members = assignableTeam().filter(member => allowed.has(member.id) && `${member.name} ${member.email || ""} ${member.role || ""}`.toLowerCase().includes(cleanQuery));
   picker.innerHTML = members.length ? members.map(member => `<button type="button" class="chat-mention-option" role="option" data-chat-mention-id="${member.id}"><span class="owner-avatar">${escapeHtml(member.initials)}</span><span><strong>${escapeHtml(member.name)}</strong><small>${escapeHtml(member.role || member.email || "CAGE team")}</small></span></button>`).join("") : `<div class="empty-state compact"><p>No staff member matches “${escapeHtml(cleanQuery)}”.</p></div>`;
   if(!cleanQuery || 'all'.startsWith(cleanQuery))picker.insertAdjacentHTML('afterbegin','<button type="button" class="chat-mention-option" role="option" data-chat-mention-id="__all"><span class="owner-avatar">@</span><span><strong>@all</strong><small>Everyone in this conversation</small></span></button>');
   picker.hidden = false;
@@ -2175,6 +2200,55 @@ function insertChatMention(memberId) {
   }
   hideChatMentionPicker();
   input.focus();
+}
+
+function openNewChatDialog(mode) {
+  if (window.CAGE_BACKEND?.moduleLevel?.("chat") !== "edit") return showToast("You need chat edit access to start a conversation.");
+  let dialog = document.getElementById("new-chat-dialog");
+  if (!dialog) {
+    document.body.insertAdjacentHTML("beforeend", `<dialog id="new-chat-dialog" class="app-dialog chat-create-dialog"><form id="new-chat-form"><div class="dialog-heading"><div><p class="section-kicker">Staff inbox</p><h2 id="new-chat-title">New conversation</h2></div><button type="button" data-close-new-chat aria-label="Close">×</button></div><input type="hidden" name="mode"><label class="field" id="chat-group-name-field"><span>Group name</span><input name="groupName" maxlength="80" placeholder="For example: Field team"></label><fieldset class="chat-member-picker"><legend id="new-chat-members-label">Choose staff</legend><div id="new-chat-members"></div></fieldset><p id="new-chat-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary-button" data-close-new-chat>Cancel</button><button class="primary-button">Create conversation</button></div></form></dialog>`);
+    dialog = document.getElementById("new-chat-dialog");
+    dialog.addEventListener("click", event => { if (event.target.closest("[data-close-new-chat]")) dialog.close(); });
+    document.getElementById("new-chat-form").addEventListener("submit", event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const current = window.CAGE_BACKEND?.currentMemberId?.() || "alexander";
+      const selected = new FormData(form).getAll("member");
+      const selectedMode = form.elements.mode.value;
+      const error = document.getElementById("new-chat-error");
+      error.textContent = "";
+      if (selectedMode === "direct") {
+        if (selected.length !== 1) return void (error.textContent = "Choose one staff member.");
+        const members = [current, selected[0]].sort();
+        const id = `direct:${members.join(":")}`;
+        if (!(state.chatGroups || []).some(group => group.id === id)) state.chatGroups.push({ id, type: "direct", members, createdBy: current, createdAt: new Date().toISOString() });
+        activeChatThread = id;
+      } else {
+        const name = form.elements.groupName.value.trim();
+        if (!name) return void (error.textContent = "Enter a group name.");
+        if (!selected.length) return void (error.textContent = "Choose at least one other staff member.");
+        const members = [...new Set([current, ...selected])];
+        const id = `group:${crypto.randomUUID()}`;
+        state.chatGroups.push({ id, type: "group", name, members, createdBy: current, createdAt: new Date().toISOString() });
+        activeChatThread = id;
+      }
+      saveState();
+      dialog.close();
+      chatFilter = selectedMode;
+      document.querySelectorAll("[data-chat-filter]").forEach(button => button.classList.toggle("active", button.dataset.chatFilter === chatFilter));
+      renderChat();
+    });
+  }
+  const form = document.getElementById("new-chat-form");
+  form.reset();
+  form.elements.mode.value = mode;
+  document.getElementById("new-chat-title").textContent = mode === "direct" ? "Message a staff member" : "Create a staff group";
+  document.getElementById("chat-group-name-field").hidden = mode === "direct";
+  document.getElementById("new-chat-members-label").textContent = mode === "direct" ? "Who do you want to message?" : "Who should be in this group?";
+  const current = window.CAGE_BACKEND?.currentMemberId?.() || "alexander";
+  document.getElementById("new-chat-members").innerHTML = assignableTeam().filter(member => member.id !== current).map(member => `<label class="chat-member-choice"><input type="${mode === "direct" ? "radio" : "checkbox"}" name="member" value="${escapeHtml(member.id)}"><span class="owner-avatar">${escapeHtml(member.initials)}</span><span><strong>${escapeHtml(member.name)}</strong><small>${escapeHtml(member.role || member.email || "CAGE staff")}</small></span></label>`).join("");
+  document.getElementById("new-chat-error").textContent = "";
+  dialog.showModal();
 }
 
 function renderLeave() {
@@ -5079,6 +5153,8 @@ document.getElementById("board-project-filter").addEventListener("change", event
   renderTasks();
 });
 document.getElementById("chat-search").addEventListener("input", renderChat);
+document.getElementById("new-direct-chat").addEventListener("click", () => openNewChatDialog("direct"));
+document.getElementById("new-group-chat").addEventListener("click", () => openNewChatDialog("group"));
 document.getElementById("chat-filter").addEventListener("click", event => {
   const button = event.target.closest("[data-chat-filter]");
   if (!button) return;
