@@ -309,6 +309,7 @@ const seedData = {
 
 let state = loadState();
 let activeView = "dashboard";
+let pendingConfirmation = null;
 let taskFilter = "all";
 let projectFilter = "all";
 let taskDisplay = "board";
@@ -937,6 +938,20 @@ function renderMetrics() {
   `).join("");
 }
 
+function openConfirmation({ title, message, confirmLabel = "Confirm", onConfirm }) {
+  const dialog = document.getElementById("confirmation-dialog");
+  pendingConfirmation = typeof onConfirm === "function" ? onConfirm : null;
+  document.getElementById("confirmation-title").textContent = title;
+  document.getElementById("confirmation-message").textContent = message;
+  document.getElementById("confirmation-accept").textContent = confirmLabel;
+  dialog.showModal();
+}
+
+function closeConfirmation() {
+  pendingConfirmation = null;
+  document.getElementById("confirmation-dialog").close();
+}
+
 function attentionScore(task) {
   return (task.priority === "High" ? 5 : 0) + (isOverdue(task) ? 8 : 0) + (task.status === "Blocked" ? 7 : 0) + (task.due === TODAY ? 6 : 0);
 }
@@ -945,7 +960,7 @@ function renderAttention() {
   const decisions = state.approvals.filter(item => item.status === "Pending").map(item => ({ title: item.title, detail: `Approval requested by ${teamMember(item.requester).name}`, label: "Decision", view: "approvals", tone: "decision" }));
   const blockers = activeTasks().filter(task => task.status === "Blocked" || isOverdue(task)).sort((a,b) => attentionScore(b)-attentionScore(a)).map(task => ({ title: task.title, detail: `${teamMember(task.owner).name} · ${dueLabel(task)}`, label: task.status === "Blocked" ? "Blocked" : "Overdue", task: task.id, tone: "risk" }));
   const receivables = state.invoices.filter(invoice => effectiveInvoiceStatus(invoice) === "Overdue").map(invoice => ({ title: `${invoice.number} · ${invoice.client}`, detail: `${formatMoney(Math.max(0, invoice.amount - Number(invoice.paidAmount || 0)))} outstanding`, label: "Payment", view: "finance", tone: "money" }));
-  const items = [...decisions, ...blockers, ...receivables].slice(0,6);
+  const items = [...decisions, ...blockers, ...receivables].slice(0,5);
   document.getElementById("attention-list").innerHTML = items.length ? items.map(item => `<button class="attention-item executive-action ${item.tone}" ${item.task ? `data-task-detail="${item.task}"` : `data-go-view="${item.view}"`}><span class="attention-copy"><span class="action-kind">${escapeHtml(item.label)}</span><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></span><span class="action-arrow">›</span></button>`).join("") : `<div class="empty-state compact"><div>✓</div><h3>No urgent decisions</h3><p>The management queue is clear.</p></div>`;
 }
 
@@ -1120,6 +1135,7 @@ function renderRequestDetail(requestId = activeRequestId) {
       </aside>
     </div>
     ${linkedApproval ? `<div class="request-review-note ${linkedApproval.status.toLowerCase()}"><strong>Latest internal review: ${escapeHtml(linkedApproval.status)}</strong><span>${escapeHtml(linkedApproval.decisionNote || linkedApproval.summary)}</span></div>` : ""}
+    ${request.stage === "Lost / Declined" ? `<div class="request-review-note returned"><strong>Closed ${formatDate(request.lostDate || TODAY, { year: true })}: ${escapeHtml(request.lostReason || "Lost or declined")}</strong><span>${escapeHtml(request.lostNote || "No outcome note recorded.")}${request.lostFollowUp ? ` Future follow-up: ${formatDate(request.lostFollowUp, { year: true })}.` : ""}</span></div>` : ""}
     <div class="request-detail-actions"><button data-open-work-chat="request" data-work-chat-id="${request.id}">◌ Open work chat</button>${actionButtons}${request.deal ? `<button data-request-open-deal="${request.id}">Open CRM opportunity</button>` : ""}${linkedCommercial ? `<button data-request-open-commercial="${request.id}">Open ${escapeHtml(linkedCommercial.type.toLowerCase())}</button>` : ""}${request.project ? `<button class="primary" data-request-open-project="${request.id}">Open delivery project</button>` : ""}</div>
   `;
 }
@@ -1145,6 +1161,53 @@ function openRequest(requestId) {
   if (!requestById(requestId)) return;
   renderRequestDetail(requestId);
   document.getElementById("request-detail-dialog").showModal();
+}
+
+function openRequestCloseDialog(requestId) {
+  const request = requestById(requestId);
+  if (!request) return;
+  const form = document.getElementById("request-close-form");
+  form.reset();
+  form.elements.requestId.value = request.id;
+  form.elements.followUp.min = TODAY;
+  document.getElementById("request-close-context").textContent = `${request.number} · ${request.title}`;
+  document.getElementById("request-close-error").textContent = "";
+  document.getElementById("request-close-dialog").showModal();
+}
+
+function closeRequestAsLost(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const request = requestById(form.elements.requestId.value);
+  if (!request) return;
+  const reason = form.elements.reason.value.trim();
+  const note = form.elements.note.value.trim();
+  const followUp = form.elements.followUp.value;
+  if (!reason || !note) {
+    document.getElementById("request-close-error").textContent = "Select a reason and record an outcome note.";
+    return;
+  }
+  request.lostReason = reason;
+  request.lostNote = note;
+  request.lostDate = TODAY;
+  request.lostFollowUp = followUp || "";
+  if (followUp) {
+    state.events.push({
+      id: `e-${Date.now()}`,
+      title: `Revisit: ${request.organisation}`,
+      date: followUp,
+      start: "09:00",
+      end: "09:30",
+      type: "Follow-up",
+      owner: request.owner,
+      attendees: request.contact,
+      notes: `${request.number}: ${reason}. ${note}`
+    });
+  }
+  changeRequestStage(request.id, "Lost / Declined");
+  document.getElementById("request-close-dialog").close();
+  document.getElementById("request-detail-dialog").close();
+  showToast(`${request.number} closed with the outcome recorded.`);
 }
 
 function renderProjects() {
@@ -2669,6 +2732,11 @@ function changeRequestStage(requestId, stage, control) {
   const request = requestById(requestId);
   if (!request || !REQUEST_STAGE_OPTIONS.includes(stage) || request.stage === stage) return;
   const previous = request.stage;
+  if (stage === "Lost / Declined" && !request.lostDate) {
+    if (control) control.value = previous;
+    openRequestCloseDialog(request.id);
+    return;
+  }
   if (["Qualified", "Scoping"].includes(stage) && !requestQualificationComplete(request)) {
     rejectRequestStageChange(request, previous, control, "Complete the qualification checks before advancing this request.");
     return;
@@ -2792,7 +2860,7 @@ function handleRequestAction(requestId, action) {
     document.getElementById("request-detail-dialog").close();
     openEventDialog({ date: request.deadline, owner: request.owner, title: `Follow up: ${request.organisation}`, attendees: `${request.contact} · ${request.contactDetail}` });
   }
-  if (action === "lose" && window.confirm(`Close ${request.number} as lost or declined?`)) changeRequestStage(request.id, "Lost / Declined");
+  if (action === "lose") openRequestCloseDialog(request.id);
 }
 
 function requestDeliveryTasks(request) {
@@ -5287,7 +5355,6 @@ document.addEventListener("keydown", event => {
 ["add-task-top", "add-task-tasks", "mobile-add"].forEach(id => document.getElementById(id).addEventListener("click", () => openTaskDialog()));
 document.getElementById("new-project-button").addEventListener("click", () => openProjectDialog());
 document.getElementById("new-request-button").addEventListener("click", openRequestDialog);
-document.getElementById("new-request-dashboard").addEventListener("click", openRequestDialog);
 document.getElementById("manage-purpose-button").addEventListener("click", openPurposeManager);
 document.getElementById("run-opportunity-scan").addEventListener("click", runOpportunityScan);
 document.getElementById("new-deal-button").addEventListener("click", () => openDealDialog());
@@ -5321,6 +5388,7 @@ document.getElementById("compliance-form").addEventListener("submit", createComp
 document.getElementById("approval-form").addEventListener("submit", createApproval);
 document.getElementById("commercial-form").addEventListener("submit", createCommercialRecord);
 document.getElementById("request-form").addEventListener("submit", createRequest);
+document.getElementById("request-close-form").addEventListener("submit", closeRequestAsLost);
 document.getElementById("purpose-form").addEventListener("submit", addRequestPurpose);
 document.getElementById("opportunity-alerts").addEventListener("change", event => {
   state.opportunityMonitor.enabled = event.currentTarget.checked;
@@ -5415,11 +5483,17 @@ document.getElementById("import-workspace").addEventListener("change", async eve
     if (backup.product !== "CAGE Operations Hub" || backup.schemaVersion !== 1 || !backup.data?.team || !backup.data?.projects) {
       throw new Error("Invalid backup");
     }
-    if (!window.confirm("Replace the shared workspace with this backup? This action will be recorded.")) return;
-    state = { ...clone(seedData), ...backup.data };
-    saveState();
-    renderAll();
-    showToast("Workspace backup imported.");
+    openConfirmation({
+      title: "Replace the shared workspace?",
+      message: "This will replace the current shared records with the selected backup and record the action.",
+      confirmLabel: "Import backup",
+      onConfirm: () => {
+        state = { ...clone(seedData), ...backup.data };
+        saveState();
+        renderAll();
+        showToast("Workspace backup imported.");
+      }
+    });
   } catch {
     showToast("This is not a valid CAGE Operations Hub backup.");
   } finally {
@@ -5427,12 +5501,27 @@ document.getElementById("import-workspace").addEventListener("change", async eve
   }
 });
 document.getElementById("reset-prototype").addEventListener("click", () => {
-  if (!window.confirm("Replace all shared workspace records with the original sample data?")) return;
-  state = clone(seedData);
-  saveState();
-  renderAll();
-  showToast("Prototype data restored.");
+  openConfirmation({
+    title: "Restore sample data?",
+    message: "This replaces all shared workspace records with the original sample data.",
+    confirmLabel: "Restore sample data",
+    onConfirm: () => {
+      state = clone(seedData);
+      saveState();
+      renderAll();
+      showToast("Prototype data restored.");
+    }
+  });
 });
+document.getElementById("confirmation-accept").addEventListener("click", () => {
+  const action = pendingConfirmation;
+  closeConfirmation();
+  action?.();
+});
+document.querySelectorAll("[data-close-dialog]").forEach(button => button.addEventListener("click", () => {
+  if (button.dataset.closeDialog === "confirmation-dialog") pendingConfirmation = null;
+  document.getElementById(button.dataset.closeDialog)?.close();
+}));
 document.getElementById("open-sidebar").addEventListener("click", openSidebar);
 document.getElementById("close-sidebar").addEventListener("click", closeSidebar);
 document.getElementById("sidebar-overlay").addEventListener("click", closeSidebar);

@@ -7,11 +7,11 @@
   <meta name="description" content="CAGE Operations Hub for request intake, projects, missions, equipment, compliance, approvals, CRM, calendar, finance, chat, leave and knowledge.">
   <title>CAGE Operations Hub</title>
   <link rel="icon" href="./cage-logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=15.2.0">
+  <link rel="stylesheet" href="./styles.css?v=15.3.0">
   <link rel="stylesheet" href="./monday-theme.css">
-<link rel="stylesheet" href="./personal-work.css?v=15.2.0">
+<link rel="stylesheet" href="./personal-work.css?v=15.3.0">
   <link rel="stylesheet" href="./mobile.css?v=14.1.0">
-<link rel="stylesheet" href="./daily-planner.css?v=15.2.0">
+<link rel="stylesheet" href="./daily-planner.css?v=15.3.0">
 <link rel="stylesheet" href="./workflows.css?v=15.0.0">
 </head>
 <body class="session-checking">
@@ -130,11 +130,7 @@
             <div>
               <p class="date-line" id="today-label" aria-live="polite"></p>
               <h2 id="dashboard-greeting" aria-live="polite">Welcome.</h2>
-              <p>Projects, field missions, decisions, clients, people and money in one place.</p>
-            </div>
-            <div class="intro-actions">
-              <button class="secondary-button" data-go-view="reports">View weekly brief</button>
-              <button class="primary-button" id="new-request-dashboard">＋ New request</button>
+              <p>Your priority decisions, delivery risks and next commitments.</p>
             </div>
           </div>
 
@@ -144,10 +140,10 @@
             <article class="surface priority-surface executive-priorities">
               <div class="surface-heading">
                 <div>
-                  <p class="section-kicker">Management priorities</p>
-                  <h3>What needs a decision</h3>
+                  <p class="section-kicker">Action queue</p>
+                  <h3>What needs attention</h3>
                 </div>
-                <button class="text-button" data-go-view="approvals">Open approval inbox</button>
+                <button class="text-button" data-go-view="approvals">Open approvals</button>
               </div>
               <div id="attention-list" class="attention-list"></div>
             </article>
@@ -155,10 +151,9 @@
             <article class="surface pulse-surface">
               <div class="surface-heading">
                 <div>
-                  <p class="section-kicker">Your day</p>
-                  <h3>Today</h3>
+                  <p class="section-kicker">Schedule</p>
+                  <h3>Next up</h3>
                 </div>
-                <span class="live-pill"><span></span> Live</span>
               </div>
               <div class="focus-date" id="dashboard-focus-date"></div>
               <div id="focus-list" class="focus-list"></div>
@@ -596,6 +591,23 @@
     <div id="request-detail-content"></div>
   </dialog>
 
+  <dialog id="request-close-dialog" class="app-dialog compact-dialog destructive-dialog">
+    <form id="request-close-form">
+      <div class="dialog-heading"><div><p class="section-kicker">Request outcome</p><h2>Close as lost or declined</h2><p id="request-close-context"></p></div><button type="button" class="icon-button dialog-close" data-close-dialog="request-close-dialog" aria-label="Close">×</button></div>
+      <input name="requestId" type="hidden">
+      <label class="field"><span>Reason *</span><select name="reason" required><option value="">Select a reason</option><option>Client chose another provider</option><option>Budget not available</option><option>Scope or timing not viable</option><option>CAGE chose not to proceed</option><option>Application or bid unsuccessful</option><option>No response from client</option><option>Other</option></select></label>
+      <label class="field"><span>Outcome note *</span><textarea name="note" rows="4" required maxlength="500" placeholder="Record what happened and anything the team should learn."></textarea></label>
+      <label class="field"><span>Optional future follow-up</span><input name="followUp" type="date"><small class="field-help">Use this only when the relationship is worth revisiting.</small></label>
+      <p class="form-error" id="request-close-error" role="alert"></p>
+      <div class="dialog-actions"><button type="button" class="secondary-button" data-close-dialog="request-close-dialog">Keep open</button><button type="submit" class="danger-button">Close request</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="confirmation-dialog" class="app-dialog compact-dialog destructive-dialog">
+    <div class="dialog-heading"><div><p class="section-kicker">Please confirm</p><h2 id="confirmation-title">Confirm action</h2><p id="confirmation-message"></p></div><button type="button" class="icon-button dialog-close" data-close-dialog="confirmation-dialog" aria-label="Close">×</button></div>
+    <div class="dialog-actions"><button type="button" class="secondary-button" data-close-dialog="confirmation-dialog">Cancel</button><button type="button" class="danger-button" id="confirmation-accept">Confirm</button></div>
+  </dialog>
+
   <dialog id="task-dialog" class="app-dialog">
     <form method="dialog" id="task-form">
       <div class="dialog-heading">
@@ -950,7 +962,7 @@
   <script src="./vendor/supabase.js" defer></script>
   <script src="./reliable-sync.js?v=15.0.0" defer></script>
   <script src="./production.js?v=15.1.0" defer></script>
-  <script src="./app.js?v=15.2.0" defer></script>
+  <script src="./app.js?v=15.3.0" defer></script>
   <script src="./hr.js" defer></script>
   <script src="./training.js?v=15.0.0" defer></script>
 <script src="./vendor/pdf-lib.min.js" defer></script>
