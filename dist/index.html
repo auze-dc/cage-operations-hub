@@ -7,11 +7,11 @@
   <meta name="description" content="CAGE Operations Hub for request intake, projects, missions, equipment, compliance, approvals, CRM, calendar, finance, chat, leave and knowledge.">
   <title>CAGE Operations Hub</title>
   <link rel="icon" href="./cage-logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=15.3.0">
+  <link rel="stylesheet" href="./styles.css">
   <link rel="stylesheet" href="./monday-theme.css">
-<link rel="stylesheet" href="./personal-work.css?v=15.3.0">
+<link rel="stylesheet" href="./personal-work.css?v=14.0.0">
   <link rel="stylesheet" href="./mobile.css?v=14.1.0">
-<link rel="stylesheet" href="./daily-planner.css?v=15.3.0">
+<link rel="stylesheet" href="./daily-planner.css?v=14.2.0">
 <link rel="stylesheet" href="./workflows.css?v=15.0.0">
 </head>
 <body class="session-checking">
@@ -130,20 +130,26 @@
             <div>
               <p class="date-line" id="today-label" aria-live="polite"></p>
               <h2 id="dashboard-greeting" aria-live="polite">Welcome.</h2>
-              <p>Your priority decisions, delivery risks and next commitments.</p>
+              <p>Projects, field missions, decisions, clients, people and money in one place.</p>
+            </div>
+            <div class="intro-actions">
+              <button class="secondary-button" data-go-view="reports">View weekly brief</button>
+              <button class="primary-button" id="new-request-dashboard">＋ New request</button>
             </div>
           </div>
 
-          <div class="executive-metrics" id="metric-grid"></div>
+          <div class="metric-grid" id="metric-grid"></div>
 
-          <div class="dashboard-grid executive-grid">
-            <article class="surface priority-surface executive-priorities">
+          <div class="control-strip" id="control-strip" aria-label="Operations control centre"></div>
+
+          <div class="dashboard-grid">
+            <article class="surface priority-surface">
               <div class="surface-heading">
                 <div>
-                  <p class="section-kicker">Action queue</p>
-                  <h3>What needs attention</h3>
+                  <p class="section-kicker">Priority queue</p>
+                  <h3>Needs attention</h3>
                 </div>
-                <button class="text-button" data-go-view="approvals">Open approvals</button>
+                <button class="text-button" data-go-view="tasks" data-preset-filter="attention">View all</button>
               </div>
               <div id="attention-list" class="attention-list"></div>
             </article>
@@ -151,16 +157,35 @@
             <article class="surface pulse-surface">
               <div class="surface-heading">
                 <div>
-                  <p class="section-kicker">Schedule</p>
-                  <h3>Next up</h3>
+                  <p class="section-kicker">Operations pulse</p>
+                  <h3>Today’s focus</h3>
                 </div>
+                <span class="live-pill"><span></span> Live</span>
               </div>
-              <div class="focus-date" id="dashboard-focus-date"></div>
+              <div class="focus-date">
+                <strong>04</strong>
+                <div><span>SEPTEMBER</span><b>FRIDAY</b></div>
+              </div>
               <div id="focus-list" class="focus-list"></div>
               <button class="full-width-button" data-go-view="calendar">Open team calendar</button>
             </article>
           </div>
 
+          <article class="surface project-overview">
+            <div class="surface-heading">
+              <div>
+                <p class="section-kicker">Portfolio health</p>
+                <h3>Active projects</h3>
+              </div>
+              <button class="text-button" data-go-view="projects">See all projects</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Project</th><th>Owner</th><th>Health</th><th>Deadline</th><th>Progress</th><th></th></tr></thead>
+                <tbody id="dashboard-projects"></tbody>
+              </table>
+            </div>
+          </article>
         </section>
 
         <section class="view-panel" data-view-panel="requests">
@@ -356,15 +381,14 @@
 
         <section class="view-panel" data-view-panel="chat">
           <div class="page-intro">
-            <div><p class="date-line">Company communication</p><h2>Work chat</h2><p>Private staff inboxes, team groups and work-linked conversations in one searchable place.</p></div>
+            <div><p class="date-line">Company communication</p><h2>Work chat</h2><p>Team-wide enquiries and continuous work conversations from first request through delivery and closure.</p></div>
             <span class="prototype-note">Press Enter to send · Shift + Enter for a new line</span>
           </div>
           <div class="communication-rule surface"><span class="communication-rule-icon">◎</span><span><strong>Use Work chat for CAGE work</strong><small>Requests, decisions, files, approvals and handovers stay searchable and linked to the work. WhatsApp is not the official work record.</small></span></div>
           <div class="chat-workspace surface">
             <aside class="chat-channels">
-              <div class="chat-create-actions"><button type="button" id="new-direct-chat">＋ Message</button><button type="button" id="new-group-chat">＋ Group</button></div>
               <label class="chat-search"><span>⌕</span><input id="chat-search" type="search" placeholder="Search work or messages" aria-label="Search work conversations"></label>
-              <div class="chat-filter" id="chat-filter"><button class="active" data-chat-filter="all">All</button><button data-chat-filter="direct">Inbox</button><button data-chat-filter="group">Groups</button><button data-chat-filter="work">Work</button></div>
+              <div class="chat-filter" id="chat-filter"><button class="active" data-chat-filter="all">All</button><button data-chat-filter="team">Team</button><button data-chat-filter="intake">Intake</button><button data-chat-filter="commercial">Grants & tenders</button><button data-chat-filter="delivery">Delivery</button></div>
               <div id="chat-channel-list" class="chat-channel-list"></div>
             </aside>
             <section class="chat-main">
@@ -587,25 +611,15 @@
     </form>
   </dialog>
 
-  <dialog id="request-detail-dialog" class="app-dialog request-detail-dialog">
-    <div id="request-detail-content"></div>
-  </dialog>
-
-  <dialog id="request-close-dialog" class="app-dialog compact-dialog destructive-dialog">
-    <form id="request-close-form">
-      <div class="dialog-heading"><div><p class="section-kicker">Request outcome</p><h2>Close as lost or declined</h2><p id="request-close-context"></p></div><button type="button" class="icon-button dialog-close" data-close-dialog="request-close-dialog" aria-label="Close">×</button></div>
-      <input name="requestId" type="hidden">
-      <label class="field"><span>Reason *</span><select name="reason" required><option value="">Select a reason</option><option>Client chose another provider</option><option>Budget not available</option><option>Scope or timing not viable</option><option>CAGE chose not to proceed</option><option>Application or bid unsuccessful</option><option>No response from client</option><option>Other</option></select></label>
-      <label class="field"><span>Outcome note *</span><textarea name="note" rows="4" required maxlength="500" placeholder="Record what happened and anything the team should learn."></textarea></label>
-      <label class="field"><span>Optional future follow-up</span><input name="followUp" type="date"><small class="field-help">Use this only when the relationship is worth revisiting.</small></label>
-      <p class="form-error" id="request-close-error" role="alert"></p>
-      <div class="dialog-actions"><button type="button" class="secondary-button" data-close-dialog="request-close-dialog">Keep open</button><button type="submit" class="danger-button">Close request</button></div>
+  <dialog id="confirm-dialog" class="app-dialog compact-dialog" aria-labelledby="confirm-dialog-title">
+    <form method="dialog" id="confirm-form">
+      <div class="dialog-heading"><div><p class="section-kicker" id="confirm-dialog-kicker">Please confirm</p><h2 id="confirm-dialog-title">Confirm action</h2><p id="confirm-dialog-message"></p></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel" id="confirm-cancel-button">Cancel</button><button class="primary-button" value="confirm" id="confirm-action-button">Confirm</button></div>
     </form>
   </dialog>
 
-  <dialog id="confirmation-dialog" class="app-dialog compact-dialog destructive-dialog">
-    <div class="dialog-heading"><div><p class="section-kicker">Please confirm</p><h2 id="confirmation-title">Confirm action</h2><p id="confirmation-message"></p></div><button type="button" class="icon-button dialog-close" data-close-dialog="confirmation-dialog" aria-label="Close">×</button></div>
-    <div class="dialog-actions"><button type="button" class="secondary-button" data-close-dialog="confirmation-dialog">Cancel</button><button type="button" class="danger-button" id="confirmation-accept">Confirm</button></div>
+  <dialog id="request-detail-dialog" class="app-dialog request-detail-dialog">
+    <div id="request-detail-content"></div>
   </dialog>
 
   <dialog id="task-dialog" class="app-dialog">
@@ -961,18 +975,17 @@
   <script src="./runtime-config.js" defer></script>
   <script src="./vendor/supabase.js" defer></script>
   <script src="./reliable-sync.js?v=15.0.0" defer></script>
-  <script src="./production.js?v=15.1.0" defer></script>
-  <script src="./app.js?v=15.3.0" defer></script>
+  <script src="./production.js?v=15.0.0" defer></script>
+  <script src="./app.js?v=15.0.0" defer></script>
   <script src="./hr.js" defer></script>
   <script src="./training.js?v=15.0.0" defer></script>
 <script src="./vendor/pdf-lib.min.js" defer></script>
-<script src="./document-pdf.js?v=15.1.0" defer></script>
-<script src="./documents-ui.js?v=15.1.0" defer></script>
-<script src="./personal-work.js?v=15.2.0" defer></script>
+<script src="./document-pdf.js" defer></script>
+<script src="./documents-ui.js" defer></script>
+<script src="./personal-work.js?v=14.3.0" defer></script>
   <script src="./mobile.js?v=14.1.0" defer></script>
-<script src="./daily-planner.js?v=15.2.0" defer></script>
-<script src="./staff-email.js?v=15.2.0" defer></script>
-<script src="./workflows.js?v=15.2.0" defer></script>
-<script src="./refresh-recovery.js?v=15.1.0" defer></script>
+<script src="./daily-planner.js?v=15.0.0" defer></script>
+<script src="./staff-email.js?v=14.3.0" defer></script>
+<script src="./workflows.js?v=15.0.0" defer></script>
 </body>
 </html>
