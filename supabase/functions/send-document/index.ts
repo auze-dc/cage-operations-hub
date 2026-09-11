@@ -1,6 +1,7 @@
 import * as PDFLib from "npm:pdf-lib@1.17.1";
 import "../_shared/document-pdf.js";
 import { logoBase64 } from "../_shared/logo.ts";
+import { stampBase64 } from "../_shared/stamp.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const cors = {
@@ -53,19 +54,10 @@ Deno.serve(async req => {
   const from = Deno.env.get("EMAIL_FROM") || "CAGE Operations <operations@cagemw.com>";
   if (!resendKey) return json({ ok: false, error: "Email delivery has not been configured" }, 503);
 
-  const attemptId=payload.deliveryAttempt;
-  if(typeof attemptId!=='string'||! /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(attemptId))return json({ok:false,error:'Refresh the Hub before sending this document.'},400);
-  const requestHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([type,record,recipient,subject,message]))))).map(b=>b.toString(16).padStart(2,'0')).join('');
-  const previous=await adminClient.from('document_delivery_attempts').select('*').eq('id',attemptId).maybeSingle();
-  if(previous.error)return json({ok:false,error:'Install the document delivery database update before sending.'},503);
-  if(previous.data&&(previous.data.organization_id!==profile.organization_id||previous.data.sender_id!==auth.user.id||previous.data.request_hash!==requestHash))return json({ok:false,error:'This send attempt belongs to different document contents. Reopen the send form.'},409);
-  if(previous.data?.provider_id)return json({ok:true,messageId:previous.data.provider_id});
-  if(previous.data&&Date.now()-Date.parse(previous.data.created_at)>23*3600000)return json({ok:false,error:'This send attempt is more than 23 hours old. Check Resend delivery history before starting a new send.'},409);
-  const sendingAt=new Date();
-  const stampDate=(globalThis as any).CagePDF.stampDateAt(sendingAt);
   let pdfBytes: Uint8Array;
   try {
-    pdfBytes=await (globalThis as any).CagePDF.createDocumentPDF(PDFLib,record,type,Uint8Array.from(atob(logoBase64),c=>c.charCodeAt(0)),sendingAt);
+    const stampDate=new Intl.DateTimeFormat("en-GB",{timeZone:"Africa/Blantyre",day:"2-digit",month:"2-digit",year:"numeric"}).format(new Date()).replaceAll("/",".");
+    pdfBytes=await (globalThis as any).CagePDF.createDocumentPDF(PDFLib,record,type,Uint8Array.from(atob(logoBase64),c=>c.charCodeAt(0)),Uint8Array.from(atob(stampBase64),c=>c.charCodeAt(0)),stampDate);
   } catch(error) { return json({ok:false,error:"The PDF could not be generated: "+String(error)},400); }
   let binary=""; for(const byte of pdfBytes) binary+=String.fromCharCode(byte);
   const filename=String(record.number).replace(/[^a-zA-Z0-9_-]/g,"-")+".pdf";
@@ -85,21 +77,13 @@ Deno.serve(async req => {
       </div>
     </div></body></html>`;
 
-  const freshPayload={from,to:[recipient],subject,html,attachments:[{filename,content:btoa(binary)}]};
-  if(!previous.data){
-    const inserted=await adminClient.from('document_delivery_attempts').upsert({id:attemptId,organization_id:profile.organization_id,sender_id:auth.user.id,document_id:record.id,request_hash:requestHash,payload:freshPayload},{onConflict:'id',ignoreDuplicates:true});
-    if(inserted.error)return json({ok:false,error:'Could not preserve this send attempt. Please retry.'},503);
-  }
-  const frozen=await adminClient.from('document_delivery_attempts').select('*').eq('id',attemptId).single();
-  if(frozen.error||frozen.data.sender_id!==auth.user.id||frozen.data.organization_id!==profile.organization_id||frozen.data.request_hash!==requestHash)return json({ok:false,error:'Could not verify the saved send attempt.'},409);
-  if(frozen.data.provider_id)return json({ok:true,messageId:frozen.data.provider_id});
   let response: Response;
   try { response = await fetch("https://api.resend.com/emails", {
     method: "POST", signal: AbortSignal.timeout(15000),
     headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json",
-      "Idempotency-Key": `document-${attemptId}`
+      "Idempotency-Key": Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify([record.id,record.sentAt||"first",recipient,subject,message,record.amount]))))).map(b=>b.toString(16).padStart(2,"0")).join("")
     },
-    body: JSON.stringify(frozen.data.payload),
+    body: JSON.stringify({ from, to: [recipient], subject, html, attachments:[{filename,content:btoa(binary)}] }),
   });
   } catch(error) {
     await adminClient.from("email_log").insert({organization_id:profile.organization_id,sender_id:auth.user.id,document_type:type,document_id:record.id,recipient,subject,status:"failed",error_message:String(error)});
@@ -118,6 +102,5 @@ Deno.serve(async req => {
     error_message: response.ok ? null : JSON.stringify(result),
   });
   if (!response.ok) return json({ ok: false, error: result.message || "Email provider rejected the message" }, 502);
-  await adminClient.from('document_delivery_attempts').update({provider_id:result.id}).eq('id',attemptId);
   return json({ ok: true, messageId: result.id });
 });
