@@ -875,15 +875,28 @@ function cageConfirm({ title = "Confirm action", message = "Are you sure?", conf
   });
 }
 
+function currentUserHasExecutiveApproval() {
+  const email = String(window.CAGE_BACKEND?.currentProfile?.()?.email || '').toLowerCase();
+  return ['alexander@cagemw.com','ndapile@cagemw.com'].includes(email);
+}
+
 function currentUserCanApprove() {
   if (!window.CAGE_BACKEND?.isProduction) return true;
-  return window.CAGE_BACKEND.canApprove?.() === true;
+  return window.CAGE_BACKEND.canApprove?.() === true || currentUserHasExecutiveApproval();
 }
 
 function currentUserIsAdmin() {
   if (!window.CAGE_BACKEND?.isProduction) return true;
   return window.CAGE_BACKEND.currentProfile?.()?.role === "admin";
 }
+
+function rememberUiState(extra = {}) {
+  try {
+    const current = JSON.parse(localStorage.getItem('cage-ui-restore-v15') || '{}');
+    localStorage.setItem('cage-ui-restore-v15', JSON.stringify({ ...current, ...extra, updatedAt: new Date().toISOString() }));
+  } catch {}
+}
+function savedUiState() { try { return JSON.parse(localStorage.getItem('cage-ui-restore-v15') || '{}'); } catch { return {}; } }
 
 function setView(view) {
   if (!viewMeta[view]) return;
@@ -894,6 +907,7 @@ function setView(view) {
   }
   if (view === "access" && !currentUserIsAdmin()) return;
   activeView = view;
+  rememberUiState({ view });
   document.querySelectorAll("[data-view-panel]").forEach(panel => panel.classList.toggle("active", panel.dataset.viewPanel === view));
   document.querySelectorAll(".nav-item[data-view]").forEach(button => button.classList.toggle("active", button.dataset.view === view));
   document.getElementById("view-title").textContent = viewMeta[view][0];
@@ -3333,7 +3347,7 @@ async function decideApproval(approvalId, decision) {
   }
   const item = state.approvals.find(record => record.id === approvalId);
   if (!item || item.status !== "Pending") return;
-  let note = decision === "Approved" ? "Approved from the CAGE decision inbox." : await window.CAGE_OPS.ask("What must be changed before this can be approved?");
+  let note = decision === "Approved" ? (currentUserHasExecutiveApproval() ? "Approved from the CAGE decision inbox under executive approval authority." : "Approved from the CAGE decision inbox.") : await window.CAGE_OPS.ask("What must be changed before this can be approved?");
   if (decision === "Returned" && !note?.trim()) {
     showToast("Add a return reason so the requester knows what to fix.");
     return;
@@ -5413,6 +5427,15 @@ document.getElementById("open-sidebar").addEventListener("click", openSidebar);
 document.getElementById("close-sidebar").addEventListener("click", closeSidebar);
 document.getElementById("sidebar-overlay").addEventListener("click", closeSidebar);
 
+
+function restoreLastUiPosition() {
+  const saved = savedUiState();
+  if (saved.view && viewMeta[saved.view]) setView(saved.view);
+  if (Number.isFinite(saved.scrollY)) window.setTimeout(() => window.scrollTo({ top: saved.scrollY, behavior: 'auto' }), 150);
+}
+window.addEventListener('beforeunload', () => rememberUiState({ view: activeView, scrollY: window.scrollY }));
+window.addEventListener('cage:session-ready', () => window.setTimeout(restoreLastUiPosition, 200));
+
 window.CAGE_APP = {
   getState: () => clone(state),
   replaceState: replaceStateFromCloud,
@@ -5425,4 +5448,5 @@ if (window.CAGE_BACKEND) {
   window.CAGE_BACKEND.boot(window.CAGE_APP);
 } else {
   renderAll();
+  restoreLastUiPosition();
 }
