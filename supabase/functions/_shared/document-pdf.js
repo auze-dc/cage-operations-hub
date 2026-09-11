@@ -1,8 +1,8 @@
 (function(root){
 'use strict';
 async function createDocumentPDF(PDFLib,record,type,logoBytes,stampBytes,stampDate){
- const {PDFDocument,StandardFonts,rgb}=PDFLib;
- const doc=await PDFDocument.create();const regular=await doc.embedFont(StandardFonts.TimesRoman),bold=await doc.embedFont(StandardFonts.TimesRomanBold),stampFont=await doc.embedFont(StandardFonts.HelveticaBold);
+ const {PDFDocument,StandardFonts,rgb,degrees}=PDFLib;
+ const doc=await PDFDocument.create();const regular=await doc.embedFont(StandardFonts.TimesRoman),bold=await doc.embedFont(StandardFonts.TimesRomanBold),stampFont=await doc.embedFont(StandardFonts.HelveticaBoldOblique||StandardFonts.HelveticaBold);
  const logo=await doc.embedPng(logoBytes),stamp=stampBytes?await doc.embedPng(stampBytes):null,blue=rgb(0,173/255,239/255),navy=rgb(.09,.10,.20),black=rgb(0,0,0),grey=rgb(.85,.85,.85),white=rgb(1,1,1);
  const currency=record.currency||'MWK', num=n=>Number(n).toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2});
  const clean=v=>String(v??'').replace(/[\u2010-\u2015]/g,'-').replace(/\u2022/g,'-').replace(/\u2019/g,"'").replace(/[^\x20-\x7E\xA0-\xFF\n]/g,'?');
@@ -12,18 +12,26 @@ async function createDocumentPDF(PDFLib,record,type,logoBytes,stampBytes,stampDa
  function newPage(){page=doc.addPage([595.28,841.89]);page.drawRectangle({x:0,y:829,width:595.28,height:13,color:navy});page.drawRectangle({x:0,y:813,width:330,height:29,color:blue});page.drawRectangle({x:0,y:0,width:210,height:9,color:blue});page.drawRectangle({x:210,y:0,width:386,height:20,color:navy});page.drawImage(logo,{x:55,y:747,width:111,height:40});text('Phone: +265 892569696',403,780,9);text('Web: cagemw.com',403,768,9);text('Add: Area 47 sector 1, ABC, Lilongwe',365,756,9);page.drawLine({start:{x:0,y:732},end:{x:595.28,y:732},thickness:2,color:navy});text('Area 47 sector 1, ABC-ABI',30,49,10,regular,navy);text('+265 892569696',246,49,10,regular,navy);text('info@cagemw.com',427,49,10,regular,navy);y=712;}
  function ensure(h){if(y-h<92)newPage();}
  function paragraph(v,width=525,size=11,font=regular){for(const line of lines(v,width,size,font)){ensure(size+6);text(line,35,y,size,font);y-=size+5;}}
+ function arcText(value,cx,cy,r,startDeg,endDeg,size,font,color){
+   const chars=[...clean(value||'')];if(!chars.length||!degrees)return;
+   const widths=chars.map(ch=>font.widthOfTextAtSize(ch,size));
+   const total=widths.reduce((a,b)=>a+b,0);const arcDeg=Math.min(Math.abs(endDeg-startDeg),Math.max(30,total/r*180/Math.PI*1.10));
+   const mid=(startDeg+endDeg)/2,dir=endDeg>=startDeg?1:-1;let angle=mid-dir*arcDeg/2;
+   for(let i=0;i<chars.length;i++){
+     const step=widths[i]/r*180/Math.PI*1.10;angle+=dir*step/2;
+     const a=angle*Math.PI/180;const x=cx+r*Math.cos(a),yy=cy+r*Math.sin(a);
+     page.drawText(chars[i],{x:x-widths[i]/2,y:yy-size/2,size,font,color,rotate:degrees(angle-90)});
+     angle+=dir*step/2;
+   }
+ }
  function authorisedStamp(x,baseY,w=98){
    if(!stamp)return;
    const h=w*(242/236);
    page.drawImage(stamp,{x,y:baseY,width:w,height:h});
-   // The supplied physical stamp contains a historic fixed date. Mask only the date band,
-   // preserving the surrounding stamp artwork, then print the live issue/send date.
-   const maskX=x+w*.245,maskY=baseY+h*.735,maskW=w*.51,maskH=h*.17;
-   page.drawRectangle({x:maskX,y:maskY,width:maskW,height:maskH,color:white});
    const liveDate=clean(stampDate||record.stampDate||record.issued||'');
    if(liveDate){
-     const size=7.2,max=maskW-4,tw=stampFont.widthOfTextAtSize(liveDate,size),tx=maskX+Math.max(2,(maskW-tw)/2);
-     page.drawText(liveDate,{x:tx,y:maskY+4.5,size:tw>max?size*(max/tw):size,font:stampFont,color:blue});
+     // Draw the issue/send date on the same curved path as the upper stamp text.
+     arcText(liveDate,x+w*.50,baseY+h*.51,w*.335,128,52,7.15,stampFont,blue);
    }
  }
  newPage();
@@ -45,7 +53,7 @@ async function createDocumentPDF(PDFLib,record,type,logoBytes,stampBytes,stampDa
  ensure(48);page.drawRectangle({x:35,y:y-45,width:525,height:45,color:grey});text('Grand Total ('+currency+')',305,y-26,12,bold);text(num(total),440,y-26,11,bold);y-=77;
  if(record.serviceDetails){paragraph('Service Description',525,12,bold);paragraph(record.serviceDetails);y-=22;}
  ensure(110);paragraph('Payment Details',525,12,bold);paragraph(record.paymentDetails||'CAGE\n1013608314\nGateway Mall Branch\nNational Bank');y-=24;
- ensure(125);const signY=y;text('Prepared By: '+(record.preparedBy||'CAGE'),35,signY,11);text('Signature: __________________',255,signY,11);authorisedStamp(447,signY-91,92);y-=105;
+ ensure(125);const signY=y;if(type==='invoice')text('Prepared By: '+(record.preparedBy||'CAGE'),35,signY,11);text('Signature: __________________',type==='quote'?35:255,signY,11);authorisedStamp(447,signY-91,92);y-=105;
  doc.getPages().forEach((p,i)=>p.drawText(`${record.number} | ${i+1} / ${doc.getPageCount()}`,{x:252,y:26,size:8,font:regular,color:navy}));
  return doc.save();
 }
