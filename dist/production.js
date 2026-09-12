@@ -20,8 +20,6 @@
   let pendingState = null;
   let cloudBase = {}, syncConflicts = [], savingNow=false;
   const draftKey=()=>"cage-unsynced-"+profile?.id;
-  const EXECUTIVE_APPROVERS = new Set(['alexander@cagemw.com','ndapile@cagemw.com']);
-  const isExecutiveApprover = () => EXECUTIVE_APPROVERS.has(String(profile?.email || '').toLowerCase());
   let saveChain = Promise.resolve();
   let realtimeChannel = null;
   let applyingRemote = false;
@@ -120,7 +118,7 @@
 
   function applyPermissions() {
     const isAdmin = profile?.role === "admin";
-    const canApprove = ["admin", "manager"].includes(profile?.role) || isExecutiveApprover();
+    const canApprove = ["admin", "manager"].includes(profile?.role);
     const isViewer = profile?.role === "viewer";
     ["manage-purpose-button", "reset-prototype", "import-workspace-label"].forEach(id => {
       const element = document.getElementById(id);
@@ -188,22 +186,31 @@
     }, 8000);
   }
 
+  // Chat messages are append-only. Read state is stored in personal_notifications,
+  // so legacy changes to an existing message (such as unread=false) must never be
+  // sent back through the workspace save function.
+  function writableChanges(base, next) {
+    return window.CAGE_SYNC.changes(base, next).filter(change =>
+      change.key !== "messages" || (change.before === null && change.after !== null)
+    );
+  }
+
   async function flushSave() {
     if(!pendingState||!profile||applyingRemote||savingNow||syncConflicts.length)return;
-    const snapshot=structuredClone(pendingState),base=structuredClone(cloudBase),patches=window.CAGE_SYNC.changes(base,snapshot);
-    if(!patches.length){pendingState=null;localStorage.removeItem(draftKey());return;}
+    const snapshot=structuredClone(pendingState),base=structuredClone(cloudBase),patches=writableChanges(base,snapshot);
+    if(!patches.length){pendingState=null;localStorage.removeItem(draftKey());app.replaceState(cloudBase);window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:false}}));return;}
     savingNow=true;showBanner("Saving changes…");
     try {
       const {data,error}=await client.rpc("save_workspace_changes",{changes:patches});
       if(error)throw error;
       if(data?.conflicts?.length){syncConflicts=data.conflicts;window.dispatchEvent(new CustomEvent("cage:conflicts",{detail:{conflicts:syncConflicts,patches}}));showBanner("Your draft is safe. Review the conflicting changes.","error");return;}
       await loadWorkspace();
-      const newer=window.CAGE_SYNC.changes(snapshot,pendingState||snapshot);
+      const newer=writableChanges(snapshot,pendingState||snapshot);
       pendingState=null;
       if(newer.length){pendingState=window.CAGE_SYNC.apply(cloudBase,newer);app.replaceState(pendingState);localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));}
       else localStorage.removeItem(draftKey());
-      showBanner(newer.length?"Saving your latest changes…":"Saved to the secure workspace", newer.length ? "saving" : "saved");window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:!!pendingState,status:newer.length?'saving':'saved'}}));
-    } catch(error){const offline=!navigator.onLine;const msg=offline?"Saved locally. It will sync when the connection returns.":"Sync needs attention. Your draft is safe on this device. Open the sync panel to retry.";showBanner(msg, offline?"local":"attention");window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:true,error:error.message,status:offline?'local':'attention'}}));}
+      showBanner(newer.length?"Saving your latest changes…":"All changes synced");window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:!!pendingState}}));
+    } catch(error){showBanner("Not synced: "+error.message+". Your draft is kept on this device.","error");window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:true,error:error.message}}));}
     finally {savingNow=false;if(pendingState&&!syncConflicts.length)setTimeout(()=>{if(navigator.onLine)flushSave();},6000);}
   }
   async function resolveSync(choices) {
@@ -211,11 +218,13 @@
     syncConflicts=[];localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));app.replaceState(pendingState);await flushSave();
   }
 
-  function reviewSync() {if(syncConflicts.length)window.dispatchEvent(new CustomEvent("cage:conflicts",{detail:{conflicts:syncConflicts,patches:window.CAGE_SYNC.changes(cloudBase,pendingState)}}));return window.CAGE_SYNC.changes(cloudBase,pendingState||cloudBase);}
+  function reviewSync() {if(syncConflicts.length)window.dispatchEvent(new CustomEvent("cage:conflicts",{detail:{conflicts:syncConflicts,patches:writableChanges(cloudBase,pendingState)}}));return writableChanges(cloudBase,pendingState||cloudBase);}
   async function discardDraftRecord(key,id) {pendingState=window.CAGE_SYNC.apply(pendingState,[{key,id,after:id===null?cloudBase[key]:cloudBase[key]?.find(r=>r.id===id)||null}]);syncConflicts=syncConflicts.filter(c=>c.key!==key||c.id!==id);localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));app.replaceState(pendingState);await flushSave();}
   async function restoreDraft() {
     const saved=JSON.parse(localStorage.getItem(draftKey())||"null");if(!saved)return;
-    const patches=window.CAGE_SYNC.changes(saved.base,saved.next);pendingState=window.CAGE_SYNC.apply(cloudBase,patches);cloudBase=window.CAGE_SYNC.apply(cloudBase,patches.map(c=>({...c,after:c.before})));app.replaceState(pendingState);await flushSave();
+    const patches=writableChanges(saved.base,saved.next);
+    if(!patches.length){localStorage.removeItem(draftKey());pendingState=null;app.replaceState(cloudBase);window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:false}}));return;}
+    pendingState=window.CAGE_SYNC.apply(cloudBase,patches);cloudBase=window.CAGE_SYNC.apply(cloudBase,patches.map(c=>({...c,after:c.before})));app.replaceState(pendingState);await flushSave();
   }
   window.addEventListener("online",()=>flushSave());
 
@@ -369,19 +378,25 @@
     clearTimeout(saveTimer);
     await saveChain;
     if(pendingState) await flushSave();
-    if(pendingState) throw new Error("This document has local changes waiting to sync. Open the sync panel and retry before sending.");
+    if(pendingState) throw new Error("Wait for cloud sync before sending this document.");
     const prepared=await client.rpc("prepare_document_delivery",{doc_type:payload.type,doc_record:payload.record});
     if(prepared.error) throw prepared.error;
     workspaceVersion=prepared.data.version;
     await loadWorkspace();
     payload={...payload,record:prepared.data.record};
-    const { data, error } = await client.functions.invoke("send-document", { body: payload });
+    const attemptKey=`cage-send-attempt:${profile.id}:${payload.type}:${payload.record.id}`;
+    const fingerprint=JSON.stringify([payload.type,payload.record,payload.recipient,payload.subject,payload.message]);
+    let attempt;try{attempt=JSON.parse(localStorage.getItem(attemptKey)||'null');}catch{}
+    if(!attempt||attempt.fingerprint!==fingerprint)attempt={id:crypto.randomUUID(),fingerprint};
+    localStorage.setItem(attemptKey,JSON.stringify(attempt));
+    const { data, error } = await client.functions.invoke("send-document", { body: {...payload,deliveryAttempt:attempt.id} });
     if (error) {
       let message=error.message || "Email delivery failed.";
       try { const response=await error.context?.json(); message=response?.error || message; } catch {}
       throw new Error(message);
     }
     if (!data?.ok) throw new Error(data?.error || "Email delivery failed.");
+    localStorage.removeItem(attemptKey);
     return data;
   }
 
@@ -581,7 +596,7 @@
     if(["admin","settings"].includes(module)) return "none";
     if(profile.role === "viewer") return moduleAccess[module] === "none" ? "none" : "view";
     if(moduleAccess[module]) return moduleAccess[module];
-    if(module === "approvals") return (["admin","manager"].includes(profile.role)||isExecutiveApprover()) ? "edit" : "none";
+    if(module === "approvals") return profile.role === "manager" ? "edit" : "none";
     if(module === "hr") return ["manager","hr"].includes(profile.role) ? "edit" : "view";
     return profile.role === "viewer" ? "view" : "edit";
   }
@@ -604,7 +619,7 @@
   }
   async function updatePlannedTask(payload) {
     clearTimeout(saveTimer);await saveChain;if(pendingState)await flushSave();
-    if(pendingState)throw new Error("This task has local changes waiting to sync. Open the sync panel and retry before updating.");
+    if(pendingState)throw new Error("Wait for cloud sync before updating this task.");
     const r=await client.rpc("update_planned_task",payload);if(r.error)throw r.error;
     await loadWorkspace();
   }
@@ -712,7 +727,7 @@
     createLearner,
     updateLearnerStage,
     applyPermissions,
-    canApprove: () => ["admin", "manager"].includes(profile?.role) || isExecutiveApprover(),
+    canApprove: () => ["admin", "manager"].includes(profile?.role),
     isProduction: configured,
     currentProfile: () => profile,
     currentMemberId: () => profile?.email?.split("@")[0] === "bonfancio" ? "bonifancio" : profile?.email?.split("@")[0] || "alexander"
