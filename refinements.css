@@ -1,0 +1,59 @@
+/* CAGE 15.4: shared spacing and readable operational views */
+[data-view-panel="dashboard"], [data-view-panel="mywork"] { max-width: 1440px; margin-inline: auto; }
+.dashboard-intro, .mywork-intro { padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--line-soft); }
+.dashboard-intro h2, .mywork-intro h2 { font-size: clamp(1.5rem, 2vw, 1.9rem); line-height: 1.3; }
+.dashboard-intro > div > p:last-child, .mywork-intro p:last-child { font-size: .875rem; line-height: 1.5; }
+.executive-metrics { gap: 14px; border: 0; overflow: visible; margin: 0 0 24px; }
+.executive-metric { border: 1px solid var(--line-soft) !important; border-radius: var(--radius); padding: 18px; min-height: 126px; gap: 8px; }
+.executive-metric::before { display: none; }
+.executive-metric .metric-label { color: var(--muted); font-size: .875rem; }
+.executive-metric .metric-value strong { font-size: clamp(1.45rem, 2.1vw, 1.9rem); overflow-wrap: anywhere; }
+.executive-metric .metric-trend { font-size: .8125rem; line-height: 1.5; }
+.executive-metric .metric-icon { display: none; }
+.executive-grid { grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); gap: 24px; }
+.executive-grid > .surface { padding: 22px; border-radius: var(--radius); }
+.executive-grid .surface-heading { gap: 16px; flex-wrap: wrap; padding-bottom: 18px; }
+.executive-grid .surface-heading h3 { font-size: 1.125rem; }
+.executive-grid .section-kicker { display: none; }
+.executive-grid .text-button, .executive-grid .full-width-button { font-size: .875rem; }
+.executive-action { padding: 16px 0 !important; min-height: 82px; border-bottom: 1px solid var(--line-soft); background: transparent; }
+.executive-action:last-child { border-bottom: 0; }
+.executive-action .attention-copy { display: grid; gap: 5px; }
+.executive-action .attention-copy strong { font-size: 1rem; font-weight: 600; line-height: 1.45; white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+.executive-action .attention-copy > span:last-child { font-size: .875rem; line-height: 1.45; white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+.executive-action .action-kind { font-size: .75rem; margin: 0; letter-spacing: 0; font-weight: 600; }
+.pulse-surface .focus-date { display: none; }
+.pulse-surface .focus-row { grid-template-columns: 48px minmax(0,1fr); padding: 14px 0; }
+.pulse-surface .focus-time, .pulse-surface .focus-copy span { font-size: .8125rem; line-height: 1.5; }
+.pulse-surface .focus-copy strong { font-size: .9375rem; line-height: 1.45; }
+.mywork-layout { grid-template-columns: minmax(0,1fr); gap: 22px; }
+.mywork-sidebar { position: static; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 22px; }
+.mywork-side-card { padding: 22px !important; }
+.mywork-card-heading h3 { font-size: 1rem; }
+.mywork-card-heading p, .mywork-side-card .personal-row small { font-size: .8125rem; line-height: 1.5; }
+.mywork-side-card .personal-row strong, .mywork-side-card .personal-link { font-size: .9375rem; line-height: 1.5; }
+.mywork-side-card .personal-actions button { min-height: 36px; font-size: .8125rem; }
+.responsibility-kind { font-size: .75rem; }
+#daily-planner { padding: 22px; }
+.planner-heading { flex-wrap: wrap; padding-bottom: 18px; }
+.planner-heading h3 { font-size: 1.125rem; }
+.planner-heading p { font-size: .875rem; line-height: 1.5; }
+#daily-planner button { font-size: .8125rem; min-height: 36px; }
+.planner-toolbar { gap: 14px; padding: 18px 0; }
+.planner-toolbar label { font-size: .8125rem; }
+.planner-board { grid-template-columns: repeat(4,minmax(0,1fr)); gap: 14px; overflow: visible; }
+.planner-board > section { min-width: 0; padding: 12px; }
+.planner-board h4 { font-size: .875rem; }
+.planner-board h4 span { font-size: .8125rem; }
+.planner-card { min-width: 0; overflow-wrap: anywhere; }
+.planner-card strong { font-size: .9375rem; line-height: 1.5; }
+.planner-card small { font-size: .8125rem; line-height: 1.5; }
+@media(max-width:1200px) { .planner-board { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media(max-width:1050px) { .executive-grid { grid-template-columns: minmax(0,1fr); } }
+@media(max-width:680px) { .executive-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; } .executive-metric { padding: 14px; } .executive-grid > .surface, #daily-planner, .mywork-side-card { padding: 16px !important; } .mywork-sidebar { grid-template-columns: minmax(0,1fr); } .planner-board { display: grid; grid-template-columns: minmax(0,1fr); } .planner-board > section { width: auto; } }
+@media(max-width:380px) { .executive-metrics { grid-template-columns: minmax(0,1fr); } }
+
+.planner-task { min-width: 0; overflow-wrap: anywhere; }
+#daily-planner .planner-task-title { font-size: .9375rem; line-height: 1.5; white-space: normal; }
+.planner-task small { font-size: .8125rem; line-height: 1.5; }
+.planner-tags span, .planner-move-label, .planner-empty { font-size: .75rem; line-height: 1.5; }
