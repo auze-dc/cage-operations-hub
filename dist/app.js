@@ -1039,7 +1039,8 @@ function renderDashboard() {
   document.getElementById("assets-nav-count").textContent = state.assets.filter(assetNeedsAttention).length;
   document.getElementById("compliance-nav-count").textContent = state.compliance.filter(record => ["Due soon", "Review required", "Expired"].includes(complianceDisplayStatus(record))).length;
   const currentMember = window.CAGE_BACKEND?.currentMemberId?.() || "alexander";
-  document.getElementById("chat-nav-count").textContent = window.CAGE_PERSONAL?.chatUnreadTotal?.() || state.messages.filter(message => message.unread && message.sender !== currentMember && threadById(threadIdForMessage(message))).length;
+  const personalUnreadTotal = window.CAGE_PERSONAL?.chatUnreadTotal?.();
+  document.getElementById("chat-nav-count").textContent = Number.isFinite(personalUnreadTotal) ? personalUnreadTotal : state.messages.filter(message => message.unread && message.sender !== currentMember && threadById(threadIdForMessage(message))).length;
   document.getElementById("finance-nav-count").textContent = state.invoices.filter(invoice => effectiveInvoiceStatus(invoice) === "Overdue").length;
   document.getElementById("approvals-nav-count").textContent = state.approvals.filter(item => item.status === "Pending").length;
   document.getElementById("commercial-nav-count").textContent = state.commercialRecords.filter(commercialNeedsAttention).length;
@@ -2118,7 +2119,8 @@ function renderChat() {
     const messages = messagesForThread(thread.id);
     const last = messages.at(-1);
     const currentMember = window.CAGE_BACKEND?.currentMemberId?.() || "alexander";
-    const unread = window.CAGE_PERSONAL?.chatUnread?.(thread.id) || messages.filter(message => message.unread && message.sender !== currentMember).length;
+    const personalUnread = window.CAGE_PERSONAL?.chatUnread?.(thread.id);
+    const unread = Number.isFinite(personalUnread) ? personalUnread : messages.filter(message => message.unread && message.sender !== currentMember).length;
     const glyph = thread.direct ? "DM" : thread.customChat ? "GP" : thread.teamWide ? "GE" : thread.type === "Grant" ? "GR" : thread.type === "Tender / RFQ" ? "TD" : thread.project ? "PR" : "RQ";
     return `<button class="chat-channel ${thread.id === activeChatThread ? "active" : ""}" data-chat-thread="${thread.id}"><span class="chat-channel-icon ${thread.category}">${glyph}</span><span class="chat-channel-copy"><strong>${escapeHtml(thread.title)}</strong><em>${escapeHtml(thread.stage)} · ${escapeHtml(thread.organisation)}</em><span>${escapeHtml(last?.text || "Start the work conversation")}</span></span>${unread ? `<span class="unread-count">${unread}</span>` : ""}</button>`;
   }).join("") : `<div class="chat-list-empty">No conversations match this view.</div>`;
@@ -2170,8 +2172,6 @@ function renderChat() {
 function selectChatThread(threadId) {
   if (!threadById(threadId)) return;
   activeChatThread = threadId;
-  state.messages.filter(message => threadIdForMessage(message) === threadId).forEach(message => { message.unread = false; });
-  saveState();
   renderChat();
   renderDashboard();
   requestAnimationFrame(() => document.getElementById("chat-input").focus());

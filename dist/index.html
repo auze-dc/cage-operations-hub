@@ -7,12 +7,13 @@
   <meta name="description" content="CAGE Operations Hub for request intake, projects, missions, equipment, compliance, approvals, CRM, calendar, finance, chat, leave and knowledge.">
   <title>CAGE Operations Hub</title>
   <link rel="icon" href="./cage-logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=15.3.0">
-  <link rel="stylesheet" href="./monday-theme.css">
-<link rel="stylesheet" href="./personal-work.css?v=15.3.0">
-  <link rel="stylesheet" href="./mobile.css?v=14.1.0">
-<link rel="stylesheet" href="./daily-planner.css?v=15.3.0">
-<link rel="stylesheet" href="./workflows.css?v=15.0.0">
+  <link rel="stylesheet" href="./styles.css?v=15.4.1">
+  <link rel="stylesheet" href="./monday-theme.css?v=15.4.1">
+<link rel="stylesheet" href="./personal-work.css?v=15.4.1">
+  <link rel="stylesheet" href="./mobile.css?v=15.4.1">
+<link rel="stylesheet" href="./daily-planner.css?v=15.4.1">
+<link rel="stylesheet" href="./workflows.css?v=15.4.1">
+  <link rel="stylesheet" href="./refinements.css?v=15.4.1">
 </head>
 <body class="session-checking">
   <div class="session-loader" role="status" aria-live="polite"><span></span><strong>Opening CAGE Operations Hub…</strong></div>
@@ -168,23 +169,7 @@
             <div><p class="date-line">Single front door</p><h2>Request centre</h2><p>Capture every enquiry once, qualify it, prepare the right offer and convert accepted work into delivery.</p></div>
             <div class="intro-actions"><button class="secondary-button" id="manage-purpose-button">Manage purposes</button><button class="primary-button" id="new-request-button">＋ New request</button></div>
           </div>
-          <div class="decision-guide surface" aria-label="Where new work starts">
-            <span class="decision-guide-icon">↳</span>
-            <div><strong>Client contacted CAGE?</strong><p>Email, WhatsApp, call, referral or website enquiry always starts as a <b>New request</b>.</p></div>
-            <i></i>
-            <span class="decision-guide-icon proactive">◇</span>
-            <div><strong>CAGE found a possible client?</strong><p>A proactive lead with no incoming request starts as a <b>CRM opportunity</b>.</p></div>
-          </div>
           <div class="metric-grid" id="request-metric-grid"></div>
-          <div class="request-flow surface" aria-label="Request to delivery workflow">
-            <span><b>1</b><strong>Intake</strong><small>Capture request</small></span>
-            <i>›</i><span><b>2</b><strong>Qualify</strong><small>Go / no-go</small></span>
-            <i>›</i><span><b>3</b><strong>Scope & cost</strong><small>Technical plan</small></span>
-            <i>›</i><span><b>4</b><strong>Approve</strong><small>Internal gate</small></span>
-            <i>›</i><span><b>5</b><strong>Submit</strong><small>Offer or application</small></span>
-            <i>›</i><span><b>6</b><strong>Contract</strong><small>Formal acceptance</small></span>
-            <i>›</i><span><b>7</b><strong>Project</strong><small>Deliver and close</small></span>
-          </div>
           <div class="toolbar request-toolbar">
             <div class="segmented-control" id="request-filters" aria-label="Filter requests">
               <button class="active" data-request-filter="all">All</button>
@@ -198,15 +183,6 @@
           </div>
           <div class="request-layout">
             <div class="request-board-scroll"><div class="request-board" id="request-board"></div></div>
-            <aside class="surface request-guardrails">
-              <div class="surface-heading"><div><p class="section-kicker">Required controls</p><h3>Before work starts</h3></div></div>
-              <div class="request-rule-list">
-                <div><span>1</span><p><strong>One owner</strong>Every request needs a responsible person and dated next action.</p></div>
-                <div><span>2</span><p><strong>Evidence first</strong>Scope, costing and supporting documents must be complete before review.</p></div>
-                <div><span>3</span><p><strong>Approval before sending</strong>No quote, tender or grant application leaves CAGE without approval.</p></div>
-                <div><span>4</span><p><strong>Acceptance before delivery</strong>Create a project only after a contract, PO, award or accepted quote is recorded.</p></div>
-              </div>
-            </aside>
           </div>
         </section>
 
@@ -958,21 +934,21 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <noscript><div class="noscript">JavaScript is required to use the CAGE Operations Hub.</div></noscript>
-  <script src="./runtime-config.js" defer></script>
-  <script src="./vendor/supabase.js" defer></script>
-  <script src="./reliable-sync.js?v=15.0.0" defer></script>
-  <script src="./production.js?v=15.1.0" defer></script>
-  <script src="./app.js?v=15.3.0" defer></script>
-  <script src="./hr.js" defer></script>
-  <script src="./training.js?v=15.0.0" defer></script>
-<script src="./vendor/pdf-lib.min.js" defer></script>
-<script src="./document-pdf.js?v=15.1.0" defer></script>
-<script src="./documents-ui.js?v=15.1.0" defer></script>
-<script src="./personal-work.js?v=15.2.0" defer></script>
-  <script src="./mobile.js?v=14.1.0" defer></script>
-<script src="./daily-planner.js?v=15.2.0" defer></script>
-<script src="./staff-email.js?v=15.2.0" defer></script>
-<script src="./workflows.js?v=15.2.0" defer></script>
-<script src="./refresh-recovery.js?v=15.1.0" defer></script>
+  <script src="./runtime-config.js?v=15.4.1" defer></script>
+  <script src="./vendor/supabase.js?v=15.4.1" defer></script>
+  <script src="./reliable-sync.js?v=15.4.1" defer></script>
+  <script src="./production.js?v=15.4.1" defer></script>
+  <script src="./app.js?v=15.4.1" defer></script>
+  <script src="./hr.js?v=15.4.1" defer></script>
+  <script src="./training.js?v=15.4.1" defer></script>
+<script src="./vendor/pdf-lib.min.js?v=15.4.1" defer></script>
+<script src="./document-pdf.js?v=15.4.1" defer></script>
+<script src="./documents-ui.js?v=15.4.1" defer></script>
+<script src="./personal-work.js?v=15.4.1" defer></script>
+  <script src="./mobile.js?v=15.4.1" defer></script>
+<script src="./daily-planner.js?v=15.4.1" defer></script>
+<script src="./staff-email.js?v=15.4.1" defer></script>
+<script src="./workflows.js?v=15.4.1" defer></script>
+<script src="./refresh-recovery.js?v=15.4.1" defer></script>
 </body>
 </html>

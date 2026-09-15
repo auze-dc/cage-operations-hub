@@ -186,21 +186,30 @@
     }, 8000);
   }
 
+  // Chat messages are append-only. Read state is stored in personal_notifications,
+  // so legacy changes to an existing message (such as unread=false) must never be
+  // sent back through the workspace save function.
+  function writableChanges(base, next) {
+    return window.CAGE_SYNC.changes(base, next).filter(change =>
+      change.key !== "messages" || (change.before === null && change.after !== null)
+    );
+  }
+
   async function flushSave() {
     if(!pendingState||!profile||applyingRemote||savingNow||syncConflicts.length)return;
-    const snapshot=structuredClone(pendingState),base=structuredClone(cloudBase),patches=window.CAGE_SYNC.changes(base,snapshot);
-    if(!patches.length){pendingState=null;localStorage.removeItem(draftKey());return;}
+    const snapshot=structuredClone(pendingState),base=structuredClone(cloudBase),patches=writableChanges(base,snapshot);
+    if(!patches.length){pendingState=null;localStorage.removeItem(draftKey());hideBanner(0);app.replaceState(cloudBase);window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:false}}));return;}
     savingNow=true;showBanner("Saving changes…");
     try {
       const {data,error}=await client.rpc("save_workspace_changes",{changes:patches});
       if(error)throw error;
       if(data?.conflicts?.length){syncConflicts=data.conflicts;window.dispatchEvent(new CustomEvent("cage:conflicts",{detail:{conflicts:syncConflicts,patches}}));showBanner("Your draft is safe. Review the conflicting changes.","error");return;}
       await loadWorkspace();
-      const newer=window.CAGE_SYNC.changes(snapshot,pendingState||snapshot);
+      const newer=writableChanges(snapshot,pendingState||snapshot);
       pendingState=null;
       if(newer.length){pendingState=window.CAGE_SYNC.apply(cloudBase,newer);app.replaceState(pendingState);localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));}
       else localStorage.removeItem(draftKey());
-      showBanner(newer.length?"Saving your latest changes…":"All changes synced");window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:!!pendingState}}));
+      hideBanner(0);window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:!!pendingState}}));
     } catch(error){showBanner("Not synced: "+error.message+". Your draft is kept on this device.","error");window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:true,error:error.message}}));}
     finally {savingNow=false;if(pendingState&&!syncConflicts.length)setTimeout(()=>{if(navigator.onLine)flushSave();},6000);}
   }
@@ -209,11 +218,13 @@
     syncConflicts=[];localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));app.replaceState(pendingState);await flushSave();
   }
 
-  function reviewSync() {if(syncConflicts.length)window.dispatchEvent(new CustomEvent("cage:conflicts",{detail:{conflicts:syncConflicts,patches:window.CAGE_SYNC.changes(cloudBase,pendingState)}}));return window.CAGE_SYNC.changes(cloudBase,pendingState||cloudBase);}
+  function reviewSync() {if(syncConflicts.length)window.dispatchEvent(new CustomEvent("cage:conflicts",{detail:{conflicts:syncConflicts,patches:writableChanges(cloudBase,pendingState)}}));return writableChanges(cloudBase,pendingState||cloudBase);}
   async function discardDraftRecord(key,id) {pendingState=window.CAGE_SYNC.apply(pendingState,[{key,id,after:id===null?cloudBase[key]:cloudBase[key]?.find(r=>r.id===id)||null}]);syncConflicts=syncConflicts.filter(c=>c.key!==key||c.id!==id);localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));app.replaceState(pendingState);await flushSave();}
   async function restoreDraft() {
     const saved=JSON.parse(localStorage.getItem(draftKey())||"null");if(!saved)return;
-    const patches=window.CAGE_SYNC.changes(saved.base,saved.next);pendingState=window.CAGE_SYNC.apply(cloudBase,patches);cloudBase=window.CAGE_SYNC.apply(cloudBase,patches.map(c=>({...c,after:c.before})));app.replaceState(pendingState);await flushSave();
+    const patches=writableChanges(saved.base,saved.next);
+    if(!patches.length){localStorage.removeItem(draftKey());pendingState=null;app.replaceState(cloudBase);window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:false}}));return;}
+    pendingState=window.CAGE_SYNC.apply(cloudBase,patches);cloudBase=window.CAGE_SYNC.apply(cloudBase,patches.map(c=>({...c,after:c.before})));app.replaceState(pendingState);await flushSave();
   }
   window.addEventListener("online",()=>flushSave());
 

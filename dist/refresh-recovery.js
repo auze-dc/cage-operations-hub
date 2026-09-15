@@ -62,7 +62,15 @@ async function restore(){
  let dialog=document.getElementById(savedDialog.id);const opener=locate(savedDialog.origin);
  if(opener&&!opener.disabled){opener.click();for(let n=0;n<30;n++){await wait(100);dialog=document.getElementById(savedDialog.id);if(dialog?.open)break;}}
  if(!dialog){showToast('Your form draft is retained. Reopen its form to recover it.');continue;}
- if(!dialog.open)dialog.showModal();
+ if(!dialog.open){if(savedDialog.id==='task-dialog')openTaskDialog(savedDialog.fields.find(f=>f.name==='project')?.value||'',g.editingTaskId||'');else dialog.showModal();}
+ if(savedDialog.id==='task-dialog'){
+   editingTaskId=g.editingTaskId||'';
+   const project=savedDialog.fields.find(f=>f.name==='project');
+   if(project)document.getElementById('task-form').elements.project.value=project.value;
+   window.CAGE_OPS?.refreshTaskDependencies?.([]);
+   const rows=[...dialog.querySelectorAll('[data-subtask]')];
+   rows.slice(savedDialog.subtasks||0).forEach(row=>row.remove());
+ }
  // Recreate repeatable rows using the existing handlers.
  for(let n=dialog.querySelectorAll('.document-item').length;n<savedDialog.items;n++)dialog.querySelector('[data-add-document-item]')?.click();
  for(let n=dialog.querySelectorAll('[data-subtask]').length;n<savedDialog.subtasks;n++)document.getElementById('ops-add-subtask')?.click();
