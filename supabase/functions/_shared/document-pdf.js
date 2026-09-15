@@ -43,7 +43,6 @@ async function createDocumentPDF(PDFLib,record,type,logoBytes,sendingAt=new Date
  ensure(110);paragraph('Payment Details',525,12,bold);paragraph(record.paymentDetails||'CAGE\n1013608314\nGateway Mall Branch\nNational Bank');y-=24;
  // Keep the approval area together, moving to a fresh page if needed.
  ensure(154);const approvalTop=y;
- if(type!=='quote')for(const line of lines('Prepared By: '+(record.preparedBy||'CAGE'),285,11).slice(0,3)){text(line,35,y,11);y-=16;}
  text('Signature: __________________',35,Math.min(y-18,approvalTop-48),11);
  const scale=0.5,sx=425,sy=approvalTop-125;
  page.drawImage(stamp,{x:sx,y:sy,width:236*scale,height:242*scale});
