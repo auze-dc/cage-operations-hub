@@ -5,7 +5,7 @@ create extension if not exists pg_net;
 
 select cron.schedule(
   'cage-daily-opportunity-scan',
-  '0 5 * * *', -- 07:00 Malawi time (UTC+2)
+  '0 5 * * 1-5', -- 07:00 Malawi time (UTC+2), Monday to Friday
   $$
   select net.http_post(
     url := 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/opportunity-scan',
