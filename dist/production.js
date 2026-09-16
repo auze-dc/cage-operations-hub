@@ -742,7 +742,27 @@
     const result=await client.from('learner_attendance').upsert(rows.map(r=>({...r,recorded_by:profile.id,recorded_at:new Date().toISOString()})),{onConflict:'session_id,learner_id'});
     if(result.error)throw new Error(result.error.message);
   }
+  async function chatReceipts(threadId) {
+    let rows=[];for(let offset=0;;offset+=1000){const r=await client.from('chat_receipts').select('*').eq('thread_id',threadId).range(offset,offset+999);if(r.error)throw r.error;rows.push(...r.data);if(r.data.length<1000)break;}return rows;
+  }
+  async function acknowledgeChat(keys,read=false) {
+    for(let i=0;i<keys.length;i+=500){const r=await client.rpc('acknowledge_chat_messages',{message_keys:keys.slice(i,i+500),mark_read:read});if(r.error)throw r.error;}
+  }
+  async function appNotificationPreferences(values) {
+    const q=values?client.from('app_notification_preferences').upsert({...values,user_id:profile.id,updated_at:new Date().toISOString()}).select().single():client.from('app_notification_preferences').select('*').eq('user_id',profile.id).maybeSingle();
+    const r=await q;if(r.error)throw r.error;return r.data;
+  }
+  async function stemData() {
+    const c=await client.from('stem_connections').select('*').eq('organization_id',profile.organization_id).maybeSingle();if(c.error)throw c.error;
+    let rows=[];for(let offset=0;;offset+=1000){const r=await client.from('stem_applications').select('*').eq('organization_id',profile.organization_id).order('submitted_at',{ascending:false}).range(offset,offset+999);if(r.error)throw r.error;rows.push(...r.data);if(r.data.length<1000)break;}return {connection:c.data,applications:rows};
+  }
+  async function reviewStem(id,values) {
+    const r=await client.from('stem_applications').update({status:values.status,notes:values.notes,reviewed_by:profile.id,updated_at:new Date().toISOString()}).eq('id',id).select().single();if(r.error)throw r.error;return r.data;
+  }
+  async function enrolStem(application,cohort,details) {const r=await client.rpc('enrol_stem_application',{application_key:application,cohort_key:cohort,details});if(r.error)throw r.error;return r.data;}
   window.CAGE_BACKEND = {
+    enrolStem,
+    chatReceipts,acknowledgeChat,appNotificationPreferences,stemData,reviewStem,
     academyAttendance,
     academyData, academySave, academyCompletion,
     opsData,opsSave,opsRpc,sendCohort,

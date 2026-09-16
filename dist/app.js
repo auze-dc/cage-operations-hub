@@ -659,6 +659,7 @@ function replaceStateFromCloud(nextState) {
   for (const [key,value] of Object.entries(nextState)) state[key] = value;
   renderAll();
   window.CAGE_PERSONAL?.refreshView();
+  window.dispatchEvent(new CustomEvent("cage:messages-loaded"));
   if (removedLegacySamples) window.setTimeout(saveState, 0);
 }
 
@@ -1986,7 +1987,7 @@ function renderFinance() {
 
   document.getElementById("finance-quote-list").innerHTML = [...state.quotes].sort((a, b) => b.issued.localeCompare(a.issued)).map(quote => `
     <tr>
-      <td><strong>${escapeHtml(quote.number)}</strong><br><span class="project-client">${escapeHtml(quote.description)}</span></td>
+      <td><button type="button" class="financial-record-link" data-view-document="quote" data-record-id="${quote.id}">${escapeHtml(quote.number)}</button><br><span class="project-client">${escapeHtml(quote.description)}</span></td>
       <td>${escapeHtml(quote.client)}<br><span class="project-client">${escapeHtml(dealById(quote.deal)?.name || "Direct quote")}</span></td>
       <td>${formatDate(quote.validUntil)}</td>
       <td class="money-cell">${formatMoney(quote.amount)}</td>
@@ -2004,7 +2005,7 @@ function renderFinance() {
   }).sort((a, b) => a.due.localeCompare(b.due));
   document.getElementById("finance-invoice-list").innerHTML = invoices.map(invoice => {
     const effective = effectiveInvoiceStatus(invoice);
-    return `<tr><td><strong>${escapeHtml(invoice.number)}</strong><br><span class="project-client">${escapeHtml(invoice.description)}</span></td><td>${escapeHtml(invoice.client)}<br><span class="project-client">${escapeHtml(projectById(invoice.project)?.name || "Unlinked")}</span></td><td><span class="due-date ${effective === "Overdue" ? "overdue" : ""}">${formatDate(invoice.due)}</span></td><td class="money-cell">${formatMoney(invoice.amount)}</td><td><select class="invoice-status-select ${statusClass(effective)}" data-invoice-status="${invoice.id}" aria-label="Status for ${escapeHtml(invoice.number)}">${["Draft", "Sent", "Overdue", "Paid"].map(option => `<option ${option === effective ? "selected" : ""}>${option}</option>`).join("")}</select></td><td><button class="document-action" data-send-document="invoice" data-document-id="${invoice.id}">${invoice.sentAt ? "Resend" : "Send"}</button>${invoice.sentAt ? `<div class="document-sent">Sent ${formatDate(invoice.sentAt.slice(0, 10))}</div>` : ""}</td></tr>`;
+    return `<tr><td><button type="button" class="financial-record-link" data-view-document="invoice" data-record-id="${invoice.id}">${escapeHtml(invoice.number)}</button><br><span class="project-client">${escapeHtml(invoice.description)}</span></td><td>${escapeHtml(invoice.client)}<br><span class="project-client">${escapeHtml(projectById(invoice.project)?.name || "Unlinked")}</span></td><td><span class="due-date ${effective === "Overdue" ? "overdue" : ""}">${formatDate(invoice.due)}</span></td><td class="money-cell">${formatMoney(invoice.amount)}</td><td><select class="invoice-status-select ${statusClass(effective)}" data-invoice-status="${invoice.id}" aria-label="Status for ${escapeHtml(invoice.number)}">${["Draft", "Sent", "Overdue", "Paid"].map(option => `<option ${option === effective ? "selected" : ""}>${option}</option>`).join("")}</select></td><td><button class="document-action" data-send-document="invoice" data-document-id="${invoice.id}">${invoice.sentAt ? "Resend" : "Send"}</button>${invoice.sentAt ? `<div class="document-sent">Sent ${formatDate(invoice.sentAt.slice(0, 10))}</div>` : ""}</td></tr>`;
   }).join("") || `<tr><td colspan="6"><div class="empty-state"><p>No invoices match this filter.</p></div></td></tr>`;
 
   const projectFigures = state.projects.map(project => {
@@ -2017,7 +2018,7 @@ function renderFinance() {
     return `<div class="profit-row"><div class="profit-row-head"><strong>${escapeHtml(item.project.name)}</strong><span class="${item.net < 0 ? "negative" : ""}">${formatMoney(item.net, true)}</span></div><div class="profit-row-meta"><span>Revenue ${formatMoney(item.revenue, true)}</span><span>Costs ${formatMoney(item.costs, true)}</span></div><div class="profit-bar"><span style="width:${item.revenue / total * 100}%"></span><span style="width:${item.costs / total * 100}%"></span></div></div>`;
   }).join("")}</div>`;
 
-  document.getElementById("expense-list").innerHTML = [...state.expenses].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 7).map(expense => `<div class="expense-row"><span class="expense-icon">−</span><span class="expense-main"><strong>${escapeHtml(expense.description)}</strong><span>${expense.receiptPath ? `<button type="button" data-open-receipt="${expense.id}">Open receipt</button>` : escapeHtml(expense.receipt || "No receipt attached")}</span></span><span>${escapeHtml(projectById(expense.project)?.name || "Unlinked")}</span><span>${escapeHtml(expense.category)} · ${formatDate(expense.date)}</span><strong class="money-cell">${formatMoney(expense.amount)}</strong></div>`).join("");
+  document.getElementById("expense-list").innerHTML = [...state.expenses].sort((a, b) => b.date.localeCompare(a.date)).map(expense => `<div class="expense-row"><span class="expense-icon">−</span><span class="expense-main"><button type="button" class="financial-record-link" data-view-document="expense" data-record-id="${expense.id}">${escapeHtml(expense.description)}</button><span>${expense.receiptPath ? `<button type="button" data-open-receipt="${expense.id}">Open receipt</button>` : escapeHtml(expense.receipt || "No receipt attached")}</span></span><span>${escapeHtml(projectById(expense.project)?.name || "Unlinked")}</span><span>${escapeHtml(expense.category)} · ${formatDate(expense.date)}</span><strong class="money-cell">${formatMoney(expense.amount)}</strong></div>`).join("");
 }
 
 function threadIdForMessage(message) {
@@ -2101,12 +2102,17 @@ function threadLifecycle(thread) {
 }
 
 function renderChat() {
+  const scroller=document.getElementById('chat-messages');
+  const previousThread=scroller.dataset.thread;
+  const previousTop=scroller.scrollTop;
+  const followEnd=previousThread!==activeChatThread || scroller.scrollHeight-scroller.scrollTop-scroller.clientHeight<90;
+  const channelTop=document.getElementById('chat-channel-list').scrollTop;
   const allThreads = workThreads();
   if (!threadById(activeChatThread)) activeChatThread = allThreads[0]?.id || "";
   const query = document.getElementById("chat-search").value.trim().toLowerCase();
   const threads = allThreads.filter(thread => {
     const messages = messagesForThread(thread.id);
-    const matchesFilter = chatFilter === "all" || thread.category === chatFilter || (chatFilter === "work" && !["direct", "group", "team"].includes(thread.category));
+    const matchesFilter = chatFilter === "all" || thread.category === chatFilter || (chatFilter === "group" && thread.category === "team") || (chatFilter === "work" && !["direct", "group", "team"].includes(thread.category));
     const matchesSearch = !query || `${thread.title} ${thread.organisation} ${thread.type} ${messages.map(message => message.text).join(" ")}`.toLowerCase().includes(query);
     return matchesFilter && matchesSearch;
   }).sort((a, b) => {
@@ -2160,21 +2166,24 @@ function renderChat() {
     if (message.type === "System") return `${day}<div class="message-system"><span>↻</span>${escapeHtml(message.text)}<small>${escapeHtml(message.time)}</small></div>`;
     const type = message.type || "Update";
     const currentMember = window.CAGE_BACKEND?.currentMemberId?.() || "alexander";
-    return `${day}<div class="message-row ${message.sender === currentMember ? "mine" : ""} ${type === "Decision" ? "decision" : ""}">${message.sender !== currentMember ? `<span class="owner-avatar">${sender.initials}</span>` : ""}<div class="message-bubble"><div class="message-bubble-head"><span class="message-author">${escapeHtml(sender.name)}</span><span class="message-type ${type.toLowerCase().replaceAll(" ", "-")}">${escapeHtml(type)}</span></div><p>${escapeHtml(message.text)}</p>${message.audio ? `<button type="button" class="message-attachment" data-play-voice="${message.id}">▶ Voice message · ${Math.ceil(message.audioDuration || 0)}s</button><div data-voice-player="${message.id}"></div>` : message.attachment ? `<button class="message-attachment" data-preview-chat-file="${message.id}">⌁ ${escapeHtml(message.attachment)}</button>` : ""}<span class="message-meta">${escapeHtml(message.time)} ${message.pinned ? "· Pinned decision" : ""} ${message.sender === currentMember ? "✓✓" : ""}</span></div></div>`;
+    return `${day}<div data-message-id="${escapeHtml(message.id)}" class="message-row ${message.sender === currentMember ? "mine" : ""} ${type === "Decision" ? "decision" : ""}">${message.sender !== currentMember ? `<span class="owner-avatar">${sender.initials}</span>` : ""}<div class="message-bubble"><div class="message-bubble-head"><span class="message-author">${escapeHtml(sender.name)}</span><span class="message-type ${type.toLowerCase().replaceAll(" ", "-")}">${escapeHtml(type)}</span></div><p>${escapeHtml(message.text)}</p>${message.audio ? `<button type="button" class="message-attachment" data-play-voice="${message.id}">▶ Voice message · ${Math.ceil(message.audioDuration || 0)}s</button><div data-voice-player="${message.id}"></div>` : message.attachment ? `<button class="message-attachment" data-preview-chat-file="${message.id}">⌁ ${escapeHtml(message.attachment)}</button>` : ""}<span class="message-meta">${escapeHtml(message.time)} ${message.pinned ? "· Pinned decision" : ""} ${message.sender === currentMember ? `<button type="button" class="message-receipt" data-receipt="${escapeHtml(message.id)}">${window.CAGE_CHAT?.receiptLabel(message.id)||"Checking…"}</button>` : ""}</span></div></div>`;
   }).join("") : thread.customChat
     ? `<div class="empty-state"><div>${thread.direct ? "↔" : "◎"}</div><h3>${thread.direct ? "Start your private conversation" : "Start the group conversation"}</h3><p>Messages and files here are available only to the selected members.</p></div>`
     : thread.teamWide
       ? `<div class="empty-state"><div>◎</div><h3>Start the team conversation</h3><p>Ask a routine question or share an enquiry that does not yet belong to a specific work record.</p></div>`
       : `<div class="empty-state"><div>◌</div><h3>Start the official work record</h3><p>Use this conversation for updates, files, decisions, approvals and handovers from intake to closure.</p></div>`;
-  if (activeView === "chat") requestAnimationFrame(() => { const panel = document.getElementById("chat-messages"); panel.scrollTop = panel.scrollHeight; });
+  scroller.dataset.thread=activeChatThread;
+  document.getElementById('chat-channel-list').scrollTop=channelTop;
+  if (activeView === "chat") requestAnimationFrame(() => { scroller.scrollTop=followEnd?scroller.scrollHeight:previousTop;window.CAGE_CHAT?.rendered(); });
 }
 
 function selectChatThread(threadId) {
   if (!threadById(threadId)) return;
+  window.CAGE_CHAT?.switchDraft(activeChatThread,threadId);
   activeChatThread = threadId;
   renderChat();
   renderDashboard();
-  requestAnimationFrame(() => document.getElementById("chat-input").focus());
+  if(!window.matchMedia?.("(max-width:680px)").matches) requestAnimationFrame(() => document.getElementById("chat-input").focus({preventScroll:true}));
 }
 
 function openWorkChat(entityType, entityId) {
@@ -2216,6 +2225,7 @@ function sendChatMessage(text, attachment = "", attachmentPath = "", extra = {})
   });
   saveState();
   document.getElementById("chat-input").value = "";
+  window.CAGE_CHAT?.sent(activeChatThread);
   document.getElementById("chat-message-type").value = "Update";
   hideChatMentionPicker();
   renderChat();
@@ -3570,7 +3580,7 @@ function projectLinkedQuotes(projectId) {
   const dealIds = state.deals.filter(deal => deal.project === projectId).map(deal => deal.id);
   const requestDealIds = state.requests.filter(request => request.project === projectId && request.deal).map(request => request.deal);
   const ids = new Set([...dealIds, ...requestDealIds]);
-  return state.quotes.filter(quote => ids.has(quote.deal));
+  return state.quotes.filter(quote => quote.project===projectId || ids.has(quote.deal));
 }
 
 function projectReferenceFiles(project) {
@@ -3615,11 +3625,11 @@ function projectWorkspaceTab(project, context) {
 
   if (activeProjectTab === "gantt") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Schedule visual</span><h3>Gantt Chart</h3></div><button data-new-task-project="${project.id}">＋ Add task</button></div>${projectTimeline(tasks)}</section>`;
 
-  if (activeProjectTab === "invoices") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Billing</span><h3>${invoices.length} project invoices</h3></div><button data-new-invoice-project="${project.id}">＋ Create invoice</button></div><div class="project-finance-list">${invoices.map(invoice => `<div><span><strong>${escapeHtml(invoice.number)}</strong><small>${escapeHtml(invoice.description)}</small></span><span><strong>${formatMoney(invoice.amount, true)}</strong><small>Due ${formatDate(invoice.due)}</small></span><span class="status-pill ${statusClass(invoice.status)}">${escapeHtml(invoice.status)}</span><button data-send-document="invoice" data-document-id="${invoice.id}">${invoice.sentAt ? "Resend" : "Send"}</button></div>`).join("") || `<div class="project-empty"><strong>No invoices yet</strong><span>Create the first project invoice when a billing milestone is reached.</span></div>`}</div></section>`;
+  if (activeProjectTab === "invoices") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Billing</span><h3>${invoices.length} project invoices</h3></div><button data-new-invoice-project="${project.id}">＋ Create invoice</button></div><div class="project-finance-list">${invoices.map(invoice => `<div><span><button type="button" class="financial-record-link" data-view-document="invoice" data-record-id="${invoice.id}">${escapeHtml(invoice.number)}</button><small>${escapeHtml(invoice.description)}</small></span><span><strong>${formatMoney(invoice.amount, true)}</strong><small>Due ${formatDate(invoice.due)}</small></span><span class="status-pill ${statusClass(invoice.status)}">${escapeHtml(invoice.status)}</span><button data-send-document="invoice" data-document-id="${invoice.id}">${invoice.sentAt ? "Resend" : "Send"}</button></div>`).join("") || `<div class="project-empty"><strong>No invoices yet</strong><span>Create the first project invoice when a billing milestone is reached.</span></div>`}</div></section>`;
 
-  if (activeProjectTab === "quotes") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Commercial record</span><h3>${quotes.length} linked quotations</h3></div>${context.primaryDeal ? `<button data-new-quote-deal="${context.primaryDeal.id}">＋ Create quotation</button>` : ""}</div><div class="project-finance-list">${quotes.map(quote => `<div><span><strong>${escapeHtml(quote.number)}</strong><small>${escapeHtml(quote.description)}</small></span><span><strong>${formatMoney(quote.amount, true)}</strong><small>Valid to ${formatDate(quote.validUntil)}</small></span><span class="status-pill ${statusClass(quote.status)}">${escapeHtml(quote.status)}</span><button data-send-document="quote" data-document-id="${quote.id}">${quote.sentAt ? "Resend" : "Send"}</button></div>`).join("") || `<div class="project-empty"><strong>No linked quotations</strong><span>${context.primaryDeal ? "Create a quotation for the linked opportunity." : "This project has no linked CRM opportunity."}</span></div>`}</div></section>`;
+  if (activeProjectTab === "quotes") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Commercial record</span><h3>${quotes.length} linked quotations</h3></div><button data-new-quote-project="${project.id}">＋ Create quotation</button></div><div class="project-finance-list">${quotes.map(quote => `<div><span><button type="button" class="financial-record-link" data-view-document="quote" data-record-id="${quote.id}">${escapeHtml(quote.number)}</button><small>${escapeHtml(quote.description)}</small></span><span><strong>${formatMoney(quote.amount, true)}</strong><small>Valid to ${formatDate(quote.validUntil)}</small></span><span class="status-pill ${statusClass(quote.status)}">${escapeHtml(quote.status)}</span><button data-send-document="quote" data-document-id="${quote.id}">${quote.sentAt ? "Resend" : "Send"}</button></div>`).join("") || `<div class="project-empty"><strong>No linked quotations</strong><span>Create a quotation for this project.</span></div>`}</div></section>`;
 
-  return `<section class="project-panel"><div class="project-panel-heading"><div><span>Project spending</span><h3>${context.expenses.length} recorded expenses</h3></div><button data-new-project-expense="${project.id}">＋ Add expense</button></div><div class="project-expense-summary"><span><small>Total project expenses</small><strong>${formatMoney(costs, true)}</strong></span><span><small>Approved</small><strong>${formatMoney(context.expenses.filter(item => (item.status || "Pending") === "Approved").reduce((sum, item) => sum + item.amount, 0), true)}</strong></span><span><small>Pending review</small><strong>${context.expenses.filter(item => (item.status || "Pending") === "Pending").length}</strong></span></div><div class="project-expense-list">${context.expenses.slice().sort((a,b) => b.date.localeCompare(a.date)).map(expense => `<div><span><strong>${escapeHtml(expense.description)}</strong><small>${expense.receiptPath ? `<button type="button" data-open-receipt="${expense.id}">Open receipt</button> · ` : ""}${escapeHtml(expense.category)} · ${formatDate(expense.date)}${expense.receipt ? ` · ${escapeHtml(expense.receipt)}` : ""}</small></span><strong>${formatMoney(expense.amount, true)}</strong><select data-expense-status="${expense.id}" aria-label="Status for ${escapeHtml(expense.description)}">${["Pending", "Approved", "Rejected"].map(status => `<option ${status === (expense.status || "Pending") ? "selected" : ""}>${status}</option>`).join("")}</select></div>`).join("") || `<div class="project-empty"><strong>No expenses recorded</strong><span>Add field, equipment, travel or administrative costs against this project.</span></div>`}</div></section>`;
+  return `<section class="project-panel"><div class="project-panel-heading"><div><span>Project spending</span><h3>${context.expenses.length} recorded expenses</h3></div><button data-new-project-expense="${project.id}">＋ Add expense</button></div><div class="project-expense-summary"><span><small>Total project expenses</small><strong>${formatMoney(costs, true)}</strong></span><span><small>Approved</small><strong>${formatMoney(context.expenses.filter(item => (item.status || "Pending") === "Approved").reduce((sum, item) => sum + item.amount, 0), true)}</strong></span><span><small>Pending review</small><strong>${context.expenses.filter(item => (item.status || "Pending") === "Pending").length}</strong></span></div><div class="project-expense-list">${context.expenses.slice().sort((a,b) => b.date.localeCompare(a.date)).map(expense => `<div><span><button type="button" class="financial-record-link" data-view-document="expense" data-record-id="${expense.id}">${escapeHtml(expense.description)}</button><small>${expense.receiptPath ? `<button type="button" data-open-receipt="${expense.id}">Open receipt</button> · ` : ""}${escapeHtml(expense.category)} · ${formatDate(expense.date)}${expense.receipt ? ` · ${escapeHtml(expense.receipt)}` : ""}</small></span><strong>${formatMoney(expense.amount, true)}</strong><select data-expense-status="${expense.id}" aria-label="Status for ${escapeHtml(expense.description)}">${["Pending", "Approved", "Rejected"].map(status => `<option ${status === (expense.status || "Pending") ? "selected" : ""}>${status}</option>`).join("")}</select></div>`).join("") || `<div class="project-empty"><strong>No expenses recorded</strong><span>Add field, equipment, travel or administrative costs against this project.</span></div>`}</div></section>`;
 }
 
 function renderProjectWorkspace() {
@@ -4120,11 +4130,12 @@ function changeInvoiceStatus(invoiceId, status) {
   showToast(`${invoice.number} marked ${status}.`);
 }
 
-function openQuoteDialog(dealId = "") {
+function openQuoteDialog(dealId = "", projectId = "") {
   renderProjectOptions();
   const form = document.getElementById("quote-form");
   form.reset();
   form.dataset.requestId = "";
+  form.dataset.projectId = projectId;
   const validUntil = asDate(TODAY);
   validUntil.setUTCDate(validUntil.getUTCDate() + 21);
   form.elements.issued.value = TODAY;
@@ -4136,6 +4147,7 @@ function openQuoteDialog(dealId = "") {
     form.elements.amount.value = deal?.value || "";
     form.elements.description.value = deal?.name || "";
   }
+  if(projectId){const project=projectById(projectId);form.elements.client.value=project?.client||'';form.elements.description.value=project?.name||'';}
   document.getElementById("quote-form-error").textContent = "";
   document.getElementById("quote-dialog").showModal();
 }
@@ -4164,6 +4176,7 @@ async function createQuote(event) {
     createdBy:window.CAGE_BACKEND.currentMemberId(),
     id: `q-${Date.now()}`,
     number: nextQuoteNumber(),
+    project: event.currentTarget.dataset.projectId || dealById(String(data.get("deal")||""))?.project || "",
     client: String(data.get("client") || "").trim(),
     deal: String(data.get("deal") || ""),
     issued: String(data.get("issued") || ""),

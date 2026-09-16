@@ -12,7 +12,7 @@ const time=v=>v?new Date(v).toLocaleString('en-GB',{timeZone:'Africa/Blantyre',d
 const localTime=v=>v?new Date(new Date(v).getTime()+120*60000).toISOString().slice(0,16):'';
 const key=()=>`cage-academy:${api()?.currentProfile()?.id}`;
 let data=null,tab='overview',query='',selected='',loading=null,loadError='';
-const tabs=[['overview','Overview'],['courses','Courses'],['cohorts','Cohorts'],['learners','Learners'],['timetable','Timetable'],['fees','Fees & sponsors'],['reports','Reports']];
+const tabs=[['overview','Overview'],['courses','Courses'],['cohorts','Cohorts'],['learners','Learners'],['timetable','Timetable'],['fees','Fees & sponsors'],['reports','Reports'],['stem','STEM applications']];
 const panel=document.querySelector('[data-view-panel="training"]');
 const root=document.createElement('div');root.className='academy';root.id='academy';panel.append(root);
 const course=id=>data?.courses.find(r=>r.id===id),cohort=id=>data?.cohorts.find(r=>r.id===id),learner=id=>data?.learners.find(r=>r.id===id);
@@ -44,7 +44,7 @@ async function load(){
 }
 function render(){
  root.innerHTML=`<div class="academy-toolbar"><nav class="academy-tabs" role="tablist" aria-label="Training Academy">${tabs.map(([k,v])=>`<button role="tab" aria-selected="${tab===k}" data-academy="tab" data-id="${k}">${v}</button>`).join('')}</nav><div class="academy-filter"><input id="academy-query" type="search" aria-label="Search Academy" placeholder="Search learners, courses or cohorts" value="${esc(query)}"><select id="academy-cohort-filter" aria-label="Filter cohort"><option value="">All cohorts</option>${(data?.cohorts||[]).map(c=>`<option value="${c.id}" ${selected===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select>${btn('refresh','Refresh')}</div></div><div id="academy-content" role="tabpanel"></div>`;
- const content=$('academy-content');if(loadError){content.innerHTML=`<p class="academy-error" role="alert">${esc(loadError)}</p>${btn('refresh','Retry')}`;return;}if(!data){content.innerHTML=empty('Loading Academy records…');return;}
+ const content=$('academy-content');if(tab==='stem'){window.CAGE_STEM?.render(content);return;}if(loadError){content.innerHTML=`<p class="academy-error" role="alert">${esc(loadError)}</p>${btn('refresh','Retry')}`;return;}if(!data){content.innerHTML=empty('Loading Academy records…');return;}
  const views={overview:overview,courses:courses,cohorts:cohorts,learners:learners,timetable:timetable,fees:fees,reports:reports};content.innerHTML=(views[tab]||overview)();
  panel.querySelectorAll('#new-training-program-button,#new-cohort-button,#enrol-learner-button').forEach(b=>b.hidden=!canEdit());
 }
