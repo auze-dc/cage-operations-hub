@@ -703,7 +703,48 @@
     await flushSave();if(pendingState)throw new Error('Sync your draft before continuing');const r=await client.rpc(name,args);if(r.error)throw r.error;await loadWorkspace();return r.data;
   }
   async function sendCohort(payload) {const r=await client.functions.invoke('send-cohort-message',{body:payload});if(r.error)throw r.error;if(!r.data?.ok)throw new Error(r.data?.error||'Email failed');return r.data;}
+  async function academyData() {
+    if (!client || !profile) throw new Error("Sign in first.");
+    const base = await loadTraining();
+    const names = {sessions:'training_sessions', attendance:'learner_attendance', assessments:'training_assessments', certificates:'training_certificates', practical:'training_practical_logs', documents:'training_documents', materials:'training_materials'};
+    const entries = await Promise.all(Object.entries(names).map(async ([key,table]) => {
+      const r = await client.from(table).select('*');
+      if (r.error) throw new Error('Academy could not load. Confirm migration 014 is installed. ' + r.error.message);
+      return [key,r.data || []];
+    }));
+    let payments=[];
+    if(moduleLevel('finance')!=='none') payments=await opsData('invoice_payments');
+    return {...base,...Object.fromEntries(entries),payments};
+  }
+  async function academySave(table, values, id) {
+    const fields = {
+      training_courses:['name','category','duration','default_fee','certificate_type','requirements','outcome','active','modules','minimum_attendance','practical_minutes','required_assessments'],
+      training_cohorts:['name','lead_instructor','start_date','end_date','venue','capacity','status','source_reference','project_id'],
+      learners:['full_name','email','phone','date_of_birth','sponsor','guardian_name','guardian_phone','guardian_consent','collection_contacts','documents_complete','invoice_id','external_licence_status','rpl_number','rpl_expiry','renewal_due','notes','alumni_consent','skills'],
+      training_sessions:['cohort_id','title','starts_at','ends_at','instructor_id','venue','session_type','cancelled'],
+      training_practical_logs:['learner_id','performed_on','aircraft','exercise','minutes','notes','signed_off_by'],
+      training_documents:['learner_id','title','file_path'],
+      training_materials:['cohort_id','title','description','resource_url']
+    };
+    if (!fields[table] || !profile) throw new Error('Unknown Academy action');
+    if(id && ['training_practical_logs','training_documents'].includes(table)) throw new Error('Training evidence is append-only.');
+    const clean=Object.fromEntries(Object.entries(values).filter(([key])=>fields[table].includes(key)));
+    let q;
+    if(id) q=client.from(table).update(clean).eq('id',id).eq('organization_id',profile.organization_id);
+    else q=client.from(table).insert({...clean,organization_id:profile.organization_id,created_by:profile.id});
+    const result=await q.select().single();if(result.error)throw new Error(result.error.message);return result.data;
+  }
+  async function academyCompletion(id,issue=false) {
+    const r=await client.rpc(issue?'issue_academy_certificate':'academy_completion',{learner_key:id});
+    if(r.error)throw new Error(r.error.message);return r.data;
+  }
+  async function academyAttendance(rows) {
+    const result=await client.from('learner_attendance').upsert(rows.map(r=>({...r,recorded_by:profile.id,recorded_at:new Date().toISOString()})),{onConflict:'session_id,learner_id'});
+    if(result.error)throw new Error(result.error.message);
+  }
   window.CAGE_BACKEND = {
+    academyAttendance,
+    academyData, academySave, academyCompletion,
     opsData,opsSave,opsRpc,sendCohort,
     resolveSync, restoreDraft, flushSave, reviewSync, discardDraftRecord, syncState:()=>({pending:!!pendingState,conflicts:syncConflicts.length}),
     emailPreferences, saveEmailPreferences, emailRouting, saveEmailRouting, readChatNotifications, requestTaskHelp,

@@ -55,11 +55,13 @@ async function restore(){
  if(!saved||(saved.url!==location.href&&new URLSearchParams(location.search).has('view')))return;
  const g=saved.globals;if(api().moduleLevel(g.activeView)==='none')return;
  restoreGlobals(g);setView(g.activeView);await wait(450);
+ if(g.activeView==='training'){await window.CAGE_TRAINING_UI?.load();await window.CAGE_ACADEMY?.load();}
  if(g.activeView==='projects'&&g.activeProjectId&&state.projects.some(p=>p.id===g.activeProjectId))openProject(g.activeProjectId);
  if(g.activeView==='requests'&&g.activeRequestId&&state.requests.some(p=>p.id===g.activeRequestId))openRequest(g.activeRequestId);
  const panel=document.querySelector(`[data-view-panel="${CSS.escape(g.activeView)}"]`);if(panel)await apply(panel,saved.panel);
  for(const savedDialog of saved.dialogs||[]){
- let dialog=document.getElementById(savedDialog.id);const opener=locate(savedDialog.origin);
+ if(savedDialog.id==='academy-dialog' && savedDialog.forms.some(f=>f.id==='academy-form')) await window.CAGE_ACADEMY.restore(savedDialog);
+ let dialog=document.getElementById(savedDialog.id);const opener=savedDialog.id==='academy-dialog'?null:locate(savedDialog.origin);
  if(opener&&!opener.disabled){opener.click();for(let n=0;n<30;n++){await wait(100);dialog=document.getElementById(savedDialog.id);if(dialog?.open)break;}}
  if(!dialog){showToast('Your form draft is retained. Reopen its form to recover it.');continue;}
  if(!dialog.open){if(savedDialog.id==='task-dialog')openTaskDialog(savedDialog.fields.find(f=>f.name==='project')?.value||'',g.editingTaskId||'');else dialog.showModal();}

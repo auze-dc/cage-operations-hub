@@ -3,7 +3,7 @@
   const STAGES = ["Enquiry", "Registered", "Documents pending", "Training", "Assessment", "Certification", "Completed", "Withdrawn"];
   const COLUMNS = [["Enquiry", ["Enquiry"]], ["Registered", ["Registered", "Documents pending"]], ["Training", ["Training"]], ["Assessment", ["Assessment"]], ["Certification", ["Certification"]], ["Completed", ["Completed", "Withdrawn"]]];
   let records = { courses: [], cohorts: [], learners: [], staff: [] };
-  let loading = false;
+  let loading = null;
   let draggedLearner = null;
   const esc = value => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
   const course = id => records.courses.find(item => item.id === id);
@@ -68,7 +68,7 @@
     document.getElementById("rpl-fields").hidden = category !== "RPL Refresher"; document.getElementById("guardian-fields").hidden = category !== "STEM";
   }
   function render() { if (!document.getElementById("training-metrics")) return; renderMetrics(); renderCohorts(); renderAlerts(); renderLearners(); renderCourses(); populateDialogs(); updateConditionalFields(); }
-  async function load() { if (loading || !window.CAGE_BACKEND?.currentProfile?.()) return; loading = true; try { records = await window.CAGE_BACKEND.loadTraining(); render(); } catch (error) { showToast(error.message || "Training records could not be loaded."); } finally { loading = false; } }
+  function load() { if (!window.CAGE_BACKEND?.currentProfile?.()) return Promise.resolve(); if (loading) return loading; loading = (async () => { try { records = await window.CAGE_BACKEND.loadTraining(); render(); window.dispatchEvent(new CustomEvent("cage:training-loaded", {detail:records})); } catch (error) { showToast(error.message || "Training records could not be loaded."); } finally { loading = null; } })(); return loading; }
 
   document.getElementById("new-training-program-button").addEventListener("click", () => { document.getElementById("training-program-form").reset(); document.getElementById("training-program-dialog").showModal(); });
   document.getElementById("new-cohort-button").addEventListener("click", () => { populateDialogs(); document.getElementById("training-cohort-form").reset(); populateDialogs(); document.getElementById("training-cohort-dialog").showModal(); });

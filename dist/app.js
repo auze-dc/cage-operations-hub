@@ -1617,7 +1617,7 @@ function updateDealField(dealId, field, value) {
 }
 
 function calendarItemsForDate(date) {
-  const events = state.events.filter(event => event.date === date).map(event => ({
+  const events = [...state.events,...(window.CAGE_ACADEMY?.calendarEvents()||[])].filter(event => event.date === date).map(event => ({
     kind: event.type.toLowerCase(),
     title: event.title,
     time: event.start,
@@ -1671,7 +1671,7 @@ function renderCalendar() {
   document.getElementById("calendar-grid").innerHTML = `${weekdays.map(day => `<div class="calendar-weekday">${day}</div>`).join("")}${cells.join("")}`;
 
   const agenda = [];
-  state.events.filter(event => event.date >= TODAY).forEach(event => agenda.push({
+  [...state.events,...(window.CAGE_ACADEMY?.calendarEvents()||[])].filter(event => event.date >= TODAY).forEach(event => agenda.push({
     date: event.date,
     time: event.start,
     title: event.title,
