@@ -7,15 +7,16 @@
   <meta name="description" content="CAGE Operations Hub for request intake, projects, missions, equipment, compliance, approvals, CRM, calendar, finance, chat, leave and knowledge.">
   <title>CAGE Operations Hub</title>
   <link rel="icon" href="./cage-logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=15.6.0">
-  <link rel="stylesheet" href="./monday-theme.css?v=15.6.0">
-<link rel="stylesheet" href="./personal-work.css?v=15.6.0">
-  <link rel="stylesheet" href="./mobile.css?v=15.6.0">
-<link rel="stylesheet" href="./daily-planner.css?v=15.6.0">
-<link rel="stylesheet" href="./workflows.css?v=15.6.0">
-  <link rel="stylesheet" href="./refinements.css?v=15.6.0">
-  <link rel="stylesheet" href="./academy.css?v=15.6.0">
-<link rel="stylesheet" href="./hub-experience.css?v=15.6.0">
+  <link rel="stylesheet" href="./styles.css?v=15.6.1">
+  <link rel="stylesheet" href="./monday-theme.css?v=15.6.1">
+<link rel="stylesheet" href="./personal-work.css?v=15.6.1">
+  <link rel="stylesheet" href="./mobile.css?v=15.6.1">
+<link rel="stylesheet" href="./daily-planner.css?v=15.6.1">
+<link rel="stylesheet" href="./workflows.css?v=15.6.1">
+  <link rel="stylesheet" href="./refinements.css?v=15.6.1">
+  <link rel="stylesheet" href="./academy.css?v=15.6.1">
+<link rel="stylesheet" href="./hub-experience.css?v=15.6.1">
+  <link rel="stylesheet" href="./messenger.css?v=15.6.1">
 </head>
 <body class="session-checking">
   <div class="session-loader" role="status" aria-live="polite"><span></span><strong>Opening CAGE Operations Hub…</strong></div>
@@ -341,8 +342,8 @@
           <div class="chat-workspace surface">
             <aside class="chat-channels">
               <div class="chat-create-actions"><button type="button" id="new-direct-chat">＋ Message</button><button type="button" id="new-group-chat">＋ Group</button></div>
-              <label class="chat-search"><span>⌕</span><input id="chat-search" type="search" placeholder="Search work or messages" aria-label="Search work conversations"></label>
-              <div class="chat-filter" id="chat-filter"><button class="active" data-chat-filter="all">All</button><button data-chat-filter="direct">Inbox</button><button data-chat-filter="group">Groups</button><button data-chat-filter="work">Work</button></div>
+              <label class="chat-search"><span>⌕</span><input id="chat-search" type="search" placeholder="Search chats or messages" aria-label="Search work conversations"></label>
+              <div class="chat-filter" id="chat-filter"><button class="active" data-chat-filter="all">All</button><button data-chat-filter="unread">Unread</button><button data-chat-filter="favourites">Favourites</button><button data-chat-filter="direct">Inbox</button><button data-chat-filter="group">Groups</button><button data-chat-filter="work">Work</button></div>
               <div id="chat-channel-list" class="chat-channel-list"></div>
             </aside>
             <section class="chat-main">
@@ -936,24 +937,25 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <noscript><div class="noscript">JavaScript is required to use the CAGE Operations Hub.</div></noscript>
-  <script src="./runtime-config.js?v=15.6.0" defer></script>
-  <script src="./vendor/supabase.js?v=15.6.0" defer></script>
-  <script src="./reliable-sync.js?v=15.6.0" defer></script>
-  <script src="./production.js?v=15.6.0" defer></script>
-  <script src="./app.js?v=15.6.0" defer></script>
-  <script src="./hr.js?v=15.6.0" defer></script>
-  <script src="./training.js?v=15.6.0" defer></script>
-<script src="./vendor/pdf-lib.min.js?v=15.6.0" defer></script>
-<script src="./document-pdf.js?v=15.6.0" defer></script>
-<script src="./documents-ui.js?v=15.6.0" defer></script>
-<script src="./personal-work.js?v=15.6.0" defer></script>
-  <script src="./mobile.js?v=15.6.0" defer></script>
-<script src="./daily-planner.js?v=15.6.0" defer></script>
-<script src="./staff-email.js?v=15.6.0" defer></script>
-<script src="./workflows.js?v=15.6.0" defer></script>
-<script src="./academy.js?v=15.6.0" defer></script>
-<script src="./hub-experience.js?v=15.6.0" defer></script>
-<script src="./stem-intake.js?v=15.6.0" defer></script>
-<script src="./refresh-recovery.js?v=15.6.0" defer></script>
+  <script src="./runtime-config.js?v=15.6.1" defer></script>
+  <script src="./vendor/supabase.js?v=15.6.1" defer></script>
+  <script src="./reliable-sync.js?v=15.6.1" defer></script>
+  <script src="./production.js?v=15.6.1" defer></script>
+  <script src="./app.js?v=15.6.1" defer></script>
+  <script src="./hr.js?v=15.6.1" defer></script>
+  <script src="./training.js?v=15.6.1" defer></script>
+<script src="./vendor/pdf-lib.min.js?v=15.6.1" defer></script>
+<script src="./document-pdf.js?v=15.6.1" defer></script>
+<script src="./documents-ui.js?v=15.6.1" defer></script>
+<script src="./personal-work.js?v=15.6.1" defer></script>
+  <script src="./mobile.js?v=15.6.1" defer></script>
+<script src="./daily-planner.js?v=15.6.1" defer></script>
+<script src="./staff-email.js?v=15.6.1" defer></script>
+<script src="./workflows.js?v=15.6.1" defer></script>
+<script src="./academy.js?v=15.6.1" defer></script>
+<script src="./hub-experience.js?v=15.6.1" defer></script>
+<script src="./stem-intake.js?v=15.6.1" defer></script>
+<script src="./messenger.js?v=15.6.1" defer></script>
+<script src="./refresh-recovery.js?v=15.6.1" defer></script>
 </body>
 </html>

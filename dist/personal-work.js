@@ -26,7 +26,7 @@ function applyAccess(){
    const level=backend().moduleLevel(panel.dataset.viewPanel);
    panel.querySelectorAll('button,input,select,textarea').forEach(el=>{
     if(el.dataset.accessDisabled){el.disabled=false;delete el.dataset.accessDisabled;}
-    const isNavigation=el.matches('[data-view],[data-go-view],[data-chat-thread],[data-chat-filter],[data-open-project],[data-project-tab],[data-play-voice],[data-preview-chat-file],[data-open-receipt],[data-equipment-history],[data-view-document],[data-record-pdf],[data-receipt],[data-chat-info],[data-finance-section]') || el.type==='search';
+    const isNavigation=el.matches('[data-view],[data-go-view],[data-chat-thread],[data-chat-filter],[data-open-project],[data-project-tab],[data-play-voice],[data-preview-chat-file],[data-open-receipt],[data-equipment-history],[data-view-document],[data-record-pdf],[data-receipt],[data-chat-info],[data-finance-section],[data-conversation-search],[data-chat-menu-toggle],[data-chat-favourite],#chat-theme-toggle,#message-find-prev,#message-find-next,#message-find-close') || el.type==='search';
     if(level==='view' && !isNavigation && !el.closest('[data-personal-readonly]')) { el.disabled=true;el.dataset.accessDisabled='true'; }
    });
  });

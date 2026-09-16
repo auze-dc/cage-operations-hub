@@ -2101,6 +2101,12 @@ function threadLifecycle(thread) {
   return steps;
 }
 
+function chatUnreadCount(threadId) {
+  const personal = window.CAGE_PERSONAL?.chatUnread?.(threadId);
+  if (Number.isFinite(personal)) return personal;
+  const current = window.CAGE_BACKEND?.currentMemberId?.() || "alexander";
+  return messagesForThread(threadId).filter(message => message.unread && message.sender !== current).length;
+}
 function renderChat() {
   const scroller=document.getElementById('chat-messages');
   const previousThread=scroller.dataset.thread;
@@ -2112,7 +2118,7 @@ function renderChat() {
   const query = document.getElementById("chat-search").value.trim().toLowerCase();
   const threads = allThreads.filter(thread => {
     const messages = messagesForThread(thread.id);
-    const matchesFilter = chatFilter === "all" || thread.category === chatFilter || (chatFilter === "group" && thread.category === "team") || (chatFilter === "work" && !["direct", "group", "team"].includes(thread.category));
+    const matchesFilter = chatFilter === "all" || (chatFilter === "unread" && chatUnreadCount(thread.id) > 0) || (chatFilter === "favourites" && window.CAGE_MESSENGER?.isFavourite(thread.id)) || thread.category === chatFilter || (chatFilter === "group" && thread.category === "team") || (chatFilter === "work" && !["direct", "group", "team"].includes(thread.category));
     const matchesSearch = !query || `${thread.title} ${thread.organisation} ${thread.type} ${messages.map(message => message.text).join(" ")}`.toLowerCase().includes(query);
     return matchesFilter && matchesSearch;
   }).sort((a, b) => {
@@ -2127,8 +2133,10 @@ function renderChat() {
     const currentMember = window.CAGE_BACKEND?.currentMemberId?.() || "alexander";
     const personalUnread = window.CAGE_PERSONAL?.chatUnread?.(thread.id);
     const unread = Number.isFinite(personalUnread) ? personalUnread : messages.filter(message => message.unread && message.sender !== currentMember).length;
-    const glyph = thread.direct ? "DM" : thread.customChat ? "GP" : thread.teamWide ? "GE" : thread.type === "Grant" ? "GR" : thread.type === "Tender / RFQ" ? "TD" : thread.project ? "PR" : "RQ";
-    return `<button class="chat-channel ${thread.id === activeChatThread ? "active" : ""}" data-chat-thread="${thread.id}"><span class="chat-channel-icon ${thread.category}">${glyph}</span><span class="chat-channel-copy"><strong>${escapeHtml(thread.title)}</strong><em>${escapeHtml(thread.stage)} · ${escapeHtml(thread.organisation)}</em><span>${escapeHtml(last?.text || "Start the work conversation")}</span></span>${unread ? `<span class="unread-count">${unread}</span>` : ""}</button>`;
+    const glyph = thread.title.split(/\s+/).slice(0, 2).map(word => word[0]).join("").toUpperCase();
+    const preview = last ? `${last.sender === currentMember ? "You: " : thread.direct ? "" : teamMember(last.sender).name.split(" ")[0]+": "}${last.audio ? "Voice message" : last.text || last.attachment || "Attachment"}` : "Start a conversation";
+    const stamp = last ? (last.date === TODAY ? last.time : formatDate(last.date)) : "";
+    return `<button type="button" class="chat-channel ${thread.id === activeChatThread ? "active" : ""} ${unread ? "has-unread" : ""}" data-chat-thread="${escapeHtml(thread.id)}" aria-current="${thread.id === activeChatThread ? "true" : "false"}"><span class="chat-channel-icon ${thread.category}">${escapeHtml(glyph)}</span><span class="chat-channel-copy"><strong>${escapeHtml(thread.title)}</strong><span>${escapeHtml(preview)}</span></span><span class="chat-channel-status"><time>${escapeHtml(stamp)}</time><span>${window.CAGE_MESSENGER?.isFavourite(thread.id) ? '<span class="chat-favourite-mark" aria-label="Favourite">★</span>' : ""}${unread ? `<span class="unread-count">${unread}</span>` : ""}</span></span></button>`;
   }).join("") : `<div class="chat-list-empty">No conversations match this view.</div>`;
 
   const thread = threadById(activeChatThread);
@@ -2166,7 +2174,7 @@ function renderChat() {
     if (message.type === "System") return `${day}<div class="message-system"><span>↻</span>${escapeHtml(message.text)}<small>${escapeHtml(message.time)}</small></div>`;
     const type = message.type || "Update";
     const currentMember = window.CAGE_BACKEND?.currentMemberId?.() || "alexander";
-    return `${day}<div data-message-id="${escapeHtml(message.id)}" class="message-row ${message.sender === currentMember ? "mine" : ""} ${type === "Decision" ? "decision" : ""}">${message.sender !== currentMember ? `<span class="owner-avatar">${sender.initials}</span>` : ""}<div class="message-bubble"><div class="message-bubble-head"><span class="message-author">${escapeHtml(sender.name)}</span><span class="message-type ${type.toLowerCase().replaceAll(" ", "-")}">${escapeHtml(type)}</span></div><p>${escapeHtml(message.text)}</p>${message.audio ? `<button type="button" class="message-attachment" data-play-voice="${message.id}">▶ Voice message · ${Math.ceil(message.audioDuration || 0)}s</button><div data-voice-player="${message.id}"></div>` : message.attachment ? `<button class="message-attachment" data-preview-chat-file="${message.id}">⌁ ${escapeHtml(message.attachment)}</button>` : ""}<span class="message-meta">${escapeHtml(message.time)} ${message.pinned ? "· Pinned decision" : ""} ${message.sender === currentMember ? `<button type="button" class="message-receipt" data-receipt="${escapeHtml(message.id)}">${window.CAGE_CHAT?.receiptLabel(message.id)||"Checking…"}</button>` : ""}</span></div></div>`;
+    return `${day}<div data-message-id="${escapeHtml(message.id)}" class="message-row ${message.sender === currentMember ? "mine" : ""} ${type === "Decision" ? "decision" : ""}">${message.sender !== currentMember ? `<span class="owner-avatar">${sender.initials}</span>` : ""}<div class="message-bubble"><div class="message-bubble-head"><span class="message-author">${escapeHtml(sender.name)}</span><span class="message-type ${type === "Update" ? "routine-message " : ""}${type.toLowerCase().replaceAll(" ", "-")}">${escapeHtml(type)}</span></div><p>${escapeHtml(message.text)}</p>${message.audio ? `<button type="button" class="message-attachment" data-play-voice="${message.id}">▶ Voice message · ${Math.ceil(message.audioDuration || 0)}s</button><div data-voice-player="${message.id}"></div>` : message.attachment ? `<button class="message-attachment" data-preview-chat-file="${message.id}">⌁ ${escapeHtml(message.attachment)}</button>` : ""}<span class="message-meta">${escapeHtml(message.time)} ${message.pinned ? "· Pinned decision" : ""} ${message.sender === currentMember ? `<button type="button" class="message-receipt" data-receipt="${escapeHtml(message.id)}">${window.CAGE_CHAT?.receiptLabel(message.id)||"Checking…"}</button>` : ""}</span></div></div>`;
   }).join("") : thread.customChat
     ? `<div class="empty-state"><div>${thread.direct ? "↔" : "◎"}</div><h3>${thread.direct ? "Start your private conversation" : "Start the group conversation"}</h3><p>Messages and files here are available only to the selected members.</p></div>`
     : thread.teamWide
@@ -5265,7 +5273,7 @@ document.getElementById("chat-input").addEventListener("keydown", event => {
       return;
     }
   }
-  if (event.key !== "Enter" || event.shiftKey) return;
+  if (event.isComposing || event.keyCode === 229 || event.key !== "Enter" || event.shiftKey) return;
   if (state.settings.enterToSend === false) return;
   event.preventDefault();
   sendChatMessage(event.currentTarget.value);
