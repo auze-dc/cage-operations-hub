@@ -752,6 +752,21 @@
     const q=values?client.from('app_notification_preferences').upsert({...values,user_id:profile.id,updated_at:new Date().toISOString()}).select().single():client.from('app_notification_preferences').select('*').eq('user_id',profile.id).maybeSingle();
     const r=await q;if(r.error)throw r.error;return r.data;
   }
+  const applicationColumns='id,organization_id,intake_id,full_name,email,phone,answers,form_snapshot,category,identity_type,status,staff_notes,submitted_at,reviewed_by,updated_at,learner_id,cohort_id';
+  async function admissionData(){
+    const read=async(table,columns='*')=>{let out=[];for(let offset=0;;offset+=1000){const r=await client.from(table).select(columns).eq('organization_id',profile.organization_id).range(offset,offset+999);if(r.error)throw r.error;out.push(...r.data);if(r.data.length<1000)return out;}};
+    const [intakes,applications,files]=await Promise.all([read('academy_intakes'),read('academy_applications',applicationColumns),read('academy_application_files')]);return {intakes,applications,files};
+  }
+  async function admissionSave(values,id,revision){
+    const keys=['category','title','description','published','accepting','closes_on','start_date','fee','currency','payment_instructions','venue','fields','schedule','schedule_notes'];
+    const clean=Object.fromEntries(Object.entries(values).filter(([key])=>keys.includes(key)));
+    const q=id?client.from('academy_intakes').update(clean).eq('id',id).eq('revision',revision).eq('organization_id',profile.organization_id):client.from('academy_intakes').insert({...clean,organization_id:profile.organization_id,created_by:profile.id});
+    const r=await q.select().maybeSingle();if(r.error)throw r.error;if(!r.data)throw new Error('This call was changed by another staff member. Refresh before saving. Your editing form is still open.');return r.data;
+  }
+  async function admissionReview(id,status,note){const r=await client.rpc('review_academy_application',{app:id,new_status:status,note});if(r.error)throw r.error;}
+  async function admissionPayment(id,status,note){const r=await client.rpc('review_academy_payment',{file_key:id,new_status:status,note});if(r.error)throw r.error;}
+  async function admissionEnrol(id,cohort,details){const r=await client.rpc('enrol_academy_application',{app:id,cohort_key:cohort,details});if(r.error)throw r.error;return r.data;}
+  async function admissionFile(id){const body=new FormData();body.set('file',id);const r=await client.functions.invoke('academy-admissions?action=staff-file',{body});if(r.error)throw r.error;if(r.data.error)throw new Error(r.data.error);return r.data.url;}
   async function stemData() {
     const c=await client.from('stem_connections').select('*').eq('organization_id',profile.organization_id).maybeSingle();if(c.error)throw c.error;
     let rows=[];for(let offset=0;;offset+=1000){const r=await client.from('stem_applications').select('*').eq('organization_id',profile.organization_id).order('submitted_at',{ascending:false}).range(offset,offset+999);if(r.error)throw r.error;rows.push(...r.data);if(r.data.length<1000)break;}return {connection:c.data,applications:rows};
@@ -761,6 +776,7 @@
   }
   async function enrolStem(application,cohort,details) {const r=await client.rpc('enrol_stem_application',{application_key:application,cohort_key:cohort,details});if(r.error)throw r.error;return r.data;}
   window.CAGE_BACKEND = {
+    admissionData,admissionSave,admissionReview,admissionPayment,admissionFile,admissionEnrol,
     enrolStem,
     chatReceipts,acknowledgeChat,appNotificationPreferences,stemData,reviewStem,
     academyAttendance,

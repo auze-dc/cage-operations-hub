@@ -7,16 +7,17 @@
   <meta name="description" content="CAGE Operations Hub for request intake, projects, missions, equipment, compliance, approvals, CRM, calendar, finance, chat, leave and knowledge.">
   <title>CAGE Operations Hub</title>
   <link rel="icon" href="./cage-logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=15.6.1">
-  <link rel="stylesheet" href="./monday-theme.css?v=15.6.1">
-<link rel="stylesheet" href="./personal-work.css?v=15.6.1">
-  <link rel="stylesheet" href="./mobile.css?v=15.6.1">
-<link rel="stylesheet" href="./daily-planner.css?v=15.6.1">
-<link rel="stylesheet" href="./workflows.css?v=15.6.1">
-  <link rel="stylesheet" href="./refinements.css?v=15.6.1">
-  <link rel="stylesheet" href="./academy.css?v=15.6.1">
-<link rel="stylesheet" href="./hub-experience.css?v=15.6.1">
-  <link rel="stylesheet" href="./messenger.css?v=15.6.1">
+  <link rel="stylesheet" href="./styles.css?v=15.7.0">
+  <link rel="stylesheet" href="./monday-theme.css?v=15.7.0">
+<link rel="stylesheet" href="./personal-work.css?v=15.7.0">
+  <link rel="stylesheet" href="./mobile.css?v=15.7.0">
+<link rel="stylesheet" href="./daily-planner.css?v=15.7.0">
+<link rel="stylesheet" href="./workflows.css?v=15.7.0">
+  <link rel="stylesheet" href="./refinements.css?v=15.7.0">
+  <link rel="stylesheet" href="./academy.css?v=15.7.0">
+<link rel="stylesheet" href="./hub-experience.css?v=15.7.0">
+  <link rel="stylesheet" href="./messenger.css?v=15.7.0">
+<link rel="stylesheet" href="./admissions.css?v=15.7.0">
 </head>
 <body class="session-checking">
   <div class="session-loader" role="status" aria-live="polite"><span></span><strong>Opening CAGE Operations Hub…</strong></div>
@@ -900,7 +901,7 @@
     </form>
   </dialog>
 
-  <dialog id="training-program-dialog" class="app-dialog"><form method="dialog" id="training-program-form"><div class="dialog-heading"><div><p class="section-kicker">Training catalogue</p><h2>Create course</h2><p>Use this for any future training CAGE wants to deliver.</p></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div><div class="form-grid"><label class="field field-wide"><span>Course name *</span><input name="name" required></label><label class="field"><span>Training category *</span><select name="category"><option>RPL</option><option>RPL Refresher</option><option>STEM</option><option>Technical</option><option>Corporate</option><option>Other</option></select></label><label class="field"><span>Default duration *</span><input name="duration" required placeholder="e.g. 5 days"></label><label class="field"><span>Default fee per learner (MWK)</span><input name="fee" type="number" min="0" step="1000"></label><label class="field"><span>Certificate *</span><select name="certificate"><option>CAGE certificate</option><option>RPL / regulatory pathway</option><option>Attendance certificate</option><option>None</option></select></label><label class="field field-wide"><span>Required documents or controls</span><input name="requirements" placeholder="ID, medical, existing RPL, guardian consent, etc."></label><label class="field field-wide"><span>Course outcome *</span><textarea name="outcome" required rows="3"></textarea></label></div><p class="form-error" id="training-program-error"></p><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Create course</button></div></form></dialog>
+  <dialog id="training-program-dialog" class="app-dialog"><form method="dialog" id="training-program-form"><div class="dialog-heading"><div><p class="section-kicker">Training catalogue</p><h2>Create course</h2><p>Use this for any future training CAGE wants to deliver.</p></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div><div class="form-grid"><label class="field field-wide"><span>Course name *</span><input name="name" required></label><label class="field"><span>Training category *</span><select name="category"><option>RPL</option><option>RPL Refresher</option><option>STEM</option><option>Industry Specific</option><option>Technical</option><option>Corporate</option><option>Other</option></select></label><label class="field"><span>Default duration *</span><input name="duration" required placeholder="e.g. 5 days"></label><label class="field"><span>Default fee per learner (MWK)</span><input name="fee" type="number" min="0" step="1000"></label><label class="field"><span>Certificate *</span><select name="certificate"><option>CAGE certificate</option><option>RPL / regulatory pathway</option><option>Attendance certificate</option><option>None</option></select></label><label class="field field-wide"><span>Required documents or controls</span><input name="requirements" placeholder="ID, medical, existing RPL, guardian consent, etc."></label><label class="field field-wide"><span>Course outcome *</span><textarea name="outcome" required rows="3"></textarea></label></div><p class="form-error" id="training-program-error"></p><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Create course</button></div></form></dialog>
 
   <dialog id="training-cohort-dialog" class="app-dialog"><form method="dialog" id="training-cohort-form"><div class="dialog-heading"><div><p class="section-kicker">Training delivery</p><h2>Create cohort</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div><div class="form-grid"><label class="field field-wide"><span>Cohort name *</span><input name="name" required></label><label class="field"><span>Course *</span><select name="courseId" id="cohort-course-input" required></select></label><label class="field"><span>Lead instructor *</span><select name="lead" id="cohort-lead-input" required></select></label><label class="field"><span>Start date *</span><input name="start" type="date" required></label><label class="field"><span>End date *</span><input name="end" type="date" required></label><label class="field"><span>Venue *</span><input name="venue" required></label><label class="field"><span>Capacity *</span><input name="capacity" type="number" min="1" value="12" required></label><label class="field field-wide"><span>Linked accepted request or client</span><input name="source" placeholder="Request number, client or internal programme"></label></div><p class="form-error" id="training-cohort-error"></p><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Create cohort</button></div></form></dialog>
 
@@ -937,25 +938,27 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <noscript><div class="noscript">JavaScript is required to use the CAGE Operations Hub.</div></noscript>
-  <script src="./runtime-config.js?v=15.6.1" defer></script>
-  <script src="./vendor/supabase.js?v=15.6.1" defer></script>
-  <script src="./reliable-sync.js?v=15.6.1" defer></script>
-  <script src="./production.js?v=15.6.1" defer></script>
-  <script src="./app.js?v=15.6.1" defer></script>
-  <script src="./hr.js?v=15.6.1" defer></script>
-  <script src="./training.js?v=15.6.1" defer></script>
-<script src="./vendor/pdf-lib.min.js?v=15.6.1" defer></script>
-<script src="./document-pdf.js?v=15.6.1" defer></script>
-<script src="./documents-ui.js?v=15.6.1" defer></script>
-<script src="./personal-work.js?v=15.6.1" defer></script>
-  <script src="./mobile.js?v=15.6.1" defer></script>
-<script src="./daily-planner.js?v=15.6.1" defer></script>
-<script src="./staff-email.js?v=15.6.1" defer></script>
-<script src="./workflows.js?v=15.6.1" defer></script>
-<script src="./academy.js?v=15.6.1" defer></script>
-<script src="./hub-experience.js?v=15.6.1" defer></script>
-<script src="./stem-intake.js?v=15.6.1" defer></script>
-<script src="./messenger.js?v=15.6.1" defer></script>
-<script src="./refresh-recovery.js?v=15.6.1" defer></script>
+  <script src="./runtime-config.js?v=15.7.0" defer></script>
+  <script src="./vendor/supabase.js?v=15.7.0" defer></script>
+  <script src="./reliable-sync.js?v=15.7.0" defer></script>
+  <script src="./production.js?v=15.7.0" defer></script>
+  <script src="./app.js?v=15.7.0" defer></script>
+  <script src="./hr.js?v=15.7.0" defer></script>
+  <script src="./training.js?v=15.7.0" defer></script>
+<script src="./vendor/pdf-lib.min.js?v=15.7.0" defer></script>
+<script src="./document-pdf.js?v=15.7.0" defer></script>
+<script src="./documents-ui.js?v=15.7.0" defer></script>
+<script src="./personal-work.js?v=15.7.0" defer></script>
+  <script src="./mobile.js?v=15.7.0" defer></script>
+<script src="./daily-planner.js?v=15.7.0" defer></script>
+<script src="./staff-email.js?v=15.7.0" defer></script>
+<script src="./workflows.js?v=15.7.0" defer></script>
+<script src="./admissions-common.js?v=15.7.0" defer></script>
+<script src="./admissions-admin.js?v=15.7.0" defer></script>
+<script src="./academy.js?v=15.7.0" defer></script>
+<script src="./hub-experience.js?v=15.7.0" defer></script>
+<script src="./stem-intake.js?v=15.7.0" defer></script>
+<script src="./messenger.js?v=15.7.0" defer></script>
+<script src="./refresh-recovery.js?v=15.7.0" defer></script>
 </body>
 </html>
