@@ -39,3 +39,6 @@ verify_jwt = true
 # Public form URL lookup; POST ingestion uses a separate server-side shared secret.
 [functions.stem-intake]
 verify_jwt = false
+
+[functions.academy-admissions]
+verify_jwt = false
