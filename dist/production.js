@@ -775,7 +775,10 @@
   const applicationColumns='id,organization_id,intake_id,full_name,email,phone,answers,form_snapshot,category,identity_type,status,staff_notes,submitted_at,reviewed_by,updated_at,learner_id,cohort_id';
   async function admissionData(){
     const read=async(table,columns='*')=>{let out=[];for(let offset=0;;offset+=1000){const r=await client.from(table).select(columns).eq('organization_id',profile.organization_id).range(offset,offset+999);if(r.error)throw r.error;out.push(...r.data);if(r.data.length<1000)return out;}};
-    const [intakes,applications,files]=await Promise.all([read('academy_intakes'),read('academy_applications',applicationColumns),read('academy_application_files')]);return {intakes,applications,files};
+    const [intakes,applications,files,emailResult]=await Promise.all([
+      read('academy_intakes'),read('academy_applications',applicationColumns),read('academy_application_files'),
+      read('enrollment_email_outbox','id,source,application_id,status,sent_at').then(emails=>({emails})).catch(()=>({emails:[],emailStatusUnavailable:true}))
+    ]);return {intakes,applications,files,...emailResult};
   }
   async function admissionSave(values,id,revision){
     const keys=['category','title','description','published','accepting','closes_on','start_date','fee','currency','payment_instructions','venue','fields','schedule','schedule_notes'];
@@ -785,9 +788,24 @@
   }
   async function admissionReview(id,status,note){const r=await client.rpc('review_academy_application',{app:id,new_status:status,note});if(r.error)throw r.error;}
   async function admissionPayment(id,status,note){const r=await client.rpc('review_academy_payment',{file_key:id,new_status:status,note});if(r.error)throw r.error;}
-  async function sendEnrolmentEmail(applicationId){const r=await client.functions.invoke('send-enrolment-email',{body:{applicationId}});if(r.error)throw r.error;if(!r.data?.ok)throw new Error(r.data?.error||'Enrolment email failed');return r.data;}
-  async function admissionEnrol(id,cohort,details){const r=await client.rpc('enrol_academy_application',{app:id,cohort_key:cohort,details});if(r.error)throw r.error;let email={ok:false};try{email=await sendEnrolmentEmail(id);}catch(error){return {learnerId:r.data,emailSent:false,emailWarning:error.message||'Congratulatory email could not be sent'};}return {learnerId:r.data,emailSent:true,email};} 
-  async function admissionEnrolmentEmail(id){return await sendEnrolmentEmail(id);}
+  // Enrollment queues the welcome email in the same database transaction.
+  // Reading delivery status must never cause a second send.
+  async function admissionEmailStatus(id){
+    const r=await client.from('enrollment_email_outbox').select('status,sent_at')
+      .eq('organization_id',profile.organization_id).eq('source','academy_applications')
+      .eq('application_id',id).maybeSingle();
+    if(r.error)throw r.error;
+    return r.data||{status:'not_queued'};
+  }
+  async function admissionEnrol(id,cohort,details){
+    const r=await client.rpc('enrol_academy_application',{app:id,cohort_key:cohort,details});
+    if(r.error)throw r.error;
+    const result={learnerId:r.data,emailWarning:'Welcome email now uses the delivery queue. Refresh the Hub to check its status.'};
+    try{return {...result,emailStatus:(await admissionEmailStatus(id)).status};}
+    catch{return {...result,emailStatus:'unavailable'};}
+  }
+  // Cached older screens must not claim that a read-only status check sent mail.
+  async function admissionEnrolmentEmail(){throw new Error('Welcome emails now use the delivery queue. Refresh the Hub and choose Check email status.');}
   async function admissionFile(id){const body=new FormData();body.set('file',id);const r=await client.functions.invoke('academy-admissions?action=staff-file',{body});if(r.error)throw r.error;if(r.data.error)throw new Error(r.data.error);return r.data.url;}
   async function stemData() {
     const c=await client.from('stem_connections').select('*').eq('organization_id',profile.organization_id).maybeSingle();if(c.error)throw c.error;
@@ -798,7 +816,7 @@
   }
   async function enrolStem(application,cohort,details) {const r=await client.rpc('enrol_stem_application',{application_key:application,cohort_key:cohort,details});if(r.error)throw r.error;return r.data;}
   window.CAGE_BACKEND = {
-    admissionData,admissionSave,admissionReview,admissionPayment,admissionFile,admissionEnrol,admissionEnrolmentEmail,
+    admissionData,admissionSave,admissionReview,admissionPayment,admissionFile,admissionEnrol,admissionEmailStatus,admissionEnrolmentEmail,
     enrolStem,
     chatReceipts,acknowledgeChat,appNotificationPreferences,stemData,reviewStem,
     academyAttendance,
