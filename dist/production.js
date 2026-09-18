@@ -195,14 +195,34 @@
     );
   }
 
+  function transientSyncError(error) {
+    const message=String(error?.message||error||'').toLowerCase();
+    return !navigator.onLine || /fetch|network|timeout|timed out|jwt|token|connection|502|503|504/.test(message);
+  }
+  async function syncRpcWithRetry(patches) {
+    let lastError;
+    for (let attempt=0; attempt<3; attempt++) {
+      try {
+        if (!navigator.onLine) throw new Error('You are offline');
+        if (attempt) { try { await client.auth.refreshSession(); } catch {} await new Promise(r=>setTimeout(r,350*attempt)); }
+        const result=await client.rpc("save_workspace_changes",{changes:patches});
+        if(result.error)throw result.error;
+        return result.data;
+      } catch(error) {
+        lastError=error;
+        if(!transientSyncError(error)||attempt===2)throw error;
+      }
+    }
+    throw lastError;
+  }
+
   async function flushSave() {
     if(!pendingState||!profile||applyingRemote||savingNow||syncConflicts.length)return;
     const snapshot=structuredClone(pendingState),base=structuredClone(cloudBase),patches=writableChanges(base,snapshot);
     if(!patches.length){pendingState=null;localStorage.removeItem(draftKey());hideBanner(0);app.replaceState(cloudBase);window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:false}}));return;}
     savingNow=true;showBanner("Saving changes…");
     try {
-      const {data,error}=await client.rpc("save_workspace_changes",{changes:patches});
-      if(error)throw error;
+      const data=await syncRpcWithRetry(patches);
       if(data?.conflicts?.length){syncConflicts=data.conflicts;window.dispatchEvent(new CustomEvent("cage:conflicts",{detail:{conflicts:syncConflicts,patches}}));showBanner("Your draft is safe. Review the conflicting changes.","error");return;}
       await loadWorkspace();
       const newer=writableChanges(snapshot,pendingState||snapshot);
@@ -765,7 +785,9 @@
   }
   async function admissionReview(id,status,note){const r=await client.rpc('review_academy_application',{app:id,new_status:status,note});if(r.error)throw r.error;}
   async function admissionPayment(id,status,note){const r=await client.rpc('review_academy_payment',{file_key:id,new_status:status,note});if(r.error)throw r.error;}
-  async function admissionEnrol(id,cohort,details){const r=await client.rpc('enrol_academy_application',{app:id,cohort_key:cohort,details});if(r.error)throw r.error;return r.data;}
+  async function sendEnrolmentEmail(applicationId){const r=await client.functions.invoke('send-enrolment-email',{body:{applicationId}});if(r.error)throw r.error;if(!r.data?.ok)throw new Error(r.data?.error||'Enrolment email failed');return r.data;}
+  async function admissionEnrol(id,cohort,details){const r=await client.rpc('enrol_academy_application',{app:id,cohort_key:cohort,details});if(r.error)throw r.error;let email={ok:false};try{email=await sendEnrolmentEmail(id);}catch(error){return {learnerId:r.data,emailSent:false,emailWarning:error.message||'Congratulatory email could not be sent'};}return {learnerId:r.data,emailSent:true,email};} 
+  async function admissionEnrolmentEmail(id){return await sendEnrolmentEmail(id);}
   async function admissionFile(id){const body=new FormData();body.set('file',id);const r=await client.functions.invoke('academy-admissions?action=staff-file',{body});if(r.error)throw r.error;if(r.data.error)throw new Error(r.data.error);return r.data.url;}
   async function stemData() {
     const c=await client.from('stem_connections').select('*').eq('organization_id',profile.organization_id).maybeSingle();if(c.error)throw c.error;
@@ -776,7 +798,7 @@
   }
   async function enrolStem(application,cohort,details) {const r=await client.rpc('enrol_stem_application',{application_key:application,cohort_key:cohort,details});if(r.error)throw r.error;return r.data;}
   window.CAGE_BACKEND = {
-    admissionData,admissionSave,admissionReview,admissionPayment,admissionFile,admissionEnrol,
+    admissionData,admissionSave,admissionReview,admissionPayment,admissionFile,admissionEnrol,admissionEnrolmentEmail,
     enrolStem,
     chatReceipts,acknowledgeChat,appNotificationPreferences,stemData,reviewStem,
     academyAttendance,

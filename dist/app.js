@@ -567,6 +567,7 @@ function clone(value) {
 }
 
 function loadState() {
+  const productionMode = window.CAGE_CONFIG?.mode === "production";
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (!saved) return clone(seedData);
@@ -579,14 +580,14 @@ function loadState() {
       const seeded = seedData.commercialRecords.find(item => item.id === record.id);
       return { ...record, request: record.request || seeded?.request || "", project: record.project || seeded?.project || "" };
     });
-    if (!commercialRecords.some(record => record.id === "cm-006")) commercialRecords.push(clone(seedData.commercialRecords.find(record => record.id === "cm-006")));
+    if (!productionMode && !commercialRecords.some(record => record.id === "cm-006")) commercialRecords.push(clone(seedData.commercialRecords.find(record => record.id === "cm-006")));
     const requests = Array.isArray(parsed.requests) ? parsed.requests : clone(seedData.requests);
     const approvals = (Array.isArray(parsed.approvals) ? parsed.approvals : clone(seedData.approvals)).map(approval => {
       if (approval.linkedType !== "commercial") return approval;
       const linkedRequest = commercialRecords.find(record => record.id === approval.linkedId)?.request;
       return linkedRequest ? { ...approval, linkedType: "request", linkedId: linkedRequest } : approval;
     });
-    if (!projects.some(project => project.id === "p-internal")) projects.push(clone(seedData.projects.find(project => project.id === "p-internal")));
+    if (!productionMode && !projects.some(project => project.id === "p-internal")) projects.push(clone(seedData.projects.find(project => project.id === "p-internal")));
     return {
       ...clone(seedData),
       ...parsed,
@@ -610,7 +611,8 @@ function loadState() {
       knowledge: Array.isArray(parsed.knowledge) ? parsed.knowledge : clone(seedData.knowledge),
       chatGroups: Array.isArray(parsed.chatGroups) ? parsed.chatGroups : [],
       messages: (() => {
-        const existing = Array.isArray(parsed.messages) ? parsed.messages : clone(seedData.messages);
+        const existing = Array.isArray(parsed.messages) ? parsed.messages : (productionMode ? [] : clone(seedData.messages));
+        if (productionMode) return existing.map(message => ({ type: "Update", ...message }));
         const additions = seedData.messages.filter(message => ["msg-general-001", "msg-040", "msg-041", "msg-042", "msg-043"].includes(message.id) && !existing.some(item => item.id === message.id));
         return [...existing, ...clone(additions)].map(message => ({ type: "Update", ...message }));
       })(),
@@ -633,7 +635,7 @@ function loadState() {
             })
           : [];
         const hasLiveResults = existing.some(item => item.url || item.source_url);
-        return hasLiveResults ? existing : clone(seedData.opportunityMatches);
+        return hasLiveResults || productionMode ? existing : clone(seedData.opportunityMatches);
       })(),
       opportunityMonitor: parsed.opportunityMonitor && typeof parsed.opportunityMonitor === "object"
         ? { ...clone(seedData.opportunityMonitor), ...parsed.opportunityMonitor, sources: clone(seedData.opportunityMonitor.sources), coverage: clone(seedData.opportunityMonitor.coverage) }
