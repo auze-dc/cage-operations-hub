@@ -14,7 +14,7 @@ await new Promise((resolve, reject) => {
   archive.glob("**/*", {
     cwd: root,
     dot: true,
-    ignore: [".git/**", ".openai/**", "node_modules/**", "*.zip", ".env", ".supabase/**"]
+    ignore: [".git/**", ".openai/**", "node_modules/**", "*.zip", ".env", ".env.*", "**/runtime-config.js", "**/node_modules/**", "tmp/**", "validation/artifacts/**", ".supabase/**", "supabase/.temp/**"]
   });
   archive.finalize();
 });

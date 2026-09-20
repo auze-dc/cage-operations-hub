@@ -32,10 +32,7 @@ const config = {
   organizationId: process.env.CAGE_ORGANIZATION_ID || "",
   appUrl: process.env.APP_URL || ""
 };
-fs.writeFileSync(path.join(dist, "runtime-config.js"), `window.CAGE_CONFIG = Object.freeze(${JSON.stringify(config)});\n`);
-
-if (missing.length) {
-  console.warn(`Build completed in setup-required mode. Missing: ${missing.join(", ")}`);
-} else {
-  console.log("Production browser bundle created.");
-}
+const runtimePath=path.join(dist,"runtime-config.js");
+if(!missing.length){fs.writeFileSync(runtimePath,`window.CAGE_CONFIG = Object.freeze(${JSON.stringify(config)});\n`);console.log("Production browser bundle created.");}
+else if(fs.existsSync(runtimePath)){console.log("Kept existing runtime-config.js; environment configuration is incomplete.");}
+else {throw new Error(`No runtime-config.js exists. Set the existing deployment environment values: ${missing.join(", ")}`);}
