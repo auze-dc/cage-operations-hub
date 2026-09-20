@@ -1820,17 +1820,42 @@ function formatMonitorTime(value) {
   return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Blantyre", timeZoneName: "short" }).format(date);
 }
 
+let opportunityFilter='open',opportunityQuery='',liveOpportunityMatches=[],opportunityLoading=false,opportunityLoadedAt=0,opportunityLoadError='';
+function opportunityRows(){
+ const rows=new Map(state.opportunityMatches.map(m=>[m.url||m.id,m]));
+ for(const live of liveOpportunityMatches){const old=rows.get(live.url||live.id);rows.set(live.url||live.id,old?{...old,...live,id:old.id,request:old.request,status:old.status}:live);}
+ return [...rows.values()];
+}
+function opportunityExpired(m){return Boolean(m.deadline&&m.deadline!=='Rolling'&&/^\d{4}-\d{2}-\d{2}$/.test(m.deadline)&&m.deadline<new Date(Date.now()+7200000).toISOString().slice(0,10));}
+async function refreshOpportunityResults(force=false){
+ if(opportunityLoading||(!force&&Date.now()-opportunityLoadedAt<60000)||!window.CAGE_BACKEND?.opportunityData||!window.CAGE_BACKEND?.isProduction())return;
+ opportunityLoading=true;opportunityLoadedAt=Date.now();
+ try{const rows=await window.CAGE_BACKEND.opportunityData();liveOpportunityMatches=rows.map(r=>({...r.raw_data,id:r.raw_data?.id||r.id,title:r.title,organisation:r.organization,source:r.source_name,platform:r.source_name,url:r.source_url,deadline:r.deadline||'Rolling',match:r.match_score,reason:r.match_reason,status:r.status==='Intake created'?'Added':r.status,foundAt:r.found_at}));opportunityLoadError='';}
+ catch(e){opportunityLoadError=e.message||'Could not refresh opportunities';}
+ finally{opportunityLoading=false;if(activeView==='commercial')renderOpportunityMonitor();}
+}
+window.addEventListener('cage:session-ready',()=>{liveOpportunityMatches=[];opportunityLoadedAt=0;});
+setInterval(()=>{if(activeView==='commercial'&&!document.hidden)refreshOpportunityResults();},60000);
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-opportunity-filter],[data-opportunity-refresh]');if(!b)return;
+ if(b.hasAttribute('data-opportunity-filter')){opportunityFilter=b.dataset.opportunityFilter;renderOpportunityMonitor();document.getElementById('opportunity-match-list')?.scrollIntoView({behavior:'smooth',block:'start'});}
+ else {b.disabled=true;await refreshOpportunityResults(true);b.disabled=false;}
+});
+document.addEventListener('input',e=>{if(e.target.id!=='opportunity-search')return;opportunityQuery=e.target.value;const pos=e.target.selectionStart;renderOpportunityMonitor();const el=document.getElementById('opportunity-search');el.focus();el.setSelectionRange(pos,pos);});
 function renderOpportunityMonitor() {
   const monitor = state.opportunityMonitor;
-  const matches = [...state.opportunityMatches].sort((a, b) => b.match - a.match);
+  const all=opportunityRows();
+  const matches=all.filter(m=>(opportunityFilter==='all'||(opportunityFilter==='new'?m.status==='New'&&!opportunityExpired(m):opportunityFilter==='expired'?opportunityExpired(m):!opportunityExpired(m)&&m.status!=='Dismissed'))&&`${m.title} ${m.organisation} ${m.platform}`.toLowerCase().includes(opportunityQuery.toLowerCase())).sort((a,b)=>b.match-a.match);
+  if(!opportunityLoading&&Date.now()-opportunityLoadedAt>=60000)refreshOpportunityResults();
   document.getElementById("opportunity-alerts").checked = monitor.enabled !== false;
   document.getElementById("opportunity-auto-intake").checked = monitor.autoIntake === true;
   document.getElementById("opportunity-monitor-status").innerHTML = `
     <span class="monitor-live-dot ${monitor.enabled === false ? "paused" : ""}"></span>
     <div><strong>${monitor.enabled === false ? "Weekday checking paused" : "Weekday check scheduled"}</strong><small>Last: ${escapeHtml(formatMonitorTime(monitor.lastScan))}<br>Next: ${escapeHtml(formatMonitorTime(monitor.nextScan))}</small></div>
-    <b>${matches.filter(item => item.status === "New").length} new</b>`;
+    <button type="button" class="secondary-button" data-opportunity-filter="new">${all.filter(item => item.status === "New"&&!opportunityExpired(item)).length} new</button>`;
   document.getElementById("opportunity-source-list").innerHTML = `${monitor.sources.map(source => `<span>${escapeHtml(source)}</span>`).join("")}
     <details class="monitor-source-details"><summary>View all ${monitor.coverage.length} named source platforms</summary><div>${monitor.coverage.map(source => `<span>${escapeHtml(source)}</span>`).join("")}</div></details>`;
+  let toolbar=document.getElementById('opportunity-results-toolbar');if(!toolbar){toolbar=document.createElement('div');toolbar.id='opportunity-results-toolbar';toolbar.className='opportunity-results-toolbar';document.getElementById('opportunity-match-list').before(toolbar);}
+  toolbar.innerHTML=`<div role="group" aria-label="Opportunity filters">${[['open','Open'],['new','New'],['all','All'],['expired','Expired']].map(([key,label])=>`<button type="button" class="secondary-button" data-opportunity-filter="${key}" aria-pressed="${opportunityFilter===key}">${label}</button>`).join('')}</div><input id="opportunity-search" type="search" aria-label="Search opportunities" placeholder="Search opportunities" value="${escapeHtml(opportunityQuery)}"><button type="button" class="secondary-button" data-opportunity-refresh ${opportunityLoading?'disabled':''}>${opportunityLoading?'Refreshing…':'Refresh results'}</button><p role="status">${opportunityLoadError?escapeHtml(opportunityLoadError):`${matches.length} matching results`}</p>`;
   const deadlineLabel = match => match.deadline === "Rolling" ? "Rolling" : formatDate(match.deadline, { year: true });
   document.getElementById("opportunity-match-list").innerHTML = matches.length ? `
     <div class="opportunity-table-wrap"><table class="opportunity-table"><thead><tr><th>Opportunity Title</th><th>Organization / Client</th><th>Source / Platform</th><th>Estimated Value / Budget</th><th>Deadline</th><th>Direct URL</th><th>Qualification Match Score</th></tr></thead><tbody>${matches.map(match => `
@@ -1848,9 +1873,10 @@ function renderOpportunityMonitor() {
 }
 
 function createRequestFromMatch(matchId, silent = false) {
-  const match = state.opportunityMatches.find(item => item.id === matchId);
+  const match = opportunityRows().find(item => item.id === matchId);
   if (!match) return null;
   if (match.request) return requestById(match.request);
+  if(!state.opportunityMatches.some(m=>m.id===match.id))state.opportunityMatches.push(match);
   const request = {
     id: `rq-${Date.now()}-${match.id}`,
     number: nextRequestNumber(),
@@ -1901,14 +1927,11 @@ async function runOpportunityScan() {
   const previousLabel = button.textContent;
   button.disabled = true;
   button.textContent = "Searching live sources…";
-  let scannedCount = 0;
-  state.opportunityMatches = state.opportunityMatches.filter(item => {
-    if (item.request || item.deadline === "Rolling" || !item.deadline) return true;
-    const deadline = new Date(`${item.deadline}T23:59:59Z`).getTime();
-    return Number.isFinite(deadline) && deadline > now.getTime() + 48 * 60 * 60 * 1000;
-  });
+  let scannedCount = 0, failedFeedCount=0;
   try {
     const result = await window.CAGE_BACKEND?.scanOpportunities?.();
+    failedFeedCount=Number(result?.failedFeeds||0);
+    if(!result?.ok)throw new Error("Live scanning is unavailable. Sign in to the connected Hub.");
     if (Array.isArray(result?.opportunities) && result.opportunities.length) {
       const existingByUrl = new Map(state.opportunityMatches.map(item => [item.url, item]));
       result.opportunities.forEach(item => {
@@ -1937,10 +1960,11 @@ async function runOpportunityScan() {
     }
   } catch (error) {
     showToast(error.message || "The live scan could not be completed.");
+    button.disabled=false;button.textContent=previousLabel;return;
   }
   state.opportunityMonitor.lastScan = now.toISOString();
   state.opportunityMonitor.nextScan = nextWeekdayScan(now);
-  state.opportunityMatches.forEach(match => { if (!match.request && match.match >= 80) match.status = "New"; });
+  await refreshOpportunityResults(true);
   let created = 0;
   if (state.opportunityMonitor.autoIntake) {
     state.opportunityMatches.filter(match => !match.request && match.match >= 80).forEach(match => { createRequestFromMatch(match.id, true); created += 1; });
@@ -1949,6 +1973,7 @@ async function runOpportunityScan() {
   renderAll();
   button.disabled = false;
   button.textContent = previousLabel;
+  if(failedFeedCount){showToast(`Scan completed with ${failedFeedCount} unavailable source groups. ${scannedCount} matches refreshed.`);return;}
   showToast(created ? `${created} strong matches added to Request centre.` : scannedCount ? `${scannedCount} verified live matches refreshed.` : "Scan finished. No new verified matches were added.");
 }
 

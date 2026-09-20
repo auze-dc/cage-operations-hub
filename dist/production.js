@@ -420,6 +420,15 @@
     return data;
   }
 
+  async function opportunityData(){
+    const rows=[];for(let offset=0;;offset+=1000){
+      const r=await client.from('opportunity_matches').select('*').eq('organization_id',profile.organization_id).order('found_at',{ascending:false}).order('id').range(offset,offset+999);
+      if(r.error)throw r.error;rows.push(...r.data);if(r.data.length<1000)break;
+    }return rows;
+  }
+  async function admissionReminderHistory(id){const r=await client.from('academy_payment_reminders').select('kind,status,due_on,sent_at,created_at,error').eq('organization_id',profile.organization_id).eq('application_id',id).order('created_at',{ascending:false}).limit(5);if(r.error)throw r.error;return r.data;}
+  async function admissionBalance(id){const r=await client.rpc('academy_payment_summary',{app:id});if(r.error)throw r.error;return r.data;}
+  async function admissionReminder(id,due,note,requestKey){const r=await client.rpc('queue_academy_payment_reminder',{app:id,due_on:due,note,request_key:requestKey});if(r.error)throw r.error;return r.data;}
   async function scanOpportunities() {
     if (!client || !profile) throw new Error("Sign in before running an opportunity scan.");
     if (!['admin', 'manager'].includes(profile.role)) throw new Error("Only an Administrator or Manager can run a live scan.");
@@ -734,7 +743,12 @@
     }));
     let payments=[];
     if(moduleLevel('finance')!=='none') payments=await opsData('invoice_payments');
-    return {...base,...Object.fromEntries(entries),payments};
+    let applicationBalances=[],applicationBalancesUnavailable=false;
+    if(['admin','manager'].includes(profile.role)&&moduleLevel('training')==='edit'){
+      try{const admissions=await admissionData();applicationBalances=admissions.applications.filter(a=>a.learner_id).map(a=>{const paid=admissions.files.filter(f=>f.application_id===a.id&&f.kind==='payment'&&f.review_status==='Verified').reduce((n,f)=>n+Number(f.amount||0),0);return {application_id:a.id,learner_id:a.learner_id,balance:Math.max(Number(a.form_snapshot.fee||0)-paid,0),currency:a.form_snapshot.currency,due_on:a.balance_due_on};});}
+      catch{applicationBalancesUnavailable=true;}
+    }
+    return {...base,...Object.fromEntries(entries),payments,applicationBalances,applicationBalancesUnavailable};
   }
   async function academySave(table, values, id) {
     const fields = {
@@ -772,7 +786,7 @@
     const q=values?client.from('app_notification_preferences').upsert({...values,user_id:profile.id,updated_at:new Date().toISOString()}).select().single():client.from('app_notification_preferences').select('*').eq('user_id',profile.id).maybeSingle();
     const r=await q;if(r.error)throw r.error;return r.data;
   }
-  const applicationColumns='id,organization_id,intake_id,full_name,email,phone,answers,form_snapshot,category,identity_type,status,staff_notes,submitted_at,reviewed_by,updated_at,learner_id,cohort_id';
+  const applicationColumns='id,organization_id,intake_id,full_name,email,phone,answers,form_snapshot,category,identity_type,status,staff_notes,submitted_at,reviewed_by,updated_at,learner_id,cohort_id,balance_due_on,balance_plan_version';
   async function admissionData(){
     const read=async(table,columns='*')=>{let out=[];for(let offset=0;;offset+=1000){const r=await client.from(table).select(columns).eq('organization_id',profile.organization_id).range(offset,offset+999);if(r.error)throw r.error;out.push(...r.data);if(r.data.length<1000)return out;}};
     const [intakes,applications,files,emailResult]=await Promise.all([
@@ -829,7 +843,7 @@
     boot,
     scheduleSave,
     sendDocument,
-    scanOpportunities,
+    scanOpportunities, opportunityData, admissionBalance, admissionReminder, admissionReminderHistory,
     uploadFile,
     openFile,
     loadHR,

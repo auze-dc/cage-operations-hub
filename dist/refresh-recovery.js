@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 const api=()=>window.CAGE_BACKEND,uid=()=>api()?.currentProfile()?.id;
-const tab=sessionStorage.getItem('cage-recovery-tab')||crypto.randomUUID();sessionStorage.setItem('cage-recovery-tab',tab);
+let tab;try{tab=sessionStorage.getItem('cage-recovery-tab')||String(Date.now())+'-'+Math.random().toString(36).slice(2);sessionStorage.setItem('cage-recovery-tab',tab);}catch{tab='storage-unavailable';}
 const key=()=>`cage-refresh-v1:${uid()}:${tab}`;
 let restoring=false,ready=false,timer,lastAction=null;const origins=new WeakMap();
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -14,12 +14,12 @@ function fileKey(root,index){return key()+':'+root.id+':'+index;}
 function warn(){showToast('Draft storage is unavailable or full. Keep this page open until your work is saved.');}
 function descriptor(el){if(!el)return null;return {id:el.id||'',tag:el.tagName,attrs:[...el.attributes].filter(a=>a.name.startsWith('data-')&&!/submitting/.test(a.name)).map(a=>[a.name,a.value]),text:el.textContent.trim(),parent:el.closest('dialog')?.id||''};}
 function locate(d){if(!d)return null;if(d.id)return document.getElementById(d.id);const root=d.parent?document.getElementById(d.parent):document;if(!root)return null;return [...root.querySelectorAll(d.tag||'button')].find(el=>d.attrs.every(([k,v])=>el.getAttribute(k)===v)&&el.textContent.trim()===d.text);}
-function globals(){return {activeView,activeChatThread,activeRequestId,activeContactId,activeProjectId,activeProjectTab,editingTaskId,editingDealId,taskFilter,projectFilter,taskDisplay,financeFilter,boardProjectFilter,chatFilter,knowledgeFilter,assetFilter,commercialFilter,requestFilter,calendar:calendarCursor.toISOString()};}
+function globals(){return {opportunityFilter,opportunityQuery,admissions:window.CAGE_ADMISSIONS?.captureView?.(),activeView,activeChatThread,activeRequestId,activeContactId,activeProjectId,activeProjectTab,editingTaskId,editingDealId,taskFilter,projectFilter,taskDisplay,financeFilter,boardProjectFilter,chatFilter,knowledgeFilter,assetFilter,commercialFilter,requestFilter,calendar:calendarCursor.toISOString()};}
 function snapshot(){
  if(!ready||restoring||!uid())return;
  const panel=document.querySelector(`[data-view-panel="${CSS.escape(activeView)}"]`);
- const dialogs=[...document.querySelectorAll('dialog[open]')].filter(d=>d.id!=='pdf-preview-dialog'&&!d.id.includes('login')).map(d=>({id:d.id,origin:origins.get(d)||null,fields:values(d),forms:[...d.querySelectorAll('form')].map(f=>({id:f.id,data:Object.fromEntries(Object.entries(f.dataset).filter(([k])=>k!=='submitting'))})),items:d.querySelectorAll('.document-item').length,subtasks:d.querySelectorAll('[data-subtask]').length}));
- try{localStorage.setItem(key(),JSON.stringify({globals:globals(),panel:panel?values(panel):[],dialogs,scroll:{x:scrollX,y:scrollY},url:location.href,updated:Date.now()}));}catch{warn();}
+ const dialogs=[...document.querySelectorAll('dialog[open]')].filter(d=>d.id!=='pdf-preview-dialog'&&!d.id.includes('login')).map(d=>({id:d.id,origin:origins.get(d)||null,fields:values(d),forms:[...d.querySelectorAll('form')].map(f=>({id:f.id,data:Object.fromEntries(Object.entries(f.dataset).filter(([k])=>k!=='submitting'))})),items:d.querySelectorAll('.document-item').length,subtasks:d.querySelectorAll('[data-subtask]').length,scrollTop:d.scrollTop,details:[...d.querySelectorAll('details')].map(x=>x.open)}));
+ try{localStorage.setItem(key(),JSON.stringify({globals:globals(),panel:panel?values(panel):[],dialogs,scroll:{x:scrollX,y:scrollY},containers:[...document.querySelectorAll('[id]')].filter(x=>x.clientHeight>0&&x.scrollHeight>x.clientHeight).map(x=>({id:x.id,top:x.scrollTop,left:x.scrollLeft})),url:location.href,updated:Date.now()}));}catch{warn();}
 }
 function schedule(){if(restoring)return;clearTimeout(timer);timer=setTimeout(snapshot,120);}
 const originalShow=HTMLDialogElement.prototype.showModal;
@@ -43,12 +43,13 @@ async function apply(root,fields){
  }
 }
 function restoreGlobals(g){
+ opportunityFilter=g.opportunityFilter||'open';opportunityQuery=g.opportunityQuery||'';window.CAGE_ADMISSIONS?.restoreView?.(g.admissions);
  activeChatThread=g.activeChatThread||GENERAL_CHAT_THREAD_ID;activeRequestId=g.activeRequestId||'';activeContactId=g.activeContactId||'';activeProjectId=g.activeProjectId||'';activeProjectTab=g.activeProjectTab||'overview';editingTaskId=g.editingTaskId||'';editingDealId=g.editingDealId||'';
  taskFilter=g.taskFilter;projectFilter=g.projectFilter;taskDisplay=g.taskDisplay;financeFilter=g.financeFilter;boardProjectFilter=g.boardProjectFilter;chatFilter=g.chatFilter;knowledgeFilter=g.knowledgeFilter;assetFilter=g.assetFilter;commercialFilter=g.commercialFilter;requestFilter=g.requestFilter;
  if(g.calendar)calendarCursor=new Date(g.calendar);
 }
 async function restore(){
- if(ready||!uid())return;restoring=true;
+ if(ready||restoring||!uid())return;restoring=true;
  try{
  const saved=JSON.parse(localStorage.getItem(key())||'null');
  // Email deep links take priority over a previous working page.
@@ -56,17 +57,19 @@ async function restore(){
  const g=saved.globals;if(api().moduleLevel(g.activeView)==='none')return;
  restoreGlobals(g);setView(g.activeView);await wait(450);
  if(g.activeView==='training'){await window.CAGE_TRAINING_UI?.load();await window.CAGE_ACADEMY?.load();}
- if(g.activeView==='projects'&&g.activeProjectId&&state.projects.some(p=>p.id===g.activeProjectId))openProject(g.activeProjectId);
- if(g.activeView==='requests'&&g.activeRequestId&&state.requests.some(p=>p.id===g.activeRequestId))openRequest(g.activeRequestId);
+ // Record IDs can remain selected after a dialog closes. Only reopen saved open dialogs.
  const panel=document.querySelector(`[data-view-panel="${CSS.escape(g.activeView)}"]`);if(panel)await apply(panel,saved.panel);
  for(const savedDialog of saved.dialogs||[]){
+ if(savedDialog.id==='project-dialog'&&state.projects.some(p=>p.id===g.activeProjectId)){openProject(g.activeProjectId);activeProjectTab=g.activeProjectTab||'overview';renderProjectWorkspace();}
+ if(savedDialog.id==='request-detail-dialog'&&state.requests.some(p=>p.id===g.activeRequestId))openRequest(g.activeRequestId);
+ if(savedDialog.id==='task-dialog')openTaskDialog(savedDialog.fields.find(f=>f.name==='project')?.value||'',g.editingTaskId||'');
  if(savedDialog.id==='admission-dialog') await window.CAGE_ADMISSIONS.restore(savedDialog);
  if(savedDialog.id==='stem-review-dialog') await window.CAGE_STEM.restore(savedDialog);
- if(savedDialog.id==='academy-dialog' && savedDialog.forms.some(f=>f.id==='academy-form')) await window.CAGE_ACADEMY.restore(savedDialog);
- let dialog=document.getElementById(savedDialog.id);const opener=['academy-dialog','stem-review-dialog','admission-dialog'].includes(savedDialog.id)?null:locate(savedDialog.origin);
- if(opener&&!opener.disabled){opener.click();for(let n=0;n<30;n++){await wait(100);dialog=document.getElementById(savedDialog.id);if(dialog?.open)break;}}
+ if(savedDialog.id==='academy-dialog') await window.CAGE_ACADEMY.restore(savedDialog);
+ let dialog=document.getElementById(savedDialog.id);const opener=['project-dialog','request-detail-dialog','task-dialog','academy-dialog','stem-review-dialog','admission-dialog'].includes(savedDialog.id)?null:locate(savedDialog.origin);
+ if(opener&&!opener.disabled&&!(opener.tagName==='BUTTON'&&opener.type==='submit')&&!/delete|remove|send|approve|reject|save|submit/i.test(JSON.stringify(savedDialog.origin))){opener.click();for(let n=0;n<30;n++){await wait(100);dialog=document.getElementById(savedDialog.id);if(dialog?.open)break;}}
  if(!dialog){showToast('Your form draft is retained. Reopen its form to recover it.');continue;}
- if(!dialog.open){if(savedDialog.id==='task-dialog')openTaskDialog(savedDialog.fields.find(f=>f.name==='project')?.value||'',g.editingTaskId||'');else dialog.showModal();}
+ if(!dialog.open){showToast('Your draft is retained. Reopen the original form to continue.');continue;}
  if(savedDialog.id==='task-dialog'){
    editingTaskId=g.editingTaskId||'';
    const project=savedDialog.fields.find(f=>f.name==='project');
@@ -79,13 +82,14 @@ async function restore(){
  for(let n=dialog.querySelectorAll('.document-item').length;n<savedDialog.items;n++)dialog.querySelector('[data-add-document-item]')?.click();
  for(let n=dialog.querySelectorAll('[data-subtask]').length;n<savedDialog.subtasks;n++)document.getElementById('ops-add-subtask')?.click();
  for(const f of savedDialog.forms){const form=document.getElementById(f.id);if(form)Object.assign(form.dataset,f.data);}
- await wait(50);await apply(dialog,savedDialog.fields);origins.set(dialog,savedDialog.origin);
+ await wait(50);await apply(dialog,savedDialog.fields);origins.set(dialog,savedDialog.origin);dialog.scrollTop=savedDialog.scrollTop||0;[...dialog.querySelectorAll('details')].forEach((x,i)=>{if(savedDialog.details&&i<savedDialog.details.length)x.open=savedDialog.details[i];});
  }
- restoreGlobals(g);window.scrollTo(saved.scroll.x,saved.scroll.y);
- if(saved.dialogs.length)showToast('Your open form and draft have been restored.');
+ restoreGlobals(g);for(const c of saved.containers||[]){const el=document.getElementById(c.id);if(el){el.scrollTop=c.top;el.scrollLeft=c.left;}}window.scrollTo(saved.scroll?.x||0,saved.scroll?.y||0);
+ 
  }catch(e){showToast('Could not reopen the previous form automatically. Your saved draft has been kept.');console.error('Form recovery failed',e);}
  finally{restoring=false;ready=true;}
 }
+window.addEventListener('cage:session-ready',()=>{ready=false;});
 window.addEventListener('cage:workspace-ready',restore);
 // Save navigation and open forms after asynchronous controls settle.
 setInterval(()=>{if(ready&&!document.hidden)snapshot();},2000);
