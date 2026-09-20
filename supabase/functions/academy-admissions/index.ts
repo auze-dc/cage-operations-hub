@@ -46,7 +46,7 @@ Deno.serve(async req=>{
  const intake=String(form.get('intake')||''),requestId=String(form.get('request_id')||'');if(!UUID.test(intake)||!UUID.test(requestId))throw new Error('Invalid application');
  const prior=await admin.from('academy_applications').select('id,access_hash').eq('organization_id',org).eq('request_id',requestId).maybeSingle();if(prior.data){if(prior.data.access_hash!==hash)return reply({error:'Submission conflict'},409);return reply({id:prior.data.id});}
  const r=await admin.from('academy_intakes').select('*').eq('id',intake).eq('organization_id',org).eq('published',true).single();if(r.error||!r.data)throw new Error('Intake unavailable');const c=r.data;
- const today=new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Blantyre'});if(!c.accepting||(c.closes_on&&c.closes_on<today))throw new Error('This intake is closed');
+ const today=new Date(Date.now()+7200000).toISOString().slice(0,10);if(!c.accepting||(c.closes_on&&c.closes_on<today))throw new Error('This intake is closed');
  if(Number(form.get('revision'))!==c.revision)throw new Error('The form changed. Reload it before submitting.');
  let answers;try{answers=JSON.parse(String(form.get('answers')));}catch{throw new Error('Invalid application fields');}answers=validateAnswers(c.fields,answers,c.category);
  const identity=await fileInfo(form.get('identity')),identityType=String(form.get('identity_type')||'');if(!identity&&c.category!=='STEM')throw new Error('Upload a National ID, passport or license');if(identity&&!['National ID','Passport','License'].includes(identityType))throw new Error('Choose the identity document type');
@@ -57,9 +57,13 @@ Deno.serve(async req=>{
  }
  const id=String(form.get('application')||'');if(!UUID.test(id))return reply({error:'Application access denied'},403);
  const r=await admin.from('academy_applications').select('id,intake_id,status,access_hash,form_snapshot,submitted_at').eq('id',id).eq('organization_id',org).eq('access_hash',hash).maybeSingle();if(r.error||!r.data)return reply({error:'Application access denied. Check your reference and private key.'},403);
+ if(action==='payment-plan'){
+ const due=String(form.get('balance_due_on')||'');if(!/^\d{4}-\d{2}-\d{2}$/.test(due))throw new Error('Choose your balance payment date');
+ const saved=await admin.rpc('set_academy_balance_date',{app:id,token_hash:hash,due_on:due});if(saved.error)throw new Error(saved.error.message);return reply({ok:true});
+ }
  if(action==='status'){
  const files=await admin.from('academy_application_files').select('id,kind,file_name,amount,payment_date,payment_reference,review_status,review_note,created_at').eq('application_id',id).eq('organization_id',org).order('created_at',{ascending:false});if(files.error)throw new Error('Uploads could not be loaded');
- const c=await admin.from('academy_intakes').select('payment_instructions,schedule,schedule_notes,title,venue,category').eq('id',r.data.intake_id).single();if(c.error)throw new Error('Intake details unavailable');return reply({id,status:r.data.status,submitted_at:r.data.submitted_at,fee:r.data.form_snapshot.fee,currency:r.data.form_snapshot.currency,intake:c.data,files:files.data});}
+ const c=await admin.from('academy_intakes').select('payment_instructions,schedule,schedule_notes,title,venue,category').eq('id',r.data.intake_id).single();if(c.error)throw new Error('Intake details unavailable');const balance=await admin.rpc('academy_payment_summary',{app:id});if(balance.error)throw new Error('Payment details could not be loaded');return reply({balance:balance.data,id,status:r.data.status,submitted_at:r.data.submitted_at,fee:r.data.form_snapshot.fee,currency:r.data.form_snapshot.currency,intake:c.data,files:files.data});}
  if(action==='payment'){
  const file=await fileInfo(form.get('proof'));if(!file)throw new Error('Select your payment proof');const amount=Number(form.get('amount')),date=String(form.get('payment_date')||''),reference=String(form.get('payment_reference')||'').trim();if(!Number.isFinite(amount)||amount<=0||amount>999999999999||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date))||!reference||reference.length>200)throw new Error('Enter the payment amount, date and transaction reference');
  const uploadId=String(form.get('upload_id')||'');if(!UUID.test(uploadId))throw new Error('Invalid upload request');
