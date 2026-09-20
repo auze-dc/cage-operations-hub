@@ -127,27 +127,32 @@ Deno.serve(async req => {
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const cronSecret = Deno.env.get("CRON_SECRET");
   const isCron = Boolean(cronSecret && req.headers.get("x-cron-secret") === cronSecret);
+  let staffOrganization: string | null = null;
   if (!isCron) {
     const token = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
     const userResult = token ? await supabase.auth.getUser(token) : null;
     const userId = userResult?.data?.user?.id;
-    const profileResult = userId ? await supabase.from("profiles").select("role, active").eq("id", userId).maybeSingle() : null;
+    const profileResult = userId ? await supabase.from("profiles").select("role, active, organization_id").eq("id", userId).maybeSingle() : null;
     if (!profileResult?.data?.active || !["admin", "manager"].includes(profileResult.data.role)) {
       return new Response(JSON.stringify({ ok: false, error: "Administrator or Manager access is required." }), { status: 403, headers: { ...cors, "Content-Type": "application/json" } });
     }
+    staffOrganization=profileResult.data.organization_id;
   }
 
   const body = await req.json().catch(() => ({}));
-  const organizationId = body.organizationId || "00000000-0000-4000-8000-000000000001";
+  const organizationId = isCron ? (body.organizationId || "00000000-0000-4000-8000-000000000001") : staffOrganization;
+  if(!organizationId)return new Response(JSON.stringify({ok:false,error:"Organisation unavailable"}),{status:403,headers:{...cors,"Content-Type":"application/json"}});
   const configuredFeeds = (Deno.env.get("OPPORTUNITY_FEEDS") || "").split(",").map(v => v.trim()).filter(Boolean).map(url => ({ name: "Configured public feed", url }));
   const feeds = [...DEFAULT_SEARCH_FEEDS, ...configuredFeeds];
   const minimum = Number(Deno.env.get("OPPORTUNITY_MIN_SCORE") || 60);
   const opportunities: any[] = [];
+  let failedFeeds=0;
   const feedResults = await Promise.all(feeds.map(async feed => {
     try {
       const response = await fetch(feed.url, { headers: { "User-Agent": "CAGE-Opportunity-Monitor/3.0" }, signal: AbortSignal.timeout(12000) });
-      if (!response.ok) return [];
+      if (!response.ok){failedFeeds++;return [];}
       const xml = await response.text();
+      if(!/<(?:rss|feed)\b/i.test(xml)){failedFeeds++;return [];}
       return (xml.match(/<(item|entry)\b[\s\S]*?<\/\1>/gi) || []).slice(0, 20).map(block => ({
         title: textOf(block, "title"),
         description: textOf(block, "description") || textOf(block, "summary") || textOf(block, "content"),
@@ -156,10 +161,11 @@ Deno.serve(async req => {
         sourceGroup: feed.name,
       }));
     } catch (error) {
-      console.error(`Source group failed: ${feed.name}`, error);
+      failedFeeds++;console.error(`Source group failed: ${feed.name}`, error);
       return [];
     }
   }));
+  if(failedFeeds===feeds.length)return new Response(JSON.stringify({ok:false,error:"All opportunity sources were unavailable. Try again later; existing results are retained."}),{status:502,headers:{...cors,"Content-Type":"application/json"}});
   const seen = new Set<string>();
   const candidates = feedResults.flat().filter(item => {
     if (!item.title || !item.link || seen.has(item.link)) return false;
@@ -189,14 +195,15 @@ Deno.serve(async req => {
   }
 
   for (const item of opportunities) {
-    await supabase.from("opportunity_matches").upsert({
+    const saved=await supabase.from("opportunity_matches").upsert({
       organization_id: organizationId, external_key: await hash(item.url), title: item.title, organization: item.organisation,
       opportunity_type: item.type === "Tender / RFQ" ? "Tender / RFQ" : "Grant", source_name: item.platform, source_url: item.url,
       deadline: item.deadline === "Rolling" ? null : item.deadline, match_score: item.match, match_reason: item.reason, raw_data: item,
     }, { onConflict: "organization_id,external_key" });
+    if(saved.error)return new Response(JSON.stringify({ok:false,error:"Opportunity results could not be saved. Refresh results before retrying."}),{status:500,headers:{...cors,"Content-Type":"application/json"}});
   }
 
   // Staff email routing is handled by staff-email-dispatch; never broadcast to an environment email list.
 
-  return new Response(JSON.stringify({ ok: true, scannedFeeds: feeds.length, coveredSources: 47, opportunities, nextScan: nextWeekdayAtSevenCAT() }), { headers: { ...cors, "Content-Type": "application/json" } });
+  return new Response(JSON.stringify({ ok: true, scannedFeeds: feeds.length-failedFeeds, failedFeeds, coveredSources: 47, opportunities, nextScan: nextWeekdayAtSevenCAT() }), { headers: { ...cors, "Content-Type": "application/json" } });
 });
