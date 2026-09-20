@@ -57,3 +57,19 @@
 #daily-planner .planner-task-title { font-size: .9375rem; line-height: 1.5; white-space: normal; }
 .planner-task small { font-size: .8125rem; line-height: 1.5; }
 .planner-tags span, .planner-move-label, .planner-empty { font-size: .75rem; line-height: 1.5; }
+
+/* 15.4.1: request board uses the space previously occupied by guidance. */
+[data-view-panel="requests"] .request-layout { grid-template-columns: minmax(0,1fr); }
+#task-form .ops-task-checklist { display: block; }
+#task-form .ops-task-help { color: var(--muted); font-size: .875rem; line-height: 1.5; margin: 8px 0; }
+#ops-subtasks { display: grid; gap: 10px; }
+#task-form .ops-subtask { display: grid !important; grid-template-columns: 22px minmax(0,1fr) 36px; gap: 12px; align-items: center; width: 100%; }
+#task-form .ops-subtask input[type=checkbox] { width: 20px; height: 20px; min-height: 0; margin: 0; padding: 0; accent-color: var(--brand); }
+#task-form .ops-subtask input[type=text] { width: 100%; min-width: 0; height: 42px; padding: 9px 12px; font: inherit; font-size: .9375rem; }
+#task-form .ops-subtask button { width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); background: #fff; cursor: pointer; font-size: 1.2rem; }
+#task-form #ops-dependencies { padding: 8px; min-height: 110px; font-size: .9375rem; }
+#task-form #ops-dependencies option { padding: 7px; white-space: normal; }
+#task-form .ops-actions button { min-height: 38px; padding: 7px 12px; font-size: .875rem; }
+@media(max-width:520px) { #task-form .ops-subtask { gap: 8px; grid-template-columns: 20px minmax(0,1fr) 32px; } }
+
+.opportunity-results-toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:16px 0}.opportunity-results-toolbar [aria-pressed="true"]{background:#00ADEF;color:#fff}.opportunity-results-toolbar input{min-width:180px;padding:10px;border:1px solid #ccd7e0;border-radius:8px}.opportunity-results-toolbar [role="group"]{display:flex;gap:6px;flex-wrap:wrap}

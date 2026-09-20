@@ -26,14 +26,14 @@ function applyAccess(){
    const level=backend().moduleLevel(panel.dataset.viewPanel);
    panel.querySelectorAll('button,input,select,textarea').forEach(el=>{
     if(el.dataset.accessDisabled){el.disabled=false;delete el.dataset.accessDisabled;}
-    const isNavigation=el.matches('[data-view],[data-go-view],[data-chat-thread],[data-chat-filter],[data-open-project],[data-project-tab],[data-play-voice],[data-preview-chat-file],[data-open-receipt],[data-equipment-history]') || el.type==='search';
+    const isNavigation=el.matches('[data-view],[data-go-view],[data-chat-thread],[data-chat-filter],[data-open-project],[data-project-tab],[data-play-voice],[data-preview-chat-file],[data-open-receipt],[data-equipment-history],[data-view-document],[data-record-pdf],[data-receipt],[data-chat-info],[data-finance-section],[data-conversation-search],[data-chat-menu-toggle],[data-chat-favourite],#chat-theme-toggle,#message-find-prev,#message-find-next,#message-find-close') || el.type==='search';
     if(level==='view' && !isNavigation && !el.closest('[data-personal-readonly]')) { el.disabled=true;el.dataset.accessDisabled='true'; }
    });
  });
  if(backend().moduleLevel(activeView)==='none' || (activeView==='access' && profile().role!=='admin')) setView('mywork');
 }
 function updateBadge(){const count=personal.notifications.filter(n=>!n.read_at).length;$('notification-count').textContent=count;bell.setAttribute('aria-label',`Notifications: ${count} unread`);}
-async function refresh(){if(!profile())return;try{personal=await backend().personalData();updateBadge();refreshView();$('personal-error').textContent='';}catch(e){$('personal-error').textContent=e.message||'Could not load personal reminders.';}}
+async function refresh(){if(!profile())return;try{personal=await backend().personalData();window.dispatchEvent(new CustomEvent("cage:personal-notifications",{detail:personal.notifications}));updateBadge();refreshView();$('personal-error').textContent='';}catch(e){$('personal-error').textContent=e.message||'Could not load personal reminders.';}}
 function formatWhen(value){return new Date(value).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});}
 function refreshView(){
  if(activeView==='mywork')renderMine();

@@ -195,14 +195,34 @@
     );
   }
 
+  function transientSyncError(error) {
+    const message=String(error?.message||error||'').toLowerCase();
+    return !navigator.onLine || /fetch|network|timeout|timed out|jwt|token|connection|502|503|504/.test(message);
+  }
+  async function syncRpcWithRetry(patches) {
+    let lastError;
+    for (let attempt=0; attempt<3; attempt++) {
+      try {
+        if (!navigator.onLine) throw new Error('You are offline');
+        if (attempt) { try { await client.auth.refreshSession(); } catch {} await new Promise(r=>setTimeout(r,350*attempt)); }
+        const result=await client.rpc("save_workspace_changes",{changes:patches});
+        if(result.error)throw result.error;
+        return result.data;
+      } catch(error) {
+        lastError=error;
+        if(!transientSyncError(error)||attempt===2)throw error;
+      }
+    }
+    throw lastError;
+  }
+
   async function flushSave() {
     if(!pendingState||!profile||applyingRemote||savingNow||syncConflicts.length)return;
     const snapshot=structuredClone(pendingState),base=structuredClone(cloudBase),patches=writableChanges(base,snapshot);
     if(!patches.length){pendingState=null;localStorage.removeItem(draftKey());hideBanner(0);app.replaceState(cloudBase);window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:false}}));return;}
     savingNow=true;showBanner("Saving changes…");
     try {
-      const {data,error}=await client.rpc("save_workspace_changes",{changes:patches});
-      if(error)throw error;
+      const data=await syncRpcWithRetry(patches);
       if(data?.conflicts?.length){syncConflicts=data.conflicts;window.dispatchEvent(new CustomEvent("cage:conflicts",{detail:{conflicts:syncConflicts,patches}}));showBanner("Your draft is safe. Review the conflicting changes.","error");return;}
       await loadWorkspace();
       const newer=writableChanges(snapshot,pendingState||snapshot);
@@ -400,6 +420,15 @@
     return data;
   }
 
+  async function opportunityData(){
+    const rows=[];for(let offset=0;;offset+=1000){
+      const r=await client.from('opportunity_matches').select('*').eq('organization_id',profile.organization_id).order('found_at',{ascending:false}).order('id').range(offset,offset+999);
+      if(r.error)throw r.error;rows.push(...r.data);if(r.data.length<1000)break;
+    }return rows;
+  }
+  async function admissionReminderHistory(id){const r=await client.from('academy_payment_reminders').select('kind,status,due_on,sent_at,created_at,error').eq('organization_id',profile.organization_id).eq('application_id',id).order('created_at',{ascending:false}).limit(5);if(r.error)throw r.error;return r.data;}
+  async function admissionBalance(id){const r=await client.rpc('academy_payment_summary',{app:id});if(r.error)throw r.error;return r.data;}
+  async function admissionReminder(id,due,note,requestKey){const r=await client.rpc('queue_academy_payment_reminder',{app:id,due_on:due,note,request_key:requestKey});if(r.error)throw r.error;return r.data;}
   async function scanOpportunities() {
     if (!client || !profile) throw new Error("Sign in before running an opportunity scan.");
     if (!['admin', 'manager'].includes(profile.role)) throw new Error("Only an Administrator or Manager can run a live scan.");
@@ -703,7 +732,109 @@
     await flushSave();if(pendingState)throw new Error('Sync your draft before continuing');const r=await client.rpc(name,args);if(r.error)throw r.error;await loadWorkspace();return r.data;
   }
   async function sendCohort(payload) {const r=await client.functions.invoke('send-cohort-message',{body:payload});if(r.error)throw r.error;if(!r.data?.ok)throw new Error(r.data?.error||'Email failed');return r.data;}
+  async function academyData() {
+    if (!client || !profile) throw new Error("Sign in first.");
+    const base = await loadTraining();
+    const names = {sessions:'training_sessions', attendance:'learner_attendance', assessments:'training_assessments', certificates:'training_certificates', practical:'training_practical_logs', documents:'training_documents', materials:'training_materials'};
+    const entries = await Promise.all(Object.entries(names).map(async ([key,table]) => {
+      const r = await client.from(table).select('*');
+      if (r.error) throw new Error('Academy could not load. Confirm migration 014 is installed. ' + r.error.message);
+      return [key,r.data || []];
+    }));
+    let payments=[];
+    if(moduleLevel('finance')!=='none') payments=await opsData('invoice_payments');
+    let applicationBalances=[],applicationBalancesUnavailable=false;
+    if(['admin','manager'].includes(profile.role)&&moduleLevel('training')==='edit'){
+      try{const admissions=await admissionData();applicationBalances=admissions.applications.filter(a=>a.learner_id).map(a=>{const paid=admissions.files.filter(f=>f.application_id===a.id&&f.kind==='payment'&&f.review_status==='Verified').reduce((n,f)=>n+Number(f.amount||0),0);return {application_id:a.id,learner_id:a.learner_id,balance:Math.max(Number(a.form_snapshot.fee||0)-paid,0),currency:a.form_snapshot.currency,due_on:a.balance_due_on};});}
+      catch{applicationBalancesUnavailable=true;}
+    }
+    return {...base,...Object.fromEntries(entries),payments,applicationBalances,applicationBalancesUnavailable};
+  }
+  async function academySave(table, values, id) {
+    const fields = {
+      training_courses:['name','category','duration','default_fee','certificate_type','requirements','outcome','active','modules','minimum_attendance','practical_minutes','required_assessments'],
+      training_cohorts:['name','lead_instructor','start_date','end_date','venue','capacity','status','source_reference','project_id'],
+      learners:['full_name','email','phone','date_of_birth','sponsor','guardian_name','guardian_phone','guardian_consent','collection_contacts','documents_complete','invoice_id','external_licence_status','rpl_number','rpl_expiry','renewal_due','notes','alumni_consent','skills'],
+      training_sessions:['cohort_id','title','starts_at','ends_at','instructor_id','venue','session_type','cancelled'],
+      training_practical_logs:['learner_id','performed_on','aircraft','exercise','minutes','notes','signed_off_by'],
+      training_documents:['learner_id','title','file_path'],
+      training_materials:['cohort_id','title','description','resource_url']
+    };
+    if (!fields[table] || !profile) throw new Error('Unknown Academy action');
+    if(id && ['training_practical_logs','training_documents'].includes(table)) throw new Error('Training evidence is append-only.');
+    const clean=Object.fromEntries(Object.entries(values).filter(([key])=>fields[table].includes(key)));
+    let q;
+    if(id) q=client.from(table).update(clean).eq('id',id).eq('organization_id',profile.organization_id);
+    else q=client.from(table).insert({...clean,organization_id:profile.organization_id,created_by:profile.id});
+    const result=await q.select().single();if(result.error)throw new Error(result.error.message);return result.data;
+  }
+  async function academyCompletion(id,issue=false) {
+    const r=await client.rpc(issue?'issue_academy_certificate':'academy_completion',{learner_key:id});
+    if(r.error)throw new Error(r.error.message);return r.data;
+  }
+  async function academyAttendance(rows) {
+    const result=await client.from('learner_attendance').upsert(rows.map(r=>({...r,recorded_by:profile.id,recorded_at:new Date().toISOString()})),{onConflict:'session_id,learner_id'});
+    if(result.error)throw new Error(result.error.message);
+  }
+  async function chatReceipts(threadId) {
+    let rows=[];for(let offset=0;;offset+=1000){const r=await client.from('chat_receipts').select('*').eq('thread_id',threadId).range(offset,offset+999);if(r.error)throw r.error;rows.push(...r.data);if(r.data.length<1000)break;}return rows;
+  }
+  async function acknowledgeChat(keys,read=false) {
+    for(let i=0;i<keys.length;i+=500){const r=await client.rpc('acknowledge_chat_messages',{message_keys:keys.slice(i,i+500),mark_read:read});if(r.error)throw r.error;}
+  }
+  async function appNotificationPreferences(values) {
+    const q=values?client.from('app_notification_preferences').upsert({...values,user_id:profile.id,updated_at:new Date().toISOString()}).select().single():client.from('app_notification_preferences').select('*').eq('user_id',profile.id).maybeSingle();
+    const r=await q;if(r.error)throw r.error;return r.data;
+  }
+  const applicationColumns='id,organization_id,intake_id,full_name,email,phone,answers,form_snapshot,category,identity_type,status,staff_notes,submitted_at,reviewed_by,updated_at,learner_id,cohort_id,balance_due_on,balance_plan_version';
+  async function admissionData(){
+    const read=async(table,columns='*')=>{let out=[];for(let offset=0;;offset+=1000){const r=await client.from(table).select(columns).eq('organization_id',profile.organization_id).range(offset,offset+999);if(r.error)throw r.error;out.push(...r.data);if(r.data.length<1000)return out;}};
+    const [intakes,applications,files,emailResult]=await Promise.all([
+      read('academy_intakes'),read('academy_applications',applicationColumns),read('academy_application_files'),
+      read('enrollment_email_outbox','id,source,application_id,status,sent_at').then(emails=>({emails})).catch(()=>({emails:[],emailStatusUnavailable:true}))
+    ]);return {intakes,applications,files,...emailResult};
+  }
+  async function admissionSave(values,id,revision){
+    const keys=['category','title','description','published','accepting','closes_on','start_date','fee','currency','payment_instructions','venue','fields','schedule','schedule_notes'];
+    const clean=Object.fromEntries(Object.entries(values).filter(([key])=>keys.includes(key)));
+    const q=id?client.from('academy_intakes').update(clean).eq('id',id).eq('revision',revision).eq('organization_id',profile.organization_id):client.from('academy_intakes').insert({...clean,organization_id:profile.organization_id,created_by:profile.id});
+    const r=await q.select().maybeSingle();if(r.error)throw r.error;if(!r.data)throw new Error('This call was changed by another staff member. Refresh before saving. Your editing form is still open.');return r.data;
+  }
+  async function admissionReview(id,status,note){const r=await client.rpc('review_academy_application',{app:id,new_status:status,note});if(r.error)throw r.error;}
+  async function admissionPayment(id,status,note){const r=await client.rpc('review_academy_payment',{file_key:id,new_status:status,note});if(r.error)throw r.error;}
+  // Enrollment queues the welcome email in the same database transaction.
+  // Reading delivery status must never cause a second send.
+  async function admissionEmailStatus(id){
+    const r=await client.from('enrollment_email_outbox').select('status,sent_at')
+      .eq('organization_id',profile.organization_id).eq('source','academy_applications')
+      .eq('application_id',id).maybeSingle();
+    if(r.error)throw r.error;
+    return r.data||{status:'not_queued'};
+  }
+  async function admissionEnrol(id,cohort,details){
+    const r=await client.rpc('enrol_academy_application',{app:id,cohort_key:cohort,details});
+    if(r.error)throw r.error;
+    const result={learnerId:r.data,emailWarning:'Welcome email now uses the delivery queue. Refresh the Hub to check its status.'};
+    try{return {...result,emailStatus:(await admissionEmailStatus(id)).status};}
+    catch{return {...result,emailStatus:'unavailable'};}
+  }
+  // Cached older screens must not claim that a read-only status check sent mail.
+  async function admissionEnrolmentEmail(){throw new Error('Welcome emails now use the delivery queue. Refresh the Hub and choose Check email status.');}
+  async function admissionFile(id){const body=new FormData();body.set('file',id);const r=await client.functions.invoke('academy-admissions?action=staff-file',{body});if(r.error)throw r.error;if(r.data.error)throw new Error(r.data.error);return r.data.url;}
+  async function stemData() {
+    const c=await client.from('stem_connections').select('*').eq('organization_id',profile.organization_id).maybeSingle();if(c.error)throw c.error;
+    let rows=[];for(let offset=0;;offset+=1000){const r=await client.from('stem_applications').select('*').eq('organization_id',profile.organization_id).order('submitted_at',{ascending:false}).range(offset,offset+999);if(r.error)throw r.error;rows.push(...r.data);if(r.data.length<1000)break;}return {connection:c.data,applications:rows};
+  }
+  async function reviewStem(id,values) {
+    const r=await client.from('stem_applications').update({status:values.status,notes:values.notes,reviewed_by:profile.id,updated_at:new Date().toISOString()}).eq('id',id).select().single();if(r.error)throw r.error;return r.data;
+  }
+  async function enrolStem(application,cohort,details) {const r=await client.rpc('enrol_stem_application',{application_key:application,cohort_key:cohort,details});if(r.error)throw r.error;return r.data;}
   window.CAGE_BACKEND = {
+    admissionData,admissionSave,admissionReview,admissionPayment,admissionFile,admissionEnrol,admissionEmailStatus,admissionEnrolmentEmail,
+    enrolStem,
+    chatReceipts,acknowledgeChat,appNotificationPreferences,stemData,reviewStem,
+    academyAttendance,
+    academyData, academySave, academyCompletion,
     opsData,opsSave,opsRpc,sendCohort,
     resolveSync, restoreDraft, flushSave, reviewSync, discardDraftRecord, syncState:()=>({pending:!!pendingState,conflicts:syncConflicts.length}),
     emailPreferences, saveEmailPreferences, emailRouting, saveEmailRouting, readChatNotifications, requestTaskHelp,
@@ -712,7 +843,7 @@
     boot,
     scheduleSave,
     sendDocument,
-    scanOpportunities,
+    scanOpportunities, opportunityData, admissionBalance, admissionReminder, admissionReminderHistory,
     uploadFile,
     openFile,
     loadHR,
