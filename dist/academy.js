@@ -12,14 +12,14 @@ const time=v=>v?new Date(v).toLocaleString('en-GB',{timeZone:'Africa/Blantyre',d
 const localTime=v=>v?new Date(new Date(v).getTime()+120*60000).toISOString().slice(0,16):'';
 const key=()=>`cage-academy:${api()?.currentProfile()?.id}`;
 let data=null,tab='overview',query='',selected='',loading=null,loadError='';
-const tabs=[['overview','Overview'],['courses','Courses'],['cohorts','Cohorts'],['learners','Learners'],['timetable','Timetable'],['fees','Fees & sponsors'],['reports','Reports'],['applications','Applications & calls'],['stem','Google STEM imports']];
+const tabs=[['overview','Overview'],['courses','Courses'],['cohorts','Cohorts'],['learners','Learners'],['timetable','Timetable'],['fees','Fees & sponsors'],['reports','Reports'],['applications','Applications & calls'],['stem','Google STEM imports'],['activity','Activity log']];
 const panel=document.querySelector('[data-view-panel="training"]');
 const root=document.createElement('div');root.className='academy';root.id='academy';panel.append(root);
 const course=id=>data?.courses.find(r=>r.id===id),cohort=id=>data?.cohorts.find(r=>r.id===id),learner=id=>data?.learners.find(r=>r.id===id);
 const staff=id=>data?.staff.find(r=>r.id===id)?.full_name||'Unassigned';
 const courseFor=l=>course(cohort(l.cohort_id)?.course_id);
 const canEdit=()=>api()?.moduleLevel('training')==='edit';
-const canApprove=()=>canEdit()&&['admin','manager'].includes(api()?.currentProfile()?.role);
+const canApprove=()=>canEdit();
 const action=(a,label,id='',primary=false)=>canEdit()?btn(a,label,id,primary):'';
 const students=()=>data.learners.filter(l=>(!selected||l.cohort_id===selected)&&`${l.full_name} ${l.email||''} ${cohort(l.cohort_id)?.name||''} ${l.sponsor||''}`.toLowerCase().includes(query.toLowerCase()));
 function progress(l){
@@ -44,9 +44,15 @@ async function load(){
 }
 function render(){
  root.innerHTML=`<div class="academy-toolbar"><nav class="academy-tabs" role="tablist" aria-label="Training Academy">${tabs.map(([k,v])=>`<button role="tab" aria-selected="${tab===k}" data-academy="tab" data-id="${k}">${v}</button>`).join('')}</nav><div class="academy-filter"><input id="academy-query" type="search" aria-label="Search Academy" placeholder="Search learners, courses or cohorts" value="${esc(query)}"><select id="academy-cohort-filter" aria-label="Filter cohort"><option value="">All cohorts</option>${(data?.cohorts||[]).map(c=>`<option value="${c.id}" ${selected===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select>${btn('refresh','Refresh')}</div></div><div id="academy-content" role="tabpanel"></div>`;
- const content=$('academy-content');if(tab==='applications'){window.CAGE_ADMISSIONS?.render(content);return;}if(tab==='stem'){window.CAGE_STEM?.render(content);return;}if(loadError){content.innerHTML=`<p class="academy-error" role="alert">${esc(loadError)}</p>${btn('refresh','Retry')}`;return;}if(!data){content.innerHTML=empty('Loading Academy records…');return;}
+ const content=$('academy-content');if(tab==='activity'){renderActivity(content);return;}if(tab==='applications'){window.CAGE_ADMISSIONS?.render(content);return;}if(tab==='stem'){window.CAGE_STEM?.render(content);return;}if(loadError){content.innerHTML=`<p class="academy-error" role="alert">${esc(loadError)}</p>${btn('refresh','Retry')}`;return;}if(!data){content.innerHTML=empty('Loading Academy records…');return;}
  const views={overview:overview,courses:courses,cohorts:cohorts,learners:learners,timetable:timetable,fees:fees,reports:reports};content.innerHTML=(views[tab]||overview)();
  panel.querySelectorAll('#new-training-program-button,#new-cohort-button,#enrol-learner-button').forEach(b=>b.hidden=!canEdit());
+}
+async function renderActivity(content){
+ content.innerHTML='<p>Loading Academy activity…</p>';
+ try{const rows=await api().academyActivity();if(!content.isConnected)return;
+ content.innerHTML='<h2>Academy activity log</h2><p>Latest 200 events. Earlier events remain stored. Document entries record link requests, not proof that a file was read.</p>'+(rows.length?rows.map(r=>`<details class="academy-card"><summary>${esc(new Date(r.created_at).toLocaleString())} · ${esc(r.actor_name||r.actor_email||r.actor_kind)} · ${esc(r.action)} · ${esc(r.entity_type)}</summary><p>Account: ${esc(r.actor_email||r.actor_id||r.actor_kind)} · Record: ${esc(r.entity_id||'')}</p><h4>Before</h4><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(JSON.stringify(r.old_data,null,2)||'—')}</pre><h4>After</h4><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(JSON.stringify(r.new_data,null,2)||'—')}</pre></details>`).join(''):'<p>No recorded activity yet.</p>');
+ }catch(e){content.textContent='Activity could not be loaded: '+e.message;}
 }
 function overview(){
  const ls=students(),cs=data.cohorts.filter(c=>!selected||c.id===selected),active=ls.filter(l=>!['Completed','Withdrawn'].includes(l.stage));
@@ -134,7 +140,7 @@ async function handle(action,id){
  if(action==='certificate-pdf')return certificatePDF(id);
  if(action==='export')return exportReport();
  if(action==='issue'){const p=await api().academyCompletion(id);if(!p.ready)throw new Error(p.reasons.join('\n'));modal('Approve completion',`<p>All recorded course requirements are met for <strong>${esc(learner(id).full_name)}</strong>. Approving will create a numbered CAGE completion certificate and mark this learner completed.</p><div class="academy-actions">${btn('issue-confirm','Approve and issue certificate',id,true)}${btn('close','Cancel')}</div>`);return;}
- if(action==='issue-confirm'){if(!canApprove())throw new Error('Manager approval required.');const c=await api().academyCompletion(id,true);await load();return certificate(c.id);}
+ if(action==='issue-confirm'){if(!canApprove())throw new Error('Academy edit access required.');const c=await api().academyCompletion(id,true);await load();return certificate(c.id);}
  if(action==='message'){$('academy-dialog').close();return window.CAGE_OPS.openCohort(id,'message',data);}
  if(action==='equipment'){const c=cohort(id);if(!c.project_id)throw new Error('Link a delivery project in Cohort settings first. Equipment reservations belong to that project.');$('academy-dialog').close();return window.CAGE_OPS.reserveForTraining(c.project_id,c.name);}
  if(['calendar','finance','project'].includes(action)){$('academy-dialog')?.close();setView(action==='project'?'projects':action);if(action==='project')openProject(id);}

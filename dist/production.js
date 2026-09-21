@@ -134,7 +134,7 @@
     if (settingsNav) settingsNav.hidden = !isAdmin;
     document.querySelectorAll(".hr-privileged").forEach(element => { element.hidden = !["admin", "manager", "hr"].includes(profile?.role); });
     window.CAGE_PERSONAL?.applyAccess();
-    if (isViewer) document.querySelectorAll("button.primary-button, .mobile-add-button").forEach(button => { if (!button.closest(".auth-card")) button.disabled = true; });
+    if (isViewer) document.querySelectorAll("button.primary-button, .mobile-add-button").forEach(button => { if (!button.closest(".auth-card, [data-view-panel=training], .academy-dialog") ) button.disabled = true; });
   }
 
   async function loadProfile(userId) {
@@ -621,6 +621,7 @@
   }
   function moduleLevel(module) {
     if (!profile) return "none";
+    if(module === "training") return profile.active === false || profile.role === "shared" ? "none" : "edit";
     if(profile.role === "admin") return "edit";
     if(["admin","settings"].includes(module)) return "none";
     if(profile.role === "viewer") return moduleAccess[module] === "none" ? "none" : "view";
@@ -744,7 +745,7 @@
     let payments=[];
     if(moduleLevel('finance')!=='none') payments=await opsData('invoice_payments');
     let applicationBalances=[],applicationBalancesUnavailable=false;
-    if(['admin','manager'].includes(profile.role)&&moduleLevel('training')==='edit'){
+    if(moduleLevel('training')==='edit'){
       try{const admissions=await admissionData();applicationBalances=admissions.applications.filter(a=>a.learner_id).map(a=>{const paid=admissions.files.filter(f=>f.application_id===a.id&&f.kind==='payment'&&f.review_status==='Verified').reduce((n,f)=>n+Number(f.amount||0),0);return {application_id:a.id,learner_id:a.learner_id,balance:Math.max(Number(a.form_snapshot.fee||0)-paid,0),currency:a.form_snapshot.currency,due_on:a.balance_due_on};});}
       catch{applicationBalancesUnavailable=true;}
     }
@@ -833,6 +834,7 @@
     admissionData,admissionSave,admissionReview,admissionPayment,admissionFile,admissionEnrol,admissionEmailStatus,admissionEnrolmentEmail,
     enrolStem,
     chatReceipts,acknowledgeChat,appNotificationPreferences,stemData,reviewStem,
+    academyActivity: async()=>{const r=await client.from("academy_activity_log").select("*").order("created_at",{ascending:false}).order("id",{ascending:false}).limit(200);if(r.error)throw r.error;return r.data||[];},
     academyAttendance,
     academyData, academySave, academyCompletion,
     opsData,opsSave,opsRpc,sendCohort,
