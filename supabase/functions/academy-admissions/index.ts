@@ -39,6 +39,7 @@ Deno.serve(async req=>{
  const auth=await admin.auth.getUser(bearer);if(auth.error||!auth.data.user)return reply({error:'Sign in required'},401);
  const staff=createClient(url,Deno.env.get('SUPABASE_ANON_KEY')!,{global:{headers:{Authorization:'Bearer '+bearer}},auth:{persistSession:false}});
  const form=await boundedForm(req),id=String(form.get('file')||'');if(!UUID.test(id))throw new Error('Invalid document');const r=await staff.from('academy_application_files').select('path,file_name,organization_id').eq('id',id).eq('organization_id',org).single();if(r.error||!r.data)return reply({error:'Document access denied'},403);
+ const audit=await staff.rpc('log_academy_document_access',{file_key:id});if(audit.error)throw new Error('Document access could not be logged');
  const signed=await admin.storage.from('academy-applications').createSignedUrl(r.data.path,60,{download:r.data.file_name});if(signed.error)throw new Error('Document unavailable');return reply({url:signed.data.signedUrl});}
  const token=req.headers.get('x-application-access')||'';if(!/^[a-f0-9]{64}$/.test(token))return reply({error:'Your private application access key is required.'},401);const hash=await sha(token);
  const form=await boundedForm(req);if(String(form.get('website')||''))throw new Error('Submission unavailable');
