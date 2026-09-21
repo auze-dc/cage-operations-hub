@@ -189,10 +189,24 @@
   // Chat messages are append-only. Read state is stored in personal_notifications,
   // so legacy changes to an existing message (such as unread=false) must never be
   // sent back through the workspace save function.
+  function preservedSettings(){return JSON.parse(localStorage.getItem(draftKey()+":protected-settings")||"[]");}
   function writableChanges(base, next) {
-    return window.CAGE_SYNC.changes(base, next).filter(change =>
-      change.key !== "messages" || (change.before === null && change.after !== null)
+    const changes=window.CAGE_SYNC.changes(base,next);
+    const excluded=profile?.role==='admin'?[]:changes.filter(c=>c.id===null);
+    if(excluded.length){
+      const saved=preservedSettings();
+      for(const change of excluded)if(!saved.some(item=>window.CAGE_SYNC.equal(item.change,change)))saved.push({savedAt:new Date().toISOString(),change});
+      // Save the recovery copy BEFORE excluding anything from the active draft.
+      localStorage.setItem(draftKey()+":protected-settings",JSON.stringify(saved));
+    }
+    return changes.filter(change =>
+      (profile?.role==='admin'||change.id!==null)&&
+      (change.key !== "messages" || (change.before === null && change.after !== null))
     );
+  }
+  function downloadPreservedSettings(){
+    const blob=new Blob([JSON.stringify({memberId:profile?.id,settings:preservedSettings()},null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='cage-local-settings-draft.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
 
   function transientSyncError(error) {
@@ -838,7 +852,7 @@
     academyAttendance,
     academyData, academySave, academyCompletion,
     opsData,opsSave,opsRpc,sendCohort,
-    resolveSync, restoreDraft, flushSave, reviewSync, discardDraftRecord, syncState:()=>({pending:!!pendingState,conflicts:syncConflicts.length}),
+    resolveSync, restoreDraft, flushSave, reviewSync, discardDraftRecord, downloadPreservedSettings, syncState:()=>({pending:!!pendingState,conflicts:syncConflicts.length,localSettings:preservedSettings().length}),
     emailPreferences, saveEmailPreferences, emailRouting, saveEmailRouting, readChatNotifications, requestTaskHelp,
     plannerData, saveTaskPlan, savePlanningCapacity, updatePlannedTask,
     moduleLevel, personalData, saveReminder, readNotification, accessAccounts, saveModuleAccess, fileUrl,
