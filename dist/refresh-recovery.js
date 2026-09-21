@@ -3,6 +3,9 @@
 const api=()=>window.CAGE_BACKEND,uid=()=>api()?.currentProfile()?.id;
 let tab;try{tab=sessionStorage.getItem('cage-recovery-tab')||String(Date.now())+'-'+Math.random().toString(36).slice(2);sessionStorage.setItem('cage-recovery-tab',tab);}catch{tab='storage-unavailable';}
 const key=()=>`cage-refresh-v1:${uid()}:${tab}`;
+const entryUrl=location.href;
+// Let a saved same-tab page take precedence over a previously followed email link.
+window.CAGE_REFRESH={hasCurrentPage(){try{const saved=JSON.parse(localStorage.getItem(key())||'null');return !!(uid()&&saved?.globals?.activeView&&saved.url===entryUrl);}catch{return false;}}};
 let restoring=false,ready=false,timer,lastAction=null;const origins=new WeakMap();
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const allowed=el=>el.matches('input,textarea,select,[contenteditable="true"]')&&!['password','submit','button','reset'].includes(el.type)&&!el.closest('#login-form,#invite-user-form')&&!/password|secret|token|api.?key/i.test(el.name||el.id||'');
@@ -53,7 +56,7 @@ async function restore(){
  try{
  const saved=JSON.parse(localStorage.getItem(key())||'null');
  // Email deep links take priority over a previous working page.
- if(!saved||(saved.url!==location.href&&new URLSearchParams(location.search).has('view')))return;
+ if(!saved||(saved.url!==entryUrl&&new URL(entryUrl).searchParams.has('view')))return;
  const g=saved.globals;if(api().moduleLevel(g.activeView)==='none')return;
  restoreGlobals(g);setView(g.activeView);await wait(450);
  if(g.activeView==='training'){await window.CAGE_TRAINING_UI?.load();await window.CAGE_ACADEMY?.load();}

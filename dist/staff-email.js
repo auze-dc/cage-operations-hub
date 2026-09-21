@@ -20,7 +20,10 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-close-emai
 async function readVisibleChat(){if(window.CAGE_CHAT)window.CAGE_CHAT.rendered();}
 const select=selectChatThread;selectChatThread=function(id){const result=select(id);readVisibleChat();return result;};
 let interval;window.addEventListener('cage:session-ready',()=>{admin.hidden=api().currentProfile()?.role!=='admin';api().emailPreferences().then(p=>{if(!p)return api().saveEmailPreferences(defaults());}).catch(()=>{});clearInterval(interval);interval=setInterval(readVisibleChat,15000);openEmailLink();});document.addEventListener('visibilitychange',readVisibleChat);
-async function openEmailLink(){const params=new URLSearchParams(location.search),view=params.get('view'),id=params.get('record');if(!view||!viewMeta[view])return;if(api().moduleLevel(view)==='none'){setView('notifications');showToast('Your access to this module has changed.');return;}setView(view);try{
+async function openEmailLink(){if(window.CAGE_REFRESH?.hasCurrentPage())return;const params=new URLSearchParams(location.search),view=params.get('view'),id=params.get('record');if(!view||!viewMeta[view])return;
+// Consume the incoming link once. Later refreshes restore the actual working page.
+try{const url=new URL(location.href);url.searchParams.delete('view');url.searchParams.delete('record');history.replaceState(history.state,'',url.pathname+url.search+url.hash);}catch{}
+if(api().moduleLevel(view)==='none'){setView('notifications');showToast('Your access to this module has changed.');return;}setView(view);try{
  if(view==='tasks'&&state.tasks.some(t=>t.id===id))openTask(id);
  else if(view==='projects'&&state.projects.some(t=>t.id===id))openProject(id);
  else if(view==='requests'&&state.requests.some(t=>t.id===id))openRequest(id);
