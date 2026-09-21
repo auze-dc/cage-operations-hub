@@ -90,9 +90,20 @@ async function restore(){
  restoreGlobals(g);for(const c of saved.containers||[]){const el=document.getElementById(c.id);if(el){el.scrollTop=c.top;el.scrollLeft=c.left;}}window.scrollTo(saved.scroll?.x||0,saved.scroll?.y||0);
  
  }catch(e){showToast('Could not reopen the previous form automatically. Your saved draft has been kept.');console.error('Form recovery failed',e);}
- finally{restoring=false;ready=true;}
+ finally{restoring=false;ready=true;document.body.classList.remove('restoring-workspace');}
 }
-window.addEventListener('cage:session-ready',()=>{ready=false;});
+window.addEventListener('cage:session-ready',()=>{
+ ready=false;
+ if(!window.CAGE_REFRESH.hasCurrentPage())return;
+ try{
+  const saved=JSON.parse(localStorage.getItem(key()));const g=saved.globals;
+  if(api().moduleLevel(g.activeView)==='none')return;
+  // Select the saved page synchronously, before the browser paints the signed-in shell.
+  // Keep the existing loader visible until data and any open dialog are restored.
+  document.body.classList.add('restoring-workspace');
+  restoreGlobals(g);setView(g.activeView);
+ }catch{document.body.classList.remove('restoring-workspace');}
+});
 window.addEventListener('cage:workspace-ready',restore);
 // Save navigation and open forms after asynchronous controls settle.
 setInterval(()=>{if(ready&&!document.hidden)snapshot();},2000);

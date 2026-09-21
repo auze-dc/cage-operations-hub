@@ -18,6 +18,12 @@
 <link rel="stylesheet" href="./hub-experience.css?v=15.9.0">
   <link rel="stylesheet" href="./messenger.css?v=15.9.0">
 <link rel="stylesheet" href="./admissions.css?v=15.9.0">
+<style>
+body.restoring-workspace .app-shell { visibility: hidden; }
+body.restoring-workspace dialog[open] { visibility: hidden; }
+body.restoring-workspace .session-loader { position: fixed; inset: 0; z-index: 10001; display: grid; place-content: center; justify-items: center; gap: 12px; color: #181b34; background: #fff; }
+body.auth-pending .session-loader { display: none; }
+</style>
 </head>
 <body class="session-checking">
   <div class="session-loader" role="status" aria-live="polite"><span></span><strong>Opening CAGE Operations Hub…</strong></div>
@@ -959,6 +965,6 @@
 <script src="./hub-experience.js?v=15.9.0" defer></script>
 <script src="./stem-intake.js?v=15.9.0" defer></script>
 <script src="./messenger.js?v=15.9.0" defer></script>
-<script src="./refresh-recovery.js?v=15.9.0-refresh1" defer></script>
+<script src="./refresh-recovery.js?v=15.9.0-refresh2" defer></script>
 </body>
 </html>
