@@ -18,6 +18,7 @@
 <link rel="stylesheet" href="./hub-experience.css?v=15.9.0">
   <link rel="stylesheet" href="./messenger.css?v=15.9.0">
 <link rel="stylesheet" href="./admissions.css?v=15.9.1-review">
+<link rel="stylesheet" href="./design-system.css?v=cage-design-20260922">
 <style>
 body.restoring-workspace .app-shell { visibility: hidden; }
 body.restoring-workspace dialog[open] { visibility: hidden; }
@@ -131,7 +132,7 @@ body.auth-pending .session-loader { display: none; }
             <div id="global-search-results" class="global-search-results" role="listbox" hidden></div>
           </div>
           <button class="icon-button notification-button" data-view="requests" aria-label="Open work requiring attention"><span id="notification-count">0</span>♢</button>
-          <button class="primary-button" id="add-task-top"><span>＋</span> Add task</button>
+          <button class="primary-button" id="add-task-top"><span>+</span> Add task</button>
         </div>
       </header>
 
@@ -177,7 +178,7 @@ body.auth-pending .session-loader { display: none; }
         <section class="view-panel" data-view-panel="requests">
           <div class="page-intro">
             <div><p class="date-line">Single front door</p><h2>Request centre</h2><p>Capture every enquiry once, qualify it, prepare the right offer and convert accepted work into delivery.</p></div>
-            <div class="intro-actions"><button class="secondary-button" id="manage-purpose-button">Manage purposes</button><button class="primary-button" id="new-request-button">＋ New request</button></div>
+            <div class="intro-actions"><button class="secondary-button" id="manage-purpose-button">Manage purposes</button><button class="primary-button" id="new-request-button">+ New request</button></div>
           </div>
           <div class="metric-grid" id="request-metric-grid"></div>
           <div class="toolbar request-toolbar">
@@ -199,7 +200,7 @@ body.auth-pending .session-loader { display: none; }
         <section class="view-panel" data-view-panel="projects">
           <div class="page-intro">
             <div><p class="date-line">Portfolio</p><h2>Projects</h2><p>Every project has one lead, a deadline and an automatically calculated progress score.</p></div>
-            <button class="primary-button" id="new-project-button">＋ New project</button>
+            <button class="primary-button" id="new-project-button">+ New project</button>
           </div>
           <div class="toolbar">
             <div class="segmented-control" id="project-filters" aria-label="Filter projects">
@@ -216,7 +217,7 @@ body.auth-pending .session-loader { display: none; }
         <section class="view-panel" data-view-panel="training">
           <div class="page-intro">
             <div><p class="date-line">Learning delivery</p><h2>CAGE Training Academy</h2><p>Manage RPL students, refresher pilots, STEM learners and any other course from enrolment to completion.</p></div>
-            <div class="intro-actions"><button class="secondary-button" id="new-training-program-button">＋ Create course</button><button class="secondary-button" id="new-cohort-button">＋ New cohort</button><button class="primary-button" id="enrol-learner-button">＋ Enrol learner</button></div>
+            <div class="intro-actions"><button class="secondary-button" id="new-training-program-button">+ Create course</button><button class="secondary-button" id="new-cohort-button">+ New cohort</button><button class="primary-button" id="enrol-learner-button">+ Enrol learner</button></div>
           </div>
           <div class="preview-banner"><strong>Correct starting point</strong><span>A new email, call or walk-in starts in Request Centre. Once accepted, open or create the training cohort here and enrol the learners.</span></div>
           <div class="training-workflow" aria-label="Training workflow"><span>1 · Enquiry</span><i>→</i><span>2 · Enrol</span><i>→</i><span>3 · Documents & fees</span><i>→</i><span>4 · Deliver training</span><i>→</i><span>5 · Assess</span><i>→</i><span>6 · Certify & follow up</span></div>
@@ -264,7 +265,7 @@ body.auth-pending .session-loader { display: none; }
         <section class="view-panel" data-view-panel="crm">
           <div class="page-intro">
             <div><p class="date-line">Growth</p><h2>CRM & opportunities</h2><p>Qualified requests appear here automatically. Add an opportunity directly only when CAGE is proactively pursuing a lead.</p></div>
-            <div class="intro-actions"><span class="prototype-note">Client email? Use New request</span><button class="primary-button" id="new-deal-button">＋ Add proactive opportunity</button></div>
+            <div class="intro-actions"><span class="prototype-note">Client email? Use New request</span><button class="primary-button" id="new-deal-button">+ Add proactive opportunity</button></div>
           </div>
           <div class="metric-grid" id="crm-metric-grid"></div>
           <article class="surface pipeline-surface">
@@ -282,7 +283,7 @@ body.auth-pending .session-loader { display: none; }
         <section class="view-panel" data-view-panel="calendar">
           <div class="page-intro">
             <div><p class="date-line">Schedule</p><h2>Team calendar</h2><p>Meetings, field missions, training and task deadlines on one shared schedule.</p></div>
-            <div class="intro-actions"><button class="secondary-button" id="calendar-today">Today</button><button class="primary-button" id="new-event-button">＋ New event</button></div>
+            <div class="intro-actions"><button class="secondary-button" id="calendar-today">Today</button><button class="primary-button" id="new-event-button">+ New event</button></div>
           </div>
           <div class="calendar-toolbar surface">
             <button class="icon-button" id="calendar-prev" aria-label="Previous month">‹</button>
@@ -299,7 +300,7 @@ body.auth-pending .session-loader { display: none; }
         <section class="view-panel" data-view-panel="missions">
           <div class="page-intro">
             <div><p class="date-line">Field operations</p><h2>Mission control</h2><p>Prepare, clear and track every field deployment from client brief to data handover.</p></div>
-            <button class="primary-button" id="new-mission-button">＋ New mission</button>
+            <button class="primary-button" id="new-mission-button">+ New mission</button>
           </div>
           <div class="metric-grid" id="mission-metric-grid"></div>
           <div class="mission-layout">
@@ -314,7 +315,7 @@ body.auth-pending .session-loader { display: none; }
         <section class="view-panel" data-view-panel="assets">
           <div class="page-intro">
             <div><p class="date-line">Fleet & inventory</p><h2>Equipment</h2><p>Know what is available, assigned or due for attention before planning a mission.</p></div>
-            <button class="primary-button" id="new-asset-button">＋ Add equipment</button>
+            <button class="primary-button" id="new-asset-button">+ Add equipment</button>
           </div>
           <div class="metric-grid" id="asset-metric-grid"></div>
           <div class="toolbar asset-toolbar">
@@ -327,7 +328,7 @@ body.auth-pending .session-loader { display: none; }
         <section class="view-panel" data-view-panel="compliance">
           <div class="page-intro">
             <div><p class="date-line">Safety & governance</p><h2>Compliance</h2><p>Keep licences, registrations, insurance, permits and safety reviews current.</p></div>
-            <button class="primary-button" id="new-compliance-button">＋ Add record</button>
+            <button class="primary-button" id="new-compliance-button">+ Add record</button>
           </div>
           <div class="metric-grid" id="compliance-metric-grid"></div>
           <div class="automation-strip surface"><span class="automation-icon">↻</span><span><strong>Automatic renewal reminders</strong><small>Surface licence, permit, insurance and safety reviews before they expire.</small></span><label class="switch"><input id="compliance-reminders" type="checkbox" checked><span></span></label></div>
@@ -348,7 +349,7 @@ body.auth-pending .session-loader { display: none; }
           <div class="communication-rule surface"><span class="communication-rule-icon">◎</span><span><strong>Use Work chat for CAGE work</strong><small>Requests, decisions, files, approvals and handovers stay searchable and linked to the work. WhatsApp is not the official work record.</small></span></div>
           <div class="chat-workspace surface">
             <aside class="chat-channels">
-              <div class="chat-create-actions"><button type="button" id="new-direct-chat">＋ Message</button><button type="button" id="new-group-chat">＋ Group</button></div>
+              <div class="chat-create-actions"><button type="button" id="new-direct-chat">+ Message</button><button type="button" id="new-group-chat">+ Group</button></div>
               <label class="chat-search"><span>⌕</span><input id="chat-search" type="search" placeholder="Search chats or messages" aria-label="Search work conversations"></label>
               <div class="chat-filter" id="chat-filter"><button class="active" data-chat-filter="all">All</button><button data-chat-filter="unread">Unread</button><button data-chat-filter="favourites">Favourites</button><button data-chat-filter="direct">Inbox</button><button data-chat-filter="group">Groups</button><button data-chat-filter="work">Work</button></div>
               <div id="chat-channel-list" class="chat-channel-list"></div>
@@ -358,7 +359,7 @@ body.auth-pending .session-loader { display: none; }
               <div class="chat-context" id="chat-context"></div>
               <div class="chat-messages" id="chat-messages" aria-live="polite"></div>
               <form class="chat-composer" id="chat-form">
-                <button type="button" class="chat-tool" id="chat-attach" aria-label="Attach a file">＋</button>
+                <button type="button" class="chat-tool" id="chat-attach" aria-label="Attach a file">+</button>
                 <input id="chat-file-input" type="file" hidden>
                 <div class="chat-compose-main"><div id="chat-mention-picker" class="chat-mention-picker" role="listbox" aria-label="Mention a colleague" hidden></div><div class="chat-compose-tools"><select id="chat-message-type" aria-label="Message type"><option value="Update">Update</option><option value="Decision">Decision</option><option value="Question">Question</option><option value="Approval">Approval</option><option value="Client communication">Client communication</option></select><button type="button" id="chat-mention" aria-label="Mention a colleague" aria-controls="chat-mention-picker" aria-expanded="false">@ Mention</button></div><textarea id="chat-input" rows="1" maxlength="1200" placeholder="Write an update, decision or question…" aria-label="Work message" autocomplete="off"></textarea></div>
                 <button type="submit" class="chat-send">Send</button>
@@ -370,7 +371,7 @@ body.auth-pending .session-loader { display: none; }
         <section class="view-panel" data-view-panel="finance">
           <div class="page-intro">
             <div><p class="date-line">Money</p><h2>Finance</h2><p>Issue invoices, record expenses and see project profitability without leaving operations.</p></div>
-            <div class="intro-actions"><button class="text-button" id="new-expense-button">Record expense</button><button class="secondary-button" id="new-invoice-button">＋ Invoice</button><button class="primary-button" id="new-quote-button">＋ Quote</button></div>
+            <div class="intro-actions"><button class="text-button" id="new-expense-button">Record expense</button><button class="secondary-button" id="new-invoice-button">+ Invoice</button><button class="primary-button" id="new-quote-button">+ Quote</button></div>
           </div>
           <div class="metric-grid" id="finance-metric-grid"></div>
           <div class="automation-strip surface"><span class="automation-icon">↻</span><span><strong>Automatic payment follow-up</strong><small>Prepare reminder messages for overdue invoices without checking another system.</small></span><label class="switch"><input id="auto-reminders" type="checkbox" checked><span></span></label></div>
@@ -391,7 +392,7 @@ body.auth-pending .session-loader { display: none; }
         <section class="view-panel" data-view-panel="approvals">
           <div class="page-intro">
             <div><p class="date-line">Decisions</p><h2>Approval inbox</h2><p>Approve money, leave, missions and submissions from one short queue.</p></div>
-            <button class="primary-button" id="new-approval-button">＋ Request approval</button>
+            <button class="primary-button" id="new-approval-button">+ Request approval</button>
           </div>
           <div class="metric-grid" id="approval-metric-grid"></div>
           <div class="approval-layout">
@@ -403,7 +404,7 @@ body.auth-pending .session-loader { display: none; }
         <section class="view-panel" data-view-panel="commercial">
           <div class="page-intro">
             <div><p class="date-line">Growth control</p><h2>Tenders, grants & contracts</h2><p>Track requirements, review gates, signatures and delivery obligations without separate spreadsheets.</p></div>
-            <button class="primary-button" id="new-commercial-button">＋ Add record</button>
+            <button class="primary-button" id="new-commercial-button">+ Add record</button>
           </div>
           <div class="metric-grid" id="commercial-metric-grid"></div>
           <article class="surface opportunity-monitor" aria-label="AI opportunity monitor">
@@ -432,7 +433,7 @@ body.auth-pending .session-loader { display: none; }
         <section class="view-panel" data-view-panel="leave">
           <div class="page-intro">
             <div><p class="date-line">People</p><h2>Vacation tracker</h2><p>See who is available, request time off and approve leave without separate spreadsheets.</p></div>
-            <button class="primary-button" id="new-leave-button">＋ Request leave</button>
+            <button class="primary-button" id="new-leave-button">+ Request leave</button>
           </div>
           <div class="metric-grid" id="leave-metric-grid"></div>
           <div class="leave-layout">
@@ -445,7 +446,7 @@ body.auth-pending .session-loader { display: none; }
         <section class="view-panel" data-view-panel="knowledge">
           <div class="page-intro">
             <div><p class="date-line">Reference</p><h2>Knowledge centre</h2><p>SOPs, templates, technical guides and lessons learned—searchable and linked to CAGE work.</p></div>
-            <button class="primary-button" id="new-knowledge-button">＋ Add reference</button>
+            <button class="primary-button" id="new-knowledge-button">+ Add reference</button>
           </div>
           <div class="toolbar knowledge-toolbar"><div class="segmented-control" id="knowledge-filters"><button class="active" data-knowledge-filter="all">All</button><button data-knowledge-filter="SOP">SOPs</button><button data-knowledge-filter="Template">Templates</button><button data-knowledge-filter="Technical guide">Technical</button><button data-knowledge-filter="Lesson learned">Lessons</button></div><label class="inline-search"><span>⌕</span><input id="knowledge-search" type="search" placeholder="Search references" aria-label="Search knowledge centre"></label></div>
           <div class="knowledge-layout"><aside class="surface knowledge-pinned"><div class="surface-heading"><div><p class="section-kicker">Quick access</p><h3>Pinned</h3></div></div><div id="knowledge-pinned"></div></aside><div class="knowledge-grid" id="knowledge-grid"></div></div>
@@ -470,7 +471,7 @@ body.auth-pending .session-loader { display: none; }
         <section class="view-panel" data-view-panel="hr">
           <div class="page-intro">
             <div><p class="date-line">People lifecycle</p><h2>Recruitment and employee records</h2><p>Manage vacancies, applications, interviews and secure employee documents from one place.</p></div>
-            <div class="intro-actions"><a class="secondary-button" href="./careers.html" target="_blank" rel="noopener">Open careers page</a><button class="primary-button hr-privileged" id="new-job-button">＋ New vacancy</button></div>
+            <div class="intro-actions"><a class="secondary-button" href="./careers.html" target="_blank" rel="noopener">Open careers page</a><button class="primary-button hr-privileged" id="new-job-button">+ New vacancy</button></div>
           </div>
           <div class="metric-grid" id="hr-metrics"></div>
           <div class="hr-top-grid">
@@ -482,7 +483,7 @@ body.auth-pending .session-loader { display: none; }
         </section>
 
         <section class="view-panel" data-view-panel="admin">
-          <div class="page-intro"><div><p class="date-line">Administrator only</p><h2>User accounts and roles</h2><p>Invite staff, change access roles and deactivate accounts without changing the database manually.</p></div><button class="primary-button" id="invite-user-button">＋ Invite user</button></div>
+          <div class="page-intro"><div><p class="date-line">Administrator only</p><h2>User accounts and roles</h2><p>Invite staff, change access roles and deactivate accounts without changing the database manually.</p></div><button class="primary-button" id="invite-user-button">+ Invite user</button></div>
           <article class="surface"><div class="surface-heading"><div><p class="section-kicker">Access control</p><h3>CAGE accounts</h3></div><span class="prototype-note">Changes take effect immediately</span></div><div id="admin-user-list" class="admin-user-list"></div></article>
           <article class="surface role-guide"><div class="surface-heading"><div><p class="section-kicker">Role guide</p><h3>What each role is for</h3></div></div><div class="role-grid"><div><strong>Administrator</strong><span>Accounts, roles and all company functions</span></div><div><strong>Manager</strong><span>Operational decisions and HR oversight</span></div><div><strong>HR</strong><span>Recruitment and employee records</span></div><div><strong>Finance</strong><span>Finance workflows and reporting</span></div><div><strong>Member</strong><span>Normal project and operational work</span></div><div><strong>Viewer</strong><span>Read-only access</span></div><div><strong>Shared</strong><span>Company mailbox; not assignable</span></div></div></article>
         </section>
@@ -536,7 +537,7 @@ body.auth-pending .session-loader { display: none; }
     </div>
   </div>
 
-  <button class="mobile-add-button" id="mobile-add" aria-label="Add task">＋</button>
+  <button class="mobile-add-button" id="mobile-add" aria-label="Add task">+</button>
 
   <dialog id="request-dialog" class="app-dialog">
     <form method="dialog" id="request-form">
@@ -566,7 +567,7 @@ body.auth-pending .session-loader { display: none; }
   <dialog id="purpose-dialog" class="app-dialog compact-dialog">
     <form method="dialog" id="purpose-form">
       <div class="dialog-heading"><div><p class="section-kicker">Admin setup</p><h2>Request purposes</h2><p>Add the services and enquiry types staff can select during intake.</p></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
-      <div class="purpose-add-row"><input name="purpose" maxlength="60" placeholder="e.g. Construction progress monitoring" aria-label="New request purpose"><button class="primary-button" value="default">＋ Add purpose</button></div>
+      <div class="purpose-add-row"><input name="purpose" maxlength="60" placeholder="e.g. Construction progress monitoring" aria-label="New request purpose"><button class="primary-button" value="default">+ Add purpose</button></div>
       <p class="form-error" id="purpose-form-error" role="alert"></p>
       <div class="purpose-list" id="purpose-list"></div>
       <div class="dialog-actions"><button class="secondary-button" value="cancel">Done</button></div>
@@ -954,7 +955,7 @@ body.auth-pending .session-loader { display: none; }
 <script src="./vendor/pdf-lib.min.js?v=15.9.0" defer></script>
 <script src="./document-pdf.js?v=15.9.0" defer></script>
 <script src="./documents-ui.js?v=15.9.0" defer></script>
-<script src="./personal-work.js?v=15.9.0-access1" defer></script>
+<script src="./personal-work.js?v=cage-design-20260922" defer></script>
   <script src="./mobile.js?v=15.9.0" defer></script>
 <script src="./daily-planner.js?v=15.9.0" defer></script>
 <script src="./staff-email.js?v=15.9.0-refresh1" defer></script>
@@ -965,7 +966,8 @@ body.auth-pending .session-loader { display: none; }
 <script src="./academy.js?v=15.9.0-access1" defer></script>
 <script src="./hub-experience.js?v=15.9.0" defer></script>
 <script src="./stem-intake.js?v=15.9.0-access1" defer></script>
-<script src="./messenger.js?v=15.9.0" defer></script>
+<script src="./messenger.js?v=cage-design-20260922" defer></script>
 <script src="./refresh-recovery.js?v=15.9.0-refresh2" defer></script>
+<script src="./design-system.js?v=cage-design-20260922" defer></script>
 </body>
 </html>

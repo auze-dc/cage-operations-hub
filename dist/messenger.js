@@ -5,8 +5,8 @@ const $=id=>document.getElementById(id), workspace=document.querySelector('.chat
 const icons={plus:'<path d="M12 5v14M5 12h14"/>',search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>',send:'<path d="m4 4 17 8-17 8 3-8-3-8Zm3 8h14"/>',mic:'<rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/>',more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',sun:'<circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4 4l2 2m12 12 2 2M4 20l2-2M18 6l2-2"/>',star:'<path d="m12 3 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1 3-6Z"/>'};
 const svg=name=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
 const key=()=>`cage-messenger:${window.CAGE_BACKEND?.currentProfile?.()?.id||'local'}`;
-let prefs={favourites:[],theme:'dark'},currentThread='',matches=[],hit=0;
-function load(){try{prefs={favourites:[],theme:'dark',...JSON.parse(localStorage.getItem(key())||'{}')};}catch{}if(!Array.isArray(prefs.favourites))prefs.favourites=[];applyTheme();}
+let prefs={favourites:[],theme:'light'},currentThread='',matches=[],hit=0;
+function load(){try{prefs={favourites:[],theme:'light',...JSON.parse(localStorage.getItem(key())||'{}')};}catch{}if(!Array.isArray(prefs.favourites))prefs.favourites=[];applyTheme();}
 function save(){try{localStorage.setItem(key(),JSON.stringify(prefs));}catch{}}
 function isFavourite(id){return prefs.favourites.includes(id);}
 function applyTheme(){workspace.dataset.messengerTheme=prefs.theme==='light'?'light':'dark';$('chat-theme-toggle')?.setAttribute('aria-label',prefs.theme==='light'?'Use dark chat appearance':'Use light chat appearance');}
