@@ -345,6 +345,7 @@
       if (event === "SIGNED_IN" && session?.user && profile?.id !== session.user.id) establishSession(session);
       if (event === "SIGNED_OUT") {
         profile = null;
+        window.CAGE_PRESENCE?.stop?.();
         showLogin();
       }
     });
@@ -404,6 +405,7 @@
 
   document.getElementById("sign-out-button").addEventListener("click", async () => {
     localStorage.removeItem("cage-operations-hub-production-cache-v1");
+    await window.CAGE_PRESENCE?.stop?.();
     if (client) await client.auth.signOut();
   });
 
@@ -878,7 +880,11 @@
     const r=await client.storage.from('hub-notices').createSignedUrl(path,60,{download:true});if(r.error)throw r.error;return r.data.signedUrl;
   }
   async function hubEvent(id) {const r=await client.from('hub_events').select('*').eq('id',id).single();if(r.error)throw r.error;const g=await client.from('hub_event_guests').select('*').eq('event_id',id);if(g.error)throw g.error;return {...r.data,guests:g.data};}
+  async function presenceHeartbeat(sid,availability) {const r=await client.rpc("hub_presence_heartbeat",{sid,availability}).abortSignal(AbortSignal.timeout(10000));if(r.error)throw r.error;return r.data;}
   window.CAGE_BACKEND = {
+    presenceHeartbeat,
+    presenceStatus: async(values)=>{const r=await client.rpc("hub_presence_status",values);if(r.error)throw r.error;},
+    presenceWeek: async(week_of)=>{const r=await client.rpc("hub_presence_week",{week_of});if(r.error)throw r.error;return r.data;},
     hubCall,hubData,hubSources,hubAttachment,hubDownload,hubEvent,
     admissionReviewStep,admissionIdentity,admissionCohortPlan,admissionData,admissionSave,admissionReview,admissionPayment,admissionFile,admissionEnrol,admissionEmailStatus,admissionEnrolmentEmail,
     enrolStem,

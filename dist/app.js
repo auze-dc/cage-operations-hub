@@ -1236,7 +1236,7 @@ function renderProjects() {
           <div class="project-card-meta"><span>Due ${formatDate(project.deadline, { year: true })}</span><strong>${progress}% complete</strong></div>
           <div class="progress-track"><span style="width:${progress}%"></span></div>
           <div class="project-card-footer">
-            <span class="member-stack">${members.slice(0,4).map(member => `<span class="owner-avatar" title="${escapeHtml(member.name)}">${member.initials}</span>`).join("")}</span>
+            <span class="member-stack">${members.slice(0,4).map(member => `<span class="owner-avatar" data-presence-member="${escapeHtml(member.id)}" title="${escapeHtml(member.name)}">${member.initials}</span>`).join("")}</span>
             <button class="text-button" data-project-detail="${project.id}">Open project</button>
           </div>
         </div>
@@ -2163,7 +2163,7 @@ function renderChat() {
     const glyph = thread.title.split(/\s+/).slice(0, 2).map(word => word[0]).join("").toUpperCase();
     const preview = last ? `${last.sender === currentMember ? "You: " : thread.direct ? "" : teamMember(last.sender).name.split(" ")[0]+": "}${last.audio ? "Voice message" : last.text || last.attachment || "Attachment"}` : "Start a conversation";
     const stamp = last ? (last.date === TODAY ? last.time : formatDate(last.date)) : "";
-    return `<button type="button" class="chat-channel ${thread.id === activeChatThread ? "active" : ""} ${unread ? "has-unread" : ""}" data-chat-thread="${escapeHtml(thread.id)}" aria-current="${thread.id === activeChatThread ? "true" : "false"}"><span class="chat-channel-icon ${thread.category}">${escapeHtml(glyph)}</span><span class="chat-channel-copy"><strong>${escapeHtml(thread.title)}</strong><span>${escapeHtml(preview)}</span></span><span class="chat-channel-status"><time>${escapeHtml(stamp)}</time><span>${window.CAGE_MESSENGER?.isFavourite(thread.id) ? '<span class="chat-favourite-mark" aria-label="Favourite">★</span>' : ""}${unread ? `<span class="unread-count">${unread}</span>` : ""}</span></span></button>`;
+    return `<button type="button" class="chat-channel ${thread.id === activeChatThread ? "active" : ""} ${unread ? "has-unread" : ""}" data-chat-thread="${escapeHtml(thread.id)}" aria-current="${thread.id === activeChatThread ? "true" : "false"}"><span class="chat-channel-icon ${thread.category}">${escapeHtml(glyph)}</span><span class="chat-channel-copy"><strong>${escapeHtml(thread.title)}</strong><span>${escapeHtml(preview)}</span></span><span class="chat-channel-status"><time>${escapeHtml(stamp)}</time>${thread.direct?`<span class="cage-presence-label" data-presence-member="${escapeHtml(threadMemberIds(thread).find(id=>id!==currentMember)||currentMember)}"></span>`:""}<span>${window.CAGE_MESSENGER?.isFavourite(thread.id) ? '<span class="chat-favourite-mark" aria-label="Favourite">★</span>' : ""}${unread ? `<span class="unread-count">${unread}</span>` : ""}</span></span></button>`;
   }).join("") : `<div class="chat-list-empty">No conversations match this view.</div>`;
 
   const thread = threadById(activeChatThread);
@@ -2177,7 +2177,7 @@ function renderChat() {
     : `${thread.type} · ${thread.organisation} · Owner: ${teamMember(thread.owner).name}`;
   const openRecordButton = thread.teamWide || thread.customChat ? "" : `<button data-thread-open-view="${thread.request ? "requests" : thread.project ? "projects" : "commercial"}">Open record</button>`;
   const extraMembers = members.length > 5 ? `<span class="chat-member-more" title="${members.slice(5).map(member => escapeHtml(member.name)).join(", ")}">+${members.length - 5}</span>` : "";
-  document.getElementById("chat-header").innerHTML = `<div class="chat-header-main"><span class="chat-channel-icon ${thread.category}">${glyph}</span><span><strong>${escapeHtml(thread.title)}</strong><span>${escapeHtml(headerDetail)}</span></span></div><div class="chat-header-actions">${openRecordButton}<div class="chat-header-members">${members.slice(0, 5).map(member => `<span class="owner-avatar" title="${escapeHtml(member.name)}">${member.initials}</span>`).join("")}${extraMembers}</div></div>`;
+  document.getElementById("chat-header").innerHTML = `<div class="chat-header-main"><span class="chat-channel-icon ${thread.category}">${glyph}</span><span><strong>${escapeHtml(thread.title)}</strong><span>${escapeHtml(headerDetail)}</span></span></div><div class="chat-header-actions">${openRecordButton}<div class="chat-header-members">${members.slice(0, 5).map(member => `<span class="owner-avatar" data-presence-member="${escapeHtml(member.id)}" title="${escapeHtml(member.name)}">${member.initials}</span>`).join("")}${extraMembers}</div></div>`;
   const messages = messagesForThread(thread.id);
   const decisions = messages.filter(message => message.type === "Decision" || message.pinned).length;
   const files = messages.filter(message => message.attachment).length;
@@ -2417,7 +2417,7 @@ function renderTeam() {
     const overdueWidth = Math.max(0, (member.overdue / max) * 100);
     return `
       <div class="team-row">
-        <div class="team-person"><span class="owner-avatar">${member.initials}</span><span><strong>${escapeHtml(member.name)}</strong><span>${escapeHtml(member.role)}</span><small>${escapeHtml(member.email || "Email not recorded")}</small></span></div>
+        <div class="team-person"><span class="owner-avatar" data-presence-member="${escapeHtml(member.id)}">${member.initials}</span><span><strong>${escapeHtml(member.name)}</strong><span>${escapeHtml(member.role)}</span><small>${escapeHtml(member.email || "Email not recorded")}</small></span></div>
         <div class="workload-track"><span class="workload-active" style="width:${activeWidth}%"></span><span class="workload-overdue" style="width:${overdueWidth}%"></span></div>
         <span class="workload-stat"><strong>${member.active}</strong> active</span>
         <span class="account-access ${member.access === "Administrator" ? "administrator" : "standard"}">${escapeHtml(member.access || "Standard user")}</span>
