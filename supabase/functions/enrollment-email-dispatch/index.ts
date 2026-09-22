@@ -1,3 +1,4 @@
+import {dispatchHubDeliveries} from '../_shared/hub-deliveries.ts';
 import {createClient} from 'https://esm.sh/@supabase/supabase-js@2';
 const esc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 async function dispatchPaymentReminders(db:any,key:string,from:string){
@@ -41,6 +42,7 @@ Deno.serve(async req=>{
   }catch(e){await checked(db.from('enrollment_email_outbox').update({status:'pending',error:e instanceof Error?e.message:'Email delivery failed',available_at:new Date(Date.now()+300000).toISOString()}).eq('id',job.id));retrying++;}
  }
  const reminders=await dispatchPaymentReminders(db,key,from);
- return reply({sent,retrying,reminders});
+ const hub=await dispatchHubDeliveries(db,key,from,Deno.env.get('APP_URL')||'');
+ return reply({sent,retrying,reminders,hub});
  }catch{ return reply({error:'Dispatch failed. Check function logs and the enrollment email queue.'},500); }
 });
