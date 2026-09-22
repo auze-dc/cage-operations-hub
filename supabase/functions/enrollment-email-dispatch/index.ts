@@ -1,3 +1,4 @@
+import {dispatchPresenceReports} from '../_shared/presence-reports.ts';
 import {dispatchHubDeliveries} from '../_shared/hub-deliveries.ts';
 import {createClient} from 'https://esm.sh/@supabase/supabase-js@2';
 const esc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
@@ -28,6 +29,8 @@ Deno.serve(async req=>{
  const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
  const checked=async(q:any)=>{const r=await q;if(r.error)throw r.error;return r.data;};
  try {
+ let presence;try{presence=await dispatchPresenceReports(db,key,from);}catch{presence={error:'Presence summary processing failed; inspect the presence report queue.'};}
+ // A summary failure must not stop existing Academy email deliveries.
  const jobs=await checked(db.rpc('claim_enrollment_email'));let sent=0,retrying=0;
  for(const job of jobs){
   // Freeze the provider request before its first send; retries use identical content.
@@ -43,6 +46,6 @@ Deno.serve(async req=>{
  }
  const reminders=await dispatchPaymentReminders(db,key,from);
  const hub=await dispatchHubDeliveries(db,key,from,Deno.env.get('APP_URL')||'');
- return reply({sent,retrying,reminders,hub});
+ return reply({sent,retrying,reminders,hub,presence});
  }catch{ return reply({error:'Dispatch failed. Check function logs and the enrollment email queue.'},500); }
 });
