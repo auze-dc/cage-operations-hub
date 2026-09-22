@@ -1,0 +1,14 @@
+#cage-emoji-dialog{width:min(520px,calc(100vw - 24px));max-height:85dvh;overflow:auto;padding:20px;box-sizing:border-box;border:1px solid #dce4ec;border-radius:16px;background:#fff;color:#182536}
+#cage-emoji-dialog::backdrop{background:rgba(16,28,44,.35)}
+#cage-emoji-dialog [hidden]{display:none!important}
+#cage-emoji-dialog .field{display:grid;gap:6px;margin:12px 0}
+#cage-emoji-dialog input,#cage-emoji-dialog select{width:100%;min-width:0;min-height:44px;border:1px solid #becbd8;border-radius:8px;padding:8px;background:white;color:#182536;box-sizing:border-box;font:inherit}
+.cage-emoji-filters{display:grid;grid-template-columns:1.5fr 1fr;gap:12px}
+.cage-full-emoji-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(44px,1fr));gap:4px}
+.cage-full-emoji-grid button{min-height:44px;border:0;border-radius:8px;background:transparent;font-family:'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;font-size:26px;cursor:pointer}
+.cage-full-emoji-grid button:hover{background:#e6f6fd}.cage-full-emoji-grid button:focus-visible,#cage-emoji-dialog :focus-visible{outline:3px solid #007cae;outline-offset:1px}
+.cage-emoji-note,[data-emoji-count]{color:#526270;font-size:13px;line-height:1.5}#cage-emoji-dialog [data-emoji-more]{margin-top:12px;min-height:44px;width:100%}
+#chat-emoji{min-height:36px} .chat-compose-tools{flex-wrap:wrap}
+@font-face{font-family:'CAGE Emoji';src:url('./vendor/NotoColorEmoji.ttf') format('truetype');font-display:swap;unicode-range:U+200D,U+20E3,U+2190-21FF,U+2300-27FF,U+2B00-2BFF,U+FE0F,U+1F000-1FAFF,U+E0020-E007F}
+.cage-full-emoji-grid button,[data-emoji-toggle],.cage-status-emoji{font-family:'CAGE Emoji','Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif}
+#chat-input,.message-bubble p,.cage-status-message,.cage-recent-row{font-family:'CAGE Emoji',Inter,system-ui,sans-serif}
