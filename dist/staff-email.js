@@ -24,7 +24,8 @@ async function openEmailLink(){if(window.CAGE_REFRESH?.hasCurrentPage())return;c
 // Consume the incoming link once. Later refreshes restore the actual working page.
 try{const url=new URL(location.href);url.searchParams.delete('view');url.searchParams.delete('record');history.replaceState(history.state,'',url.pathname+url.search+url.hash);}catch{}
 if(api().moduleLevel(view)==='none'){setView('notifications');showToast('Your access to this module has changed.');return;}setView(view);try{
- if(view==='tasks'&&state.tasks.some(t=>t.id===id))openTask(id);
+ if(['notices','calendar'].includes(view)&&id)await window.CAGE_COLLAB?.open(view,id);
+ else if(view==='tasks'&&state.tasks.some(t=>t.id===id))openTask(id);
  else if(view==='projects'&&state.projects.some(t=>t.id===id))openProject(id);
  else if(view==='requests'&&state.requests.some(t=>t.id===id))openRequest(id);
  else if(view==='chat'&&threadById(id))selectChatThread(id);

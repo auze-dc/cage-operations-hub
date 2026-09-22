@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 const $=id=>document.getElementById(id), esc=escapeHtml, backend=()=>window.CAGE_BACKEND;
-const modules=['requests','projects','tasks','crm','calendar','missions','assets','compliance','chat','finance','approvals','commercial','leave','knowledge','team','evidence','reports','hr','training'];
+const modules=['notices','requests','projects','tasks','crm','calendar','missions','assets','compliance','chat','finance','approvals','commercial','leave','knowledge','team','evidence','reports','hr','training'];
 let personal={reminders:[],notifications:[]}, users=[], rules=[], poll, recorder, stream, chunks=[], voiceBlob, voiceUrl, voiceThread, started, clock, discarded=false;
 const profile=()=>backend().currentProfile(), me=()=>backend().currentMemberId();
 function panel(id,content){const section=document.createElement('section');section.className='view-panel';section.dataset.viewPanel=id;section.innerHTML=content;document.querySelector('[data-view-panel="dashboard"]').parentElement.append(section);}
@@ -26,7 +26,7 @@ function applyAccess(){
    const level=backend().moduleLevel(panel.dataset.viewPanel);
    panel.querySelectorAll('button,input,select,textarea').forEach(el=>{
     if(el.dataset.accessDisabled){el.disabled=false;delete el.dataset.accessDisabled;}
-    const isNavigation=el.matches('[data-view],[data-go-view],[data-chat-thread],[data-chat-filter],[data-open-project],[data-project-tab],[data-play-voice],[data-preview-chat-file],[data-open-receipt],[data-equipment-history],[data-view-document],[data-record-pdf],[data-receipt],[data-chat-info],[data-finance-section],[data-conversation-search],[data-chat-menu-toggle],[data-chat-favourite],#chat-theme-toggle,#message-find-prev,#message-find-next,#message-find-close') || el.type==='search';
+    const isNavigation=el.matches('[data-hub-action=notice],[data-hub-action=event],[data-hub-action=close],[data-hub-action=download],[data-hub-action=ack],[data-hub-action=rsvp],[data-hub-action=today],[data-hub-action=previous],[data-hub-action=next],[data-hub-action=more],[data-hub-action=export],[data-hub-action=refresh],[data-hub-action=refresh-calendar],[data-hub-source],#hub-calendar-date,#hub-calendar-view,#hub-notice-filter') || el.matches('[data-view],[data-go-view],[data-chat-thread],[data-chat-filter],[data-open-project],[data-project-tab],[data-play-voice],[data-preview-chat-file],[data-open-receipt],[data-equipment-history],[data-view-document],[data-record-pdf],[data-receipt],[data-chat-info],[data-finance-section],[data-conversation-search],[data-chat-menu-toggle],[data-chat-favourite],#chat-theme-toggle,#message-find-prev,#message-find-next,#message-find-close') || el.type==='search';
     if(level==='view' && !isNavigation && !el.closest('[data-personal-readonly]')) { el.disabled=true;el.dataset.accessDisabled='true'; }
    });
  });
@@ -63,6 +63,7 @@ function openReminder(id='',title=''){
 function navigate(view,id){
  if(backend().moduleLevel(view)==='none'){showToast('Your module access has changed. Ask an administrator if you need this record.');return;}
  setView(view);
+ if(['notices','calendar'].includes(view)&&id)window.CAGE_COLLAB?.open(view,id).catch(e=>showToast(e.message));
  if(view==='chat')selectChatThread(id);
  if(view==='requests' && requestById(id))openRequest(id);
  if(view==='assets'){const asset=assetById(id);if(asset){$('asset-search').value=asset.tag;assetFilter='all';renderAssets();}}

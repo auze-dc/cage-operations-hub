@@ -635,6 +635,7 @@
   }
   function moduleLevel(module) {
     if (!profile) return "none";
+    if(module === "notices" && profile.role === "shared") return "none";
     if(module === "training") return profile.active === false || profile.role === "shared" ? "none" : "edit";
     if(profile.role === "admin") return "edit";
     if(["admin","settings"].includes(module)) return "none";
@@ -847,7 +848,38 @@
     const r=await client.from('stem_applications').update({status:values.status,notes:values.notes,reviewed_by:profile.id,updated_at:new Date().toISOString()}).eq('id',id).select().single();if(r.error)throw r.error;return r.data;
   }
   async function enrolStem(application,cohort,details) {const r=await client.rpc('enrol_stem_application',{application_key:application,cohort_key:cohort,details});if(r.error)throw r.error;return r.data;}
+  async function hubCall(name,args={}) {
+    if(!['hub_delivery_status','hub_notice_save','hub_notice_mark','hub_notice_file','hub_calendar_list','hub_event_save','hub_event_exception','hub_event_reply','hub_event_conflicts'].includes(name))throw new Error('Unknown Hub operation');
+    const r=await client.rpc(name,args);if(r.error)throw r.error;return r.data;
+  }
+  async function hubRows(table,columns='*') {
+    let rows=[];for(let offset=0;;offset+=1000){const r=await client.from(table).select(columns).range(offset,offset+999);if(r.error)throw r.error;rows.push(...r.data);if(r.data.length<1000)return rows;}
+  }
+  async function hubData() {
+    const [notices,reads,files,people]=await Promise.all([hubRows('hub_notices'),hubRows('hub_notice_reads'),hubRows('hub_notice_files'),hubRows('profiles','id,full_name,role,active')]);
+    return {notices,reads,files,people:people.filter(p=>p.active&&p.role!=='shared')};
+  }
+  async function hubSources() {
+    const read=async(t,c)=>hubRows(t,c);
+    const [cohorts,sessions,interviews,departments]=await Promise.all([
+      moduleLevel('training')==='none'?[]:read('training_cohorts','id,name,start_date,end_date,status,lead_instructor'),
+      moduleLevel('training')==='none'?[]:read('training_sessions','id,cohort_id,title,starts_at,ends_at,cancelled,instructor_id,venue'),
+      moduleLevel('hr')==='none'?[]:read('interviews','id,scheduled_start,scheduled_end,status,location_or_link'),
+      read('staff_work_settings','department')]);
+    return {cohorts,sessions,interviews,departments:[...new Set(departments.map(d=>d.department).filter(Boolean))]};
+  }
+  async function hubAttachment(nid,file) {
+    if(file.size>10485760)throw new Error('Attachments must be 10 MB or smaller.');
+    const path=nid+'/'+crypto.randomUUID()+'/'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    const r=await client.storage.from('hub-notices').upload(path,file,{upsert:false});if(r.error)throw r.error;
+    await hubCall('hub_notice_file',{nid,file_path:path,file_name:file.name});
+  }
+  async function hubDownload(path) {
+    const r=await client.storage.from('hub-notices').createSignedUrl(path,60,{download:true});if(r.error)throw r.error;return r.data.signedUrl;
+  }
+  async function hubEvent(id) {const r=await client.from('hub_events').select('*').eq('id',id).single();if(r.error)throw r.error;const g=await client.from('hub_event_guests').select('*').eq('event_id',id);if(g.error)throw g.error;return {...r.data,guests:g.data};}
   window.CAGE_BACKEND = {
+    hubCall,hubData,hubSources,hubAttachment,hubDownload,hubEvent,
     admissionReviewStep,admissionIdentity,admissionCohortPlan,admissionData,admissionSave,admissionReview,admissionPayment,admissionFile,admissionEnrol,admissionEmailStatus,admissionEnrolmentEmail,
     enrolStem,
     chatReceipts,acknowledgeChat,appNotificationPreferences,stemData,reviewStem,

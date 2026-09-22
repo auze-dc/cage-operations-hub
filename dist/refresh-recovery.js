@@ -17,11 +17,11 @@ function fileKey(root,index){return key()+':'+root.id+':'+index;}
 function warn(){showToast('Draft storage is unavailable or full. Keep this page open until your work is saved.');}
 function descriptor(el){if(!el)return null;return {id:el.id||'',tag:el.tagName,attrs:[...el.attributes].filter(a=>a.name.startsWith('data-')&&!/submitting/.test(a.name)).map(a=>[a.name,a.value]),text:el.textContent.trim(),parent:el.closest('dialog')?.id||''};}
 function locate(d){if(!d)return null;if(d.id)return document.getElementById(d.id);const root=d.parent?document.getElementById(d.parent):document;if(!root)return null;return [...root.querySelectorAll(d.tag||'button')].find(el=>d.attrs.every(([k,v])=>el.getAttribute(k)===v)&&el.textContent.trim()===d.text);}
-function globals(){return {opportunityFilter,opportunityQuery,admissions:window.CAGE_ADMISSIONS?.captureView?.(),activeView,activeChatThread,activeRequestId,activeContactId,activeProjectId,activeProjectTab,editingTaskId,editingDealId,taskFilter,projectFilter,taskDisplay,financeFilter,boardProjectFilter,chatFilter,knowledgeFilter,assetFilter,commercialFilter,requestFilter,calendar:calendarCursor.toISOString()};}
+function globals(){return {collaboration:window.CAGE_COLLAB?.capture(),opportunityFilter,opportunityQuery,admissions:window.CAGE_ADMISSIONS?.captureView?.(),activeView,activeChatThread,activeRequestId,activeContactId,activeProjectId,activeProjectTab,editingTaskId,editingDealId,taskFilter,projectFilter,taskDisplay,financeFilter,boardProjectFilter,chatFilter,knowledgeFilter,assetFilter,commercialFilter,requestFilter,calendar:calendarCursor.toISOString()};}
 function snapshot(){
  if(!ready||restoring||!uid())return;
  const panel=document.querySelector(`[data-view-panel="${CSS.escape(activeView)}"]`);
- const dialogs=[...document.querySelectorAll('dialog[open]')].filter(d=>d.id!=='pdf-preview-dialog'&&!d.id.includes('login')).map(d=>({id:d.id,origin:origins.get(d)||null,fields:values(d),forms:[...d.querySelectorAll('form')].map(f=>({id:f.id,data:Object.fromEntries(Object.entries(f.dataset).filter(([k])=>k!=='submitting'))})),items:d.querySelectorAll('.document-item').length,subtasks:d.querySelectorAll('[data-subtask]').length,scrollTop:d.scrollTop,details:[...d.querySelectorAll('details')].map(x=>x.open)}));
+ const dialogs=[...document.querySelectorAll('dialog[open]')].filter(d=>d.id!=='pdf-preview-dialog'&&!d.id.includes('login')).map(d=>({id:d.id,hubRecord:d.dataset.hubRecord||'',origin:origins.get(d)||null,fields:values(d),forms:[...d.querySelectorAll('form')].map(f=>({id:f.id,data:Object.fromEntries(Object.entries(f.dataset).filter(([k])=>k!=='submitting'))})),items:d.querySelectorAll('.document-item').length,subtasks:d.querySelectorAll('[data-subtask]').length,scrollTop:d.scrollTop,details:[...d.querySelectorAll('details')].map(x=>x.open)}));
  try{localStorage.setItem(key(),JSON.stringify({globals:globals(),panel:panel?values(panel):[],dialogs,scroll:{x:scrollX,y:scrollY},containers:[...document.querySelectorAll('[id]')].filter(x=>x.clientHeight>0&&x.scrollHeight>x.clientHeight).map(x=>({id:x.id,top:x.scrollTop,left:x.scrollLeft})),url:location.href,updated:Date.now()}));}catch{warn();}
 }
 function schedule(){if(restoring)return;clearTimeout(timer);timer=setTimeout(snapshot,120);}
@@ -46,6 +46,7 @@ async function apply(root,fields){
  }
 }
 function restoreGlobals(g){
+ window.CAGE_COLLAB?.restoreView(g.collaboration);
  opportunityFilter=g.opportunityFilter||'open';opportunityQuery=g.opportunityQuery||'';window.CAGE_ADMISSIONS?.restoreView?.(g.admissions);
  activeChatThread=g.activeChatThread||GENERAL_CHAT_THREAD_ID;activeRequestId=g.activeRequestId||'';activeContactId=g.activeContactId||'';activeProjectId=g.activeProjectId||'';activeProjectTab=g.activeProjectTab||'overview';editingTaskId=g.editingTaskId||'';editingDealId=g.editingDealId||'';
  taskFilter=g.taskFilter;projectFilter=g.projectFilter;taskDisplay=g.taskDisplay;financeFilter=g.financeFilter;boardProjectFilter=g.boardProjectFilter;chatFilter=g.chatFilter;knowledgeFilter=g.knowledgeFilter;assetFilter=g.assetFilter;commercialFilter=g.commercialFilter;requestFilter=g.requestFilter;
@@ -66,10 +67,11 @@ async function restore(){
  if(savedDialog.id==='project-dialog'&&state.projects.some(p=>p.id===g.activeProjectId)){openProject(g.activeProjectId);activeProjectTab=g.activeProjectTab||'overview';renderProjectWorkspace();}
  if(savedDialog.id==='request-detail-dialog'&&state.requests.some(p=>p.id===g.activeRequestId))openRequest(g.activeRequestId);
  if(savedDialog.id==='task-dialog')openTaskDialog(savedDialog.fields.find(f=>f.name==='project')?.value||'',g.editingTaskId||'');
+ if(['hub-notice-dialog','hub-event-dialog'].includes(savedDialog.id))await window.CAGE_COLLAB.restore(savedDialog);
  if(savedDialog.id==='admission-dialog') await window.CAGE_ADMISSIONS.restore(savedDialog);
  if(savedDialog.id==='stem-review-dialog') await window.CAGE_STEM.restore(savedDialog);
  if(savedDialog.id==='academy-dialog') await window.CAGE_ACADEMY.restore(savedDialog);
- let dialog=document.getElementById(savedDialog.id);const opener=['project-dialog','request-detail-dialog','task-dialog','academy-dialog','stem-review-dialog','admission-dialog'].includes(savedDialog.id)?null:locate(savedDialog.origin);
+ let dialog=document.getElementById(savedDialog.id);const opener=['hub-notice-dialog','hub-event-dialog','project-dialog','request-detail-dialog','task-dialog','academy-dialog','stem-review-dialog','admission-dialog'].includes(savedDialog.id)?null:locate(savedDialog.origin);
  if(opener&&!opener.disabled&&!(opener.tagName==='BUTTON'&&opener.type==='submit')&&!/delete|remove|send|approve|reject|save|submit/i.test(JSON.stringify(savedDialog.origin))){opener.click();for(let n=0;n<30;n++){await wait(100);dialog=document.getElementById(savedDialog.id);if(dialog?.open)break;}}
  if(!dialog){showToast('Your form draft is retained. Reopen its form to recover it.');continue;}
  if(!dialog.open){showToast('Your draft is retained. Reopen the original form to continue.');continue;}
