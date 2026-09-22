@@ -12,3 +12,16 @@
 @font-face{font-family:'CAGE Emoji';src:url('./vendor/NotoColorEmoji.ttf') format('truetype');font-display:swap;unicode-range:U+200D,U+20E3,U+2190-21FF,U+2300-27FF,U+2B00-2BFF,U+FE0F,U+1F000-1FAFF,U+E0020-E007F}
 .cage-full-emoji-grid button,[data-emoji-toggle],.cage-status-emoji{font-family:'CAGE Emoji','Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif}
 #chat-input,.message-bubble p,.cage-status-message,.cage-recent-row{font-family:'CAGE Emoji',Inter,system-ui,sans-serif}
+/* Compact category-first palette */
+#cage-emoji-dialog{background:#1c2023;color:#f2f4f5;width:min(540px,calc(100vw - 20px));height:min(740px,90dvh);padding:16px}
+#cage-emoji-dialog .dialog-heading{margin-bottom:8px;border-color:#41474c}#cage-emoji-dialog h2,#cage-emoji-dialog h3,#cage-emoji-dialog label{color:#f2f4f5}#cage-emoji-dialog h3{font-size:16px;margin:18px 0 10px}
+.cage-emoji-tabs{display:flex;overflow-x:auto;border-bottom:1px solid #41474c;gap:2px;padding:2px 0 6px;scrollbar-width:thin}
+.cage-emoji-tabs button{background:transparent;border:0;border-bottom:3px solid transparent;color:#adb7bd;font-size:24px;min-width:40px;min-height:44px;border-radius:0;cursor:pointer}
+.cage-emoji-tabs button[aria-pressed=true]{color:#fff;border-bottom-color:#00adef}.cage-emoji-tabs button:hover{background:#343b40}
+#cage-emoji-dialog input,#cage-emoji-dialog select{background:#20272b;border-color:#56626b;color:#fff}#cage-emoji-dialog input::placeholder{color:#aeb8bd}
+#cage-emoji-dialog .secondary-button{background:#252c31;color:#fff;border-color:#61717b}#cage-emoji-dialog .cage-emoji-filters{display:block}#cage-emoji-dialog .cage-emoji-filters .field{display:flex;align-items:center;justify-content:flex-end;font-size:13px}#cage-emoji-dialog .cage-emoji-filters select{width:auto;min-height:36px}
+#cage-emoji-dialog .cage-full-emoji-grid{grid-template-columns:repeat(9,minmax(0,1fr));gap:3px}#cage-emoji-dialog .cage-full-emoji-grid button{padding:0;min-width:0;font-size:28px}#cage-emoji-dialog .cage-full-emoji-grid button:hover{background:#39434b}#cage-emoji-dialog :focus-visible{outline-color:#52c7f4}
+#cage-emoji-dialog .cage-emoji-note,#cage-emoji-dialog [data-emoji-count]{color:#b9c4cc}.cage-emoji-footer{border-top:1px solid #465058;padding-top:12px;margin-top:16px}.cage-emoji-footer label{display:flex;align-items:center;gap:8px;font-size:14px}#cage-emoji-dialog [data-emoji-copy]{width:20px;min-height:20px;flex:none}
+@media(max-width:420px){#cage-emoji-dialog .cage-full-emoji-grid{grid-template-columns:repeat(7,minmax(0,1fr))}.cage-emoji-tabs button{min-width:40px}}
+#cage-emoji-dialog[open]{display:flex;flex-direction:column}#cage-emoji-dialog .dialog-heading{background:#1c2023;flex:none}#cage-emoji-dialog .field>span{color:#d2dbe1}
+#cage-emoji-dialog [data-emoji-body]{display:flex;flex-direction:column;flex:1;min-height:0}#cage-emoji-dialog [data-emoji-results]{flex:1;min-height:80px;overflow:auto;padding:0 4px 8px;scrollbar-width:thin}#cage-emoji-dialog .cage-emoji-footer{flex:none;background:#22282c;margin:8px -8px -8px;padding:10px 8px}#cage-emoji-dialog [data-emoji-count]{margin:4px 0}#cage-emoji-dialog .cage-emoji-tabs{flex-shrink:0}#cage-emoji-dialog .cage-emoji-filters .field{margin:3px 0}.cage-emoji-tabs button{font-family:'CAGE Emoji',system-ui,sans-serif}
