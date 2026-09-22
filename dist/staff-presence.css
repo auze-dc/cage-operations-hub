@@ -2,3 +2,9 @@
 #cage-online-button[hidden]{display:none}
 
 .cage-status-actions,.cage-status-presets{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.cage-status-presets button{font-size:13px}.cage-status-message{display:block;color:var(--muted,#526173);font-weight:400;font-size:12px;margin-top:4px;overflow-wrap:anywhere}.cage-status-emoji{position:absolute;top:-9px;right:-7px;font-size:14px;line-height:20px;background:#fff;border-radius:6px}.cage-presence-label{max-width:125px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#cage-status-dialog{width:min(480px,calc(100vw - 24px));max-height:90dvh;overflow:auto}#cage-status-dialog .field{display:flex;flex-direction:column;margin:14px 0;gap:6px}#cage-presence-report-dialog{width:min(1000px,calc(100vw - 24px));max-height:90dvh;overflow:auto}.cage-report-scroll{max-width:100%;overflow:auto}.cage-report-scroll table{width:100%;border-collapse:collapse}.cage-report-scroll th,.cage-report-scroll td{padding:12px;text-align:left;border-bottom:1px solid #dbe4eb;white-space:nowrap;font-size:13px}#cage-weekly-report[hidden]{display:none}
+/* Personal status editor */
+#cage-status-dialog{width:min(560px,calc(100vw - 24px));max-height:90dvh;overflow:auto}
+#cage-status-dialog [hidden]{display:none!important}
+.cage-status-entry{display:flex;gap:8px;margin:8px 0 16px}.cage-status-entry input{min-width:0;flex:1}.cage-status-entry button{font-size:24px;min-width:48px}
+.cage-emoji-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin:12px 0}.cage-emoji-grid button{font-size:23px;min-height:44px;padding:6px}
+.cage-recent-row{display:flex;gap:6px;margin:6px 0}.cage-recent-row button:first-child{flex:1;text-align:left;min-width:0;overflow-wrap:anywhere}.cage-recent-row small{font-weight:400;color:#526270}.cage-recent-row button:last-child{min-width:44px}

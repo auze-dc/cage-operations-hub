@@ -883,7 +883,9 @@
   async function presenceHeartbeat(sid,availability) {const r=await client.rpc("hub_presence_heartbeat",{sid,availability}).abortSignal(AbortSignal.timeout(10000));if(r.error)throw r.error;return r.data;}
   window.CAGE_BACKEND = {
     presenceHeartbeat,
-    presenceStatus: async(values)=>{const r=await client.rpc("hub_presence_status",values);if(r.error)throw r.error;},
+    presenceStatusSettings: async()=>{const r=await client.rpc("hub_status_settings");if(r.error)throw r.error;return r.data;},
+    presenceStatusForget: async(emoji_value,message_value)=>{const r=await client.rpc("hub_status_forget",{emoji_value,message_value});if(r.error)throw r.error;},
+    presenceStatus: async(values)=>{const r=await client.rpc("hub_status_save",values);if(r.error)throw r.error;},
     presenceWeek: async(week_of)=>{const r=await client.rpc("hub_presence_week",{week_of});if(r.error)throw r.error;return r.data;},
     hubCall,hubData,hubSources,hubAttachment,hubDownload,hubEvent,
     admissionReviewStep,admissionIdentity,admissionCohortPlan,admissionData,admissionSave,admissionReview,admissionPayment,admissionFile,admissionEnrol,admissionEmailStatus,admissionEnrolmentEmail,
