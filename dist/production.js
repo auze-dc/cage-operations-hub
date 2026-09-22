@@ -801,7 +801,7 @@
     const q=values?client.from('app_notification_preferences').upsert({...values,user_id:profile.id,updated_at:new Date().toISOString()}).select().single():client.from('app_notification_preferences').select('*').eq('user_id',profile.id).maybeSingle();
     const r=await q;if(r.error)throw r.error;return r.data;
   }
-  const applicationColumns='id,organization_id,intake_id,full_name,email,phone,answers,form_snapshot,category,identity_type,status,staff_notes,submitted_at,reviewed_by,updated_at,learner_id,cohort_id,balance_due_on,balance_plan_version';
+  const applicationColumns='id,organization_id,intake_id,full_name,email,phone,answers,form_snapshot,category,identity_type,status,staff_notes,submitted_at,reviewed_by,updated_at,learner_id,cohort_id,balance_due_on,balance_plan_version,review_version,information_verified_by,information_verified_at,planned_cohort_id,enrolment_draft,correction_note';
   async function admissionData(){
     const read=async(table,columns='*')=>{let out=[];for(let offset=0;;offset+=1000){const r=await client.from(table).select(columns).eq('organization_id',profile.organization_id).range(offset,offset+999);if(r.error)throw r.error;out.push(...r.data);if(r.data.length<1000)return out;}};
     const [intakes,applications,files,emailResult]=await Promise.all([
@@ -815,6 +815,9 @@
     const q=id?client.from('academy_intakes').update(clean).eq('id',id).eq('revision',revision).eq('organization_id',profile.organization_id):client.from('academy_intakes').insert({...clean,organization_id:profile.organization_id,created_by:profile.id});
     const r=await q.select().maybeSingle();if(r.error)throw r.error;if(!r.data)throw new Error('This call was changed by another staff member. Refresh before saving. Your editing form is still open.');return r.data;
   }
+  async function admissionReviewStep(values){const r=await client.rpc('save_academy_review',values);if(r.error)throw r.error;}
+  async function admissionIdentity(file_key,new_status,note){const r=await client.rpc('review_academy_identity',{file_key,new_status,note});if(r.error)throw r.error;}
+  async function admissionCohortPlan(values){const r=await client.rpc('save_academy_cohort_plan',values);if(r.error)throw r.error;}
   async function admissionReview(id,status,note){const r=await client.rpc('review_academy_application',{app:id,new_status:status,note});if(r.error)throw r.error;}
   async function admissionPayment(id,status,note){const r=await client.rpc('review_academy_payment',{file_key:id,new_status:status,note});if(r.error)throw r.error;}
   // Enrollment queues the welcome email in the same database transaction.
@@ -845,7 +848,7 @@
   }
   async function enrolStem(application,cohort,details) {const r=await client.rpc('enrol_stem_application',{application_key:application,cohort_key:cohort,details});if(r.error)throw r.error;return r.data;}
   window.CAGE_BACKEND = {
-    admissionData,admissionSave,admissionReview,admissionPayment,admissionFile,admissionEnrol,admissionEmailStatus,admissionEnrolmentEmail,
+    admissionReviewStep,admissionIdentity,admissionCohortPlan,admissionData,admissionSave,admissionReview,admissionPayment,admissionFile,admissionEnrol,admissionEmailStatus,admissionEnrolmentEmail,
     enrolStem,
     chatReceipts,acknowledgeChat,appNotificationPreferences,stemData,reviewStem,
     academyActivity: async()=>{const r=await client.from("academy_activity_log").select("*").order("created_at",{ascending:false}).order("id",{ascending:false}).limit(200);if(r.error)throw r.error;return r.data||[];},
