@@ -430,6 +430,7 @@
   });
 
   async function sendDocument(payload) {
+    payload={...payload,...window.CAGE_DELIVERY.fields(payload)};
     if(moduleLevel("finance")!=="edit") throw new Error("Finance edit access is required.");
     clearTimeout(saveTimer);
     await saveChain;
@@ -440,12 +441,13 @@
     workspaceVersion=prepared.data.version;
     await loadWorkspace();
     payload={...payload,record:prepared.data.record};
-    const attemptKey=`cage-send-attempt:${profile.id}:${payload.type}:${payload.record.id}`;
-    const fingerprint=JSON.stringify([payload.type,payload.record,payload.recipient,payload.subject,payload.message]);
+    const attemptKey=`cage-send-v2:${profile.id}:${payload.type}:${payload.record.id}`;
+    const fingerprintRecord={...payload.record};for(const key of ['status','recipient','sentAt','automaticFollowUp','clientResponse'])delete fingerprintRecord[key];
+    const fingerprint=JSON.stringify([payload.type,fingerprintRecord,payload.recipient,payload.cc,payload.bcc,payload.approver,payload.subject,payload.message]);
     let attempt;try{attempt=JSON.parse(localStorage.getItem(attemptKey)||'null');}catch{}
     if(!attempt||attempt.fingerprint!==fingerprint)attempt={id:crypto.randomUUID(),fingerprint};
     localStorage.setItem(attemptKey,JSON.stringify(attempt));
-    const { data, error } = await client.functions.invoke("send-document", { body: {...payload,deliveryAttempt:attempt.id} });
+    const { data, error } = await client.functions.invoke("send-document-v2", { body: {...payload,deliveryAttempt:attempt.id} });
     if (error) {
       let message=error.message || "Email delivery failed.";
       try { const response=await error.context?.json(); message=response?.error || message; } catch {}
@@ -902,6 +904,7 @@
   async function hubEvent(id) {const r=await client.from('hub_events').select('*').eq('id',id).single();if(r.error)throw r.error;const g=await client.from('hub_event_guests').select('*').eq('event_id',id);if(g.error)throw g.error;return {...r.data,guests:g.data};}
   async function presenceHeartbeat(sid,availability) {const r=await client.rpc("hub_presence_heartbeat",{sid,availability}).abortSignal(AbortSignal.timeout(10000));if(r.error)throw r.error;return r.data;}
   window.CAGE_BACKEND = {
+    documentHistory: async(doc_type,doc_id)=>{const r=await client.rpc("document_history_v2",{doc_type,doc_id});if(r.error)throw r.error;return r.data||[];},
     presenceHeartbeat,
     presenceStatusSettings: async()=>{const r=await client.rpc("hub_status_settings");if(r.error)throw r.error;return r.data;},
     presenceStatusForget: async(emoji_value,message_value)=>{const r=await client.rpc("hub_status_forget",{emoji_value,message_value});if(r.error)throw r.error;},

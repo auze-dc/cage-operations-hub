@@ -42,3 +42,9 @@ verify_jwt = false
 
 [functions.academy-admissions]
 verify_jwt = false
+
+[functions.send-document-v2]
+verify_jwt = true
+
+[functions.quote-response]
+verify_jwt = false
