@@ -152,14 +152,7 @@
     const { data, error } = await client.rpc("get_my_workspace");
     if (error) throw error;
     if (!data) {
-      if (profile.role !== "admin") throw new Error("The workspace has not been initialized. Ask an administrator to sign in first.");
-      const initial = { organization_id: config.organizationId, data: app.seedData, version: 1, updated_by: profile.id };
-      const result = await client.from("workspace_states").insert(initial).select("data, version").single();
-      if (result.error) throw result.error;
-      workspaceVersion = result.data.version;
-      cloudBase=structuredClone(result.data.data);
-      app.replaceState(result.data.data);
-      return;
+      throw new Error("No workspace record was found for this organisation. Ask an administrator to verify the project configuration or restore the workspace backup. No sample records have been created.");
     }
     workspaceVersion = data.version || 0;
     cloudBase=structuredClone(data.data);
