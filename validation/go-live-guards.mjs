@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';
+import {validateBrowserConfig,readBrowserConfig} from '../scripts/runtime-config.mjs';
+const jwt=claims=>'test.'+Buffer.from(JSON.stringify(claims)).toString('base64url')+'.test';
+const base={mode:'production',supabaseUrl:'https://project.supabase.co',supabaseAnonKey:jwt({role:'anon',ref:'project',exp:4102444800}),organizationId:'00000000-0000-4000-8000-000000000001',appUrl:'https://hub.example.test'};
+assert.equal(validateBrowserConfig(base),base);assert.equal(readBrowserConfig('window.CAGE_CONFIG = Object.freeze('+JSON.stringify(base)+');').mode,'production');
+for(const patch of [{supabaseAnonKey:jwt({role:'service_role'})},{supabaseAnonKey:'sb_secret_TEST'},{supabaseAnonKey:jwt({role:'anon',ref:'other'})},{supabaseAnonKey:jwt({role:'anon',exp:1})},{mode:'setup-required'},{organizationId:''},{supabaseUrl:'http://project.supabase.co'}])assert.throws(()=>validateBrowserConfig({...base,...patch}));
+assert.equal(validateBrowserConfig({...base,supabaseAnonKey:'sb_publishable_test'}).mode,'production');
+const source=fs.readFileSync(new URL('../dist/production.js',import.meta.url),'utf8');const from=source.indexOf('  async function loadWorkspace()');const to=source.indexOf('\n  function ',from);const end=source.indexOf('\n  async function ',from+10);const fn=source.slice(from,Math.min(...[to,end].filter(x=>x>from)));
+let writes=0;const ctx=vm.createContext({client:{rpc:async()=>({data:null}),from:()=>{writes++;throw Error('Unexpected write');}},profile:{role:'admin'}});vm.runInContext(fn,ctx);await assert.rejects(vm.runInContext('loadWorkspace()',ctx),/No workspace record/);assert.equal(writes,0);
+console.log('PASS go-live guards: public key accepted; service-role, secret, expired and wrong-project keys rejected; incomplete preserved runtime rejected; missing workspace never seeds demo records.');
