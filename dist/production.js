@@ -183,8 +183,18 @@
   // so legacy changes to an existing message (such as unread=false) must never be
   // sent back through the workspace save function.
   function preservedSettings(){return JSON.parse(localStorage.getItem(draftKey()+":protected-settings")||"[]");}
+  // CAGE reset compatibility 2026-09-23
+  function resetEpoch(state) { return typeof state?._resetEpoch === 'string' ? state._resetEpoch : null; }
+  function quarantineResetDraft(saved) {
+    const recoveryKey=draftKey()+":before-reset:"+Date.now();
+    // Write the recovery copy successfully before removing the active draft.
+    localStorage.setItem(recoveryKey,JSON.stringify({savedAt:new Date().toISOString(),draft:saved}));
+    localStorage.removeItem(draftKey());
+    pendingState=null;syncConflicts=[];
+    window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:false}}));
+  }
   function writableChanges(base, next) {
-    const changes=window.CAGE_SYNC.changes(base,next);
+    const changes=window.CAGE_SYNC.changes(base,next).filter(c=>c.key!=="_resetEpoch");
     const excluded=profile?.role==='admin'?[]:changes.filter(c=>c.id===null);
     if(excluded.length){
       const saved=preservedSettings();
@@ -206,13 +216,13 @@
     const message=String(error?.message||error||'').toLowerCase();
     return !navigator.onLine || /fetch|network|timeout|timed out|jwt|token|connection|502|503|504/.test(message);
   }
-  async function syncRpcWithRetry(patches) {
+  async function syncRpcWithRetry(patches, expectedEpoch) {
     let lastError;
     for (let attempt=0; attempt<3; attempt++) {
       try {
         if (!navigator.onLine) throw new Error('You are offline');
         if (attempt) { try { await client.auth.refreshSession(); } catch {} await new Promise(r=>setTimeout(r,350*attempt)); }
-        const result=await client.rpc("save_workspace_changes",{changes:patches});
+        const result=await client.rpc("save_workspace_changes",{changes:patches,expected_epoch:expectedEpoch});
         if(result.error)throw result.error;
         return result.data;
       } catch(error) {
@@ -229,15 +239,27 @@
     if(!patches.length){pendingState=null;localStorage.removeItem(draftKey());hideBanner(0);app.replaceState(cloudBase);window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:false}}));return;}
     savingNow=true;showBanner("Saving changes…");
     try {
-      const data=await syncRpcWithRetry(patches);
+      const data=await syncRpcWithRetry(patches,resetEpoch(base));
       if(data?.conflicts?.length){syncConflicts=data.conflicts;window.dispatchEvent(new CustomEvent("cage:conflicts",{detail:{conflicts:syncConflicts,patches}}));showBanner("Your draft is safe. Review the conflicting changes.","error");return;}
       await loadWorkspace();
+      if(resetEpoch(base)!==resetEpoch(cloudBase)) {
+        quarantineResetDraft({base,next:pendingState||snapshot});
+        showBanner("The workspace was reset. Your old draft was kept separately and was not restored.","error");
+        return;
+      }
       const newer=writableChanges(snapshot,pendingState||snapshot);
       pendingState=null;
       if(newer.length){pendingState=window.CAGE_SYNC.apply(cloudBase,newer);app.replaceState(pendingState);localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));}
       else localStorage.removeItem(draftKey());
       hideBanner(0);window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:!!pendingState}}));
-    } catch(error){showBanner("Not synced: "+error.message+". Your draft is kept on this device.","error");window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:true,error:error.message}}));}
+    } catch(error){
+      if(/Workspace was reset/i.test(error.message||"")) {
+        quarantineResetDraft({base,next:pendingState||snapshot});
+        await loadWorkspace();
+        showBanner("The workspace was reset. Your old draft was kept separately and was not restored.","error");
+        return;
+      }
+      showBanner("Not synced: "+error.message+". Your draft is kept on this device.","error");window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:true,error:error.message}}));}
     finally {savingNow=false;if(pendingState&&!syncConflicts.length)setTimeout(()=>{if(navigator.onLine)flushSave();},6000);}
   }
   async function resolveSync(choices) {
@@ -249,6 +271,11 @@
   async function discardDraftRecord(key,id) {pendingState=window.CAGE_SYNC.apply(pendingState,[{key,id,after:id===null?cloudBase[key]:cloudBase[key]?.find(r=>r.id===id)||null}]);syncConflicts=syncConflicts.filter(c=>c.key!==key||c.id!==id);localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));app.replaceState(pendingState);await flushSave();}
   async function restoreDraft() {
     const saved=JSON.parse(localStorage.getItem(draftKey())||"null");if(!saved)return;
+    if(resetEpoch(saved.base)!==resetEpoch(cloudBase)) {
+      quarantineResetDraft(saved);app.replaceState(cloudBase);
+      showBanner("A draft from before the reset was kept separately. The fresh workspace is ready.","error");
+      return;
+    }
     const patches=writableChanges(saved.base,saved.next);
     if(!patches.length){localStorage.removeItem(draftKey());pendingState=null;app.replaceState(cloudBase);window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:false}}));return;}
     pendingState=window.CAGE_SYNC.apply(cloudBase,patches);cloudBase=window.CAGE_SYNC.apply(cloudBase,patches.map(c=>({...c,after:c.before})));app.replaceState(pendingState);await flushSave();

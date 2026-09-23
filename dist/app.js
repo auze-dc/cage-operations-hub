@@ -1842,7 +1842,13 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-oppo
 });
 document.addEventListener('input',e=>{if(e.target.id!=='opportunity-search')return;opportunityQuery=e.target.value;const pos=e.target.selectionStart;renderOpportunityMonitor();const el=document.getElementById('opportunity-search');el.focus();el.setSelectionRange(pos,pos);});
 function renderOpportunityMonitor() {
-  const monitor = state.opportunityMonitor;
+  // Missing scan history is normal in a fresh workspace. Never seed demo results.
+  const savedMonitor = state.opportunityMonitor || {};
+  const monitor = {
+    ...savedMonitor,
+    sources: Array.isArray(savedMonitor.sources) ? savedMonitor.sources : [],
+    coverage: Array.isArray(savedMonitor.coverage) ? savedMonitor.coverage : []
+  };
   const all=opportunityRows();
   const matches=all.filter(m=>(opportunityFilter==='all'||(opportunityFilter==='new'?m.status==='New'&&!opportunityExpired(m):opportunityFilter==='expired'?opportunityExpired(m):!opportunityExpired(m)&&m.status!=='Dismissed'))&&`${m.title} ${m.organisation} ${m.platform}`.toLowerCase().includes(opportunityQuery.toLowerCase())).sort((a,b)=>b.match-a.match);
   if(!opportunityLoading&&Date.now()-opportunityLoadedAt>=60000)refreshOpportunityResults();
