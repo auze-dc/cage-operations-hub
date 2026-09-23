@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { build } from "esbuild";
+import {validateBrowserConfig,readBrowserConfig} from "./runtime-config.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const dist = path.join(root, "dist");
@@ -33,6 +34,6 @@ const config = {
   appUrl: process.env.APP_URL || ""
 };
 const runtimePath=path.join(dist,"runtime-config.js");
-if(!missing.length){fs.writeFileSync(runtimePath,`window.CAGE_CONFIG = Object.freeze(${JSON.stringify(config)});\n`);console.log("Production browser bundle created.");}
-else if(fs.existsSync(runtimePath)){console.log("Kept existing runtime-config.js; environment configuration is incomplete.");}
+if(!missing.length){validateBrowserConfig(config);fs.writeFileSync(runtimePath,`window.CAGE_CONFIG = Object.freeze(${JSON.stringify(config)});\n`);console.log("Production browser bundle created.");}
+else if(fs.existsSync(runtimePath)){readBrowserConfig(fs.readFileSync(runtimePath,"utf8"));console.log("Kept existing runtime-config.js; environment configuration is incomplete.");}
 else {throw new Error(`No runtime-config.js exists. Set the existing deployment environment values: ${missing.join(", ")}`);}
