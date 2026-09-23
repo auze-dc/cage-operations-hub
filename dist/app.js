@@ -4316,6 +4316,7 @@ function openSendDocument(type, id) {
   form.elements.documentType.value = type;
   form.elements.documentId.value = id;
   form.elements.recipient.value = documentRecord.recipient || "";
+  window.CAGE_DELIVERY.open(type,documentRecord,form);
   form.elements.subject.value = `${type === "quote" ? "Quotation" : "Invoice"} ${documentRecord.number} from CAGE`;
   form.elements.message.value = type === "quote" ? `Hello,\n\nPlease find CAGE quotation ${documentRecord.number} for ${documentRecord.description}.\n\nKind regards,\nCAGE` : `Hello,\n\nPlease find CAGE invoice ${documentRecord.number} for ${documentRecord.description}.\n\nKind regards,\nCAGE`;
   form.elements.automaticFollowUp.checked = documentRecord.automaticFollowUp !== false;
@@ -4374,8 +4375,8 @@ async function sendDocument(event) {
   if (submitButton) submitButton.disabled = false;
   documentRecord.recipient = recipient;
   documentRecord.sentAt = new Date().toISOString();
-  documentRecord.automaticFollowUp = Boolean(data.get("automaticFollowUp"));
-  if (type === "quote") documentRecord.status = "Sent";
+  documentRecord.automaticFollowUp = type === "quote" && documentRecord.clientResponse ? false : Boolean(data.get("automaticFollowUp"));
+  if (type === "quote" && documentRecord.status !== "Accepted") documentRecord.status = "Sent";
   if (type === "invoice" && documentRecord.status !== "Paid") documentRecord.status = "Sent";
   saveState();
   document.getElementById("send-dialog").close();

@@ -15,6 +15,7 @@ export function eligible(item:any,kind:string,c:any){const {p,s,notices,reminder
  if(kind==='blocker')return task&&task.status==='Blocked'&&task.needsLeadHelp&&arr('projects').some((a:any)=>a.id===task.project&&owns(p,a.lead||a.owner));
  if(kind==='equipment'){const a=arr('assets').find((a:any)=>a.id===item.target);return a&&owns(p,a.custodian)&&a[item.field]===item.due&&!(item.field==='returnDate'&&a.status!=='Assigned');}
  if(kind==='opportunity')return route.opportunity_users?.includes(p.id)&&arr('opportunityMatches').some((o:any)=>o.id===item.target&&Number(o.match||o.score)>=80&&(!o.deadline||o.deadline==='Rolling'||Date.parse(o.deadline)>now.getTime()+172800000));
+ if(kind==='quote_response')return arr('quotes').some((r:any)=>r.id===item.target&&r.clientResponse?.attempt===item.attempt);
  if(kind==='decision'){const key=item.source||(item.view==='leave'?'leaveRequests':item.view);return arr(key).some((r:any)=>r.id===(item.sourceId||item.target)&&owns(p,r.requester||r.submittedBy||r.person||r.owner));}
  return kind==='delivery_failure';
 }
