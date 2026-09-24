@@ -134,7 +134,7 @@
     if (settingsNav) settingsNav.hidden = !isAdmin;
     document.querySelectorAll(".hr-privileged").forEach(element => { element.hidden = !["admin", "manager", "hr"].includes(profile?.role); });
     window.CAGE_PERSONAL?.applyAccess();
-    if (isViewer) document.querySelectorAll("button.primary-button, .mobile-add-button").forEach(button => { if (!button.closest(".auth-card, [data-view-panel=training], .academy-dialog") ) button.disabled = true; });
+    if (isViewer) document.querySelectorAll("button.primary-button, .mobile-add-button").forEach(button => { if (!button.closest(".auth-card, [data-view-panel=training], .academy-dialog") && !((button.matches('[data-send-document=invoice]')||(button.closest('#send-form')&&document.getElementById('send-form').elements.documentType.value==='invoice'))&&profile?.active&&profile.role!=='shared'&&moduleLevel('finance')!=='none') ) button.disabled = true; });
   }
 
   async function loadProfile(userId) {
@@ -415,18 +415,21 @@
 
   document.getElementById("sign-out-button").addEventListener("click", async () => {
     localStorage.removeItem("cage-operations-hub-production-cache-v1");
+    await window.CAGE_LOCATION?.stop?.();
     await window.CAGE_PRESENCE?.stop?.();
     if (client) await client.auth.signOut();
   });
 
   async function sendDocument(payload) {
     payload={...payload,...window.CAGE_DELIVERY.fields(payload)};
-    if(moduleLevel("finance")!=="edit") throw new Error("Finance edit access is required.");
+    if(!profile?.active||profile.role==='shared'||(payload.type==='invoice'?moduleLevel('finance')==='none':moduleLevel('finance')!=='edit')) throw new Error('Access to this document is required.');
     clearTimeout(saveTimer);
     await saveChain;
     if(pendingState) await flushSave();
     if(pendingState) throw new Error("Wait for cloud sync before sending this document.");
-    const prepared=await client.rpc("prepare_document_delivery",{doc_type:payload.type,doc_record:payload.record});
+    const prepared=payload.type==='invoice'&&moduleLevel('finance')!=='edit'
+      ?await client.rpc('prepare_staff_invoice_send',{doc_record:payload.record})
+      :await client.rpc("prepare_document_delivery",{doc_type:payload.type,doc_record:payload.record});
     if(prepared.error) throw prepared.error;
     workspaceVersion=prepared.data.version;
     await loadWorkspace();
@@ -445,6 +448,7 @@
     }
     if (!data?.ok) throw new Error(data?.error || "Email delivery failed.");
     localStorage.removeItem(attemptKey);
+    if(payload.type==='invoice')await loadWorkspace();
     return data;
   }
 
@@ -898,6 +902,11 @@
   async function presenceHeartbeat(sid,availability) {const r=await client.rpc("hub_presence_heartbeat",{sid,availability}).abortSignal(AbortSignal.timeout(10000));if(r.error)throw r.error;return r.data;}
   window.CAGE_BACKEND = {
     documentHistory: async(doc_type,doc_id)=>{const r=await client.rpc("document_history_v2",{doc_type,doc_id});if(r.error)throw r.error;return r.data||[];},
+    canSendInvoice: ()=>!!profile?.active&&profile.role!=='shared'&&moduleLevel('finance')!=='none',
+    locationCanRead: async()=>{const r=await client.rpc('hub_location_can_read');if(r.error)throw r.error;return r.data;},
+    locationPublish: async(values)=>{const r=await client.rpc('hub_location_publish',values).abortSignal(AbortSignal.timeout(12000));if(r.error)throw r.error;},
+    locationStop: async(sid)=>{const r=await client.rpc('hub_location_stop',{sid}).abortSignal(AbortSignal.timeout(12000));if(r.error)throw r.error;},
+    locationList: async()=>{const r=await client.rpc('hub_location_list').abortSignal(AbortSignal.timeout(10000));if(r.error)throw r.error;return r.data;},
     categoryList: async(category_module)=>{const r=await client.rpc("hub_category_list",{category_module});if(r.error)throw r.error;return r.data;},
     categoryAdd: async(category_module,category_name)=>{const r=await client.rpc("hub_category_add",{category_module,category_name});if(r.error)throw r.error;return r.data;},
     presenceHeartbeat,

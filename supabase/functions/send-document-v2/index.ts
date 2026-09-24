@@ -1,3 +1,4 @@
+import { cageSender } from "../_shared/cage-sender.js";
 import * as PDFLib from "npm:pdf-lib@1.17.1";
 import "../_shared/document-pdf.js";
 import { logoBase64 } from "../_shared/logo.ts";
@@ -27,16 +28,17 @@ Deno.serve(async req => {
  const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
  const {data:auth,error:authError}=await userClient.auth.getUser();
  if(authError||!auth.user)return json({ok:false,error:'Sign in again.'},401);
- const {data:profile}=await db.from('profiles').select('organization_id,active,email').eq('id',auth.user.id).single();
- if(!profile?.active)return json({ok:false,error:'Account is inactive.'},403);
+ const {data:profile}=await db.from('profiles').select('organization_id,active,email,role').eq('id',auth.user.id).single();
+ if(!profile?.active||profile.role==='shared')return json({ok:false,error:'Account is inactive.'},403);
  const payload=await req.json();const {type,subject,message}=payload;
  if(!['quote','invoice'].includes(type)||typeof subject!=='string'||!subject.trim()||subject.length>200||typeof message!=='string'||message.length>10000)return json({ok:false,error:'Check document type, subject and message.'},400);
  const access=await userClient.rpc('module_level',{m:'finance'});
  const visible=await userClient.rpc('can_work_record',{k:type==='quote'?'quotes':'invoices',rid:payload.record?.id||''});
- if(access.error||access.data!=='edit'||visible.error||!visible.data)return json({ok:false,error:'Finance edit access to this document is required.'},403);
+ if(access.error||(type==='invoice'?!['view','edit'].includes(access.data):access.data!=='edit')||visible.error||!visible.data)return json({ok:false,error:'Access to this document is required (Finance edit access for quotes).'},403);
  const w=await db.from('workspace_states').select('data').eq('organization_id',profile.organization_id).single();
  const record=w.data?.data?.[type==='quote'?'quotes':'invoices']?.find((r:any)=>r.id===payload.record?.id);
  if(!record||!record.number)return json({ok:false,error:'Document not found.'},404);
+ if(type==='invoice'&&['Cancelled','Voided'].includes(record.status))return json({ok:false,error:'This invoice is no longer open for sending.'},409);
  if(type==='quote'&&!['Approved','Sent','Accepted'].includes(record.status))return json({ok:false,error:'Quotation must be approved before sending.'},409);
  const people=recipients({...payload,record});
  const attemptId=payload.deliveryAttempt;
@@ -48,7 +50,7 @@ Deno.serve(async req => {
  if(frozen&&(frozen.organization_id!==profile.organization_id||frozen.sender_id!==auth.user.id||frozen.request_hash!==hash))return json({ok:false,error:'Document or recipients changed. Reopen the send form.'},409);
  const resendKey=Deno.env.get('RESEND_API_KEY');
  if(!resendKey)return json({ok:false,error:'Email delivery is not configured.'},503);
- const from=Deno.env.get('EMAIL_FROM')||'CAGE Operations <operations@cagemw.com>';
+ const from=cageSender(Deno.env.get('EMAIL_FROM')||'CAGE <operations@cagemw.com>');
  if(!frozen){
   const sendingAt=new Date();
   const stampDate=(globalThis as any).CagePDF.stampDateAt(sendingAt);
@@ -70,7 +72,7 @@ Deno.serve(async req => {
           ${record.due ? `<p style="color:#647985">Due: ${esc(record.due)}</p>` : ""}
           ${record.validUntil ? `<p style="color:#647985">Valid until: ${esc(record.validUntil)}</p>` : ""}
         </div>
-        <p style="font-size:13px;color:#71818b">This message was sent from the secure CAGE Operations Hub.</p>
+        <p style="font-size:13px;color:#71818b">Sent by CAGE.</p>
       </div>
     </div></body></html>`;
 
@@ -89,7 +91,14 @@ Deno.serve(async req => {
  if(registered.error)return json({ok:false,error:registered.error.message},409);
  frozen=registered.data;
  }
- if(frozen.provider_id&&(!frozen.invitation_payload||frozen.invitation_provider_id))return json({ok:true,messageId:frozen.provider_id});
+ async function completed(){
+  if(type==='invoice'){
+   const saved=await db.rpc('complete_staff_invoice_send',{attempt:attemptId});
+   if(saved.error)return json({ok:false,error:'Email provider accepted the invoice, but recording its status failed. Retry this unchanged form.'},502);
+  }
+  return json({ok:true,messageId:frozen.provider_id});
+ }
+ if(frozen.provider_id&&(!frozen.invitation_payload||frozen.invitation_provider_id))return await completed();
  if(Date.now()-Date.parse(frozen.created_at)>23*3600000)return json({ok:false,error:'This attempt is over 23 hours old. Check provider history before starting another send; do not retry blindly.'},409);
  for(const part of ['document','invitation']){
   const column=part==='document'?'provider_id':'invitation_provider_id';
@@ -104,7 +113,7 @@ Deno.serve(async req => {
   if(saved.error)return json({ok:false,error:'Provider accepted the email, but its status could not be saved. Retry this unchanged form.'},502);
   frozen[column]=result.id;
  }
- return json({ok:true,messageId:frozen.provider_id});
+ return await completed();
  }catch(error){
   // Do not return provider payloads, tokens or recipient lists in diagnostic logs.
   if(error instanceof TypeError||error instanceof DOMException)return json({ok:false,error:'Delivery could not be confirmed. Retry this unchanged form; do not start a new send.'},502);

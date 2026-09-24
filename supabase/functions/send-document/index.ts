@@ -1,3 +1,4 @@
+import { cageSender } from "../_shared/cage-sender.js";
 import * as PDFLib from "npm:pdf-lib@1.17.1";
 import "../_shared/document-pdf.js";
 import { logoBase64 } from "../_shared/logo.ts";
@@ -50,7 +51,7 @@ Deno.serve(async req => {
   }
 
   const resendKey = Deno.env.get("RESEND_API_KEY");
-  const from = Deno.env.get("EMAIL_FROM") || "CAGE Operations <operations@cagemw.com>";
+  const from = cageSender(Deno.env.get("EMAIL_FROM") || "CAGE <operations@cagemw.com>");
   if (!resendKey) return json({ ok: false, error: "Email delivery has not been configured" }, 503);
 
   const attemptId=payload.deliveryAttempt;
@@ -81,7 +82,7 @@ Deno.serve(async req => {
           ${record.due ? `<p style="color:#647985">Due: ${esc(record.due)}</p>` : ""}
           ${record.validUntil ? `<p style="color:#647985">Valid until: ${esc(record.validUntil)}</p>` : ""}
         </div>
-        <p style="font-size:13px;color:#71818b">This message was sent from the secure CAGE Operations Hub.</p>
+        <p style="font-size:13px;color:#71818b">Sent by CAGE.</p>
       </div>
     </div></body></html>`;
 

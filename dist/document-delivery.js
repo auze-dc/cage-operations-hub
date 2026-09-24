@@ -36,16 +36,35 @@
   try{
    const rows=await window.CAGE_BACKEND.documentHistory(type,id);
    box.innerHTML=rows.length?rows.map(r=>`<article style="padding:16px 0;border-bottom:1px solid #dce5eb"><p><strong>${escape(new Date(r.createdAt).toLocaleString('en-GB',{timeZone:'Africa/Blantyre'}))} CAT</strong></p><p>To: ${escape(r.to.join(', '))}<br>CC: ${escape(r.cc.join(', ')||'None')}<br>BCC: ${escape(r.bccHidden?'Visible only to sender and administrators':r.bcc.join(', ')||'None')}</p><p>PDF email: ${escape(r.emailStatus)}<br>Response invitation: ${escape(r.invitationStatus)}</p>${r.approver?`<p>Approver: ${escape(r.approver)}</p>`:''}${r.decision?`<p><strong>${escape(r.decision)}</strong> · ${escape(r.name)} · ${escape(new Date(r.respondedAt).toLocaleString('en-GB',{timeZone:'Africa/Blantyre'}))} CAT</p><p style="white-space:pre-wrap">${escape(r.note)}</p>`:''}</article>`).join(''):'No sends recorded by the updated delivery system yet.';
+   const latest=rows.filter(r=>r.decision).sort((a,b)=>String(b.respondedAt).localeCompare(String(a.respondedAt)))[0];
+   if(latest)box.insertAdjacentHTML('afterbegin',`<section style="padding:20px;background:#e6f7fe;border-left:5px solid #00adef"><h3>Client response: ${escape(latest.decision)}</h3><p>${escape(latest.name)}</p><p style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:17px">${escape(latest.note||'No additional message.')}</p></section>`);
    box.insertAdjacentHTML('beforeend','<p>Provider accepted means the email provider accepted the message; it does not confirm inbox delivery. Client identity is based on possession of the private email link and the name entered.</p>');
   }catch(e){box.textContent=e.message||'History could not be loaded. Close and reopen to retry.';}
  }
  document.addEventListener('click',e=>{const b=e.target.closest('[data-delivery-history]');if(b)history(b.dataset.deliveryHistory,b.dataset.documentId);});
+ function renderResponses(){
+  const panel=document.querySelector('[data-view-panel="finance"]');if(!panel)return;
+  let summary=document.getElementById('client-response-summary');
+  const quotes=(window.CAGE_APP?.getState()?.quotes||[]).filter(q=>q.clientResponse).sort((a,b)=>String(b.clientResponse.at).localeCompare(String(a.clientResponse.at)));
+  const fingerprint=JSON.stringify(quotes.map(q=>[q.id,q.number,q.client,q.clientResponse]));
+  if(summary?.dataset.fingerprint===fingerprint)return;
+  if(!summary){summary=document.createElement('section');summary.id='client-response-summary';summary.setAttribute('aria-label','Client quotation responses');panel.prepend(summary);}
+  summary.dataset.fingerprint=fingerprint;summary.hidden=!quotes.length;summary.replaceChildren();
+  const heading=document.createElement('h2');heading.textContent='Client quotation responses';summary.append(heading);
+  for(const q of quotes){const r=q.clientResponse,card=document.createElement('article');card.style.cssText='border:1px solid #cbd5e1;border-left:5px solid #00adef;border-radius:8px;padding:16px;margin:12px 0;background:#fff';
+   const title=document.createElement('h3');title.textContent=`${q.number} · ${q.client||''} · ${r.decision}`;
+   const who=document.createElement('p');who.textContent=`${r.name||'Client'} · ${new Date(r.at).toLocaleString('en-GB',{timeZone:'Africa/Blantyre'})} CAT`;
+   const note=document.createElement('p');note.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;font-size:16px';note.textContent=r.note||'The client did not add a message.';
+   const button=document.createElement('button');button.type='button';button.className='secondary-button';button.dataset.deliveryHistory='quote';button.dataset.documentId=q.id;button.textContent='View delivery details';card.append(title,who,note,button);summary.append(card);
+  }
+ }
  function addHistoryButtons(){
+  renderResponses();
   document.querySelectorAll('[data-send-document][data-document-id]').forEach(b=>{
    if(b.nextElementSibling?.hasAttribute('data-delivery-history'))return;
-   const button=document.createElement('button');button.type='button';button.className='document-action';button.dataset.deliveryHistory=b.dataset.sendDocument;button.dataset.documentId=b.dataset.documentId;button.textContent='History';b.after(button);
+   const button=document.createElement('button');button.type='button';button.className='document-action';button.dataset.deliveryHistory=b.dataset.sendDocument;button.dataset.documentId=b.dataset.documentId;button.textContent=b.dataset.sendDocument==='quote'?'Client response':'Delivery history';b.after(button);
   });
  }
- new MutationObserver(addHistoryButtons).observe(document.body,{childList:true,subtree:true});addHistoryButtons();
+ let scheduled=false;new MutationObserver(()=>{if(!scheduled){scheduled=true;requestAnimationFrame(()=>{scheduled=false;addHistoryButtons();});}}).observe(document.body,{childList:true,subtree:true});addHistoryButtons();
  window.CAGE_DELIVERY={fields,open};
 })();
