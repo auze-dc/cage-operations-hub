@@ -829,7 +829,7 @@
     const r=await client.from(table).upsert(values,table==='cohort_messages'?{onConflict:'id',ignoreDuplicates:true}:conflict?{onConflict:conflict}:undefined).select();if(r.error)throw r.error;return r.data;
   }
   async function opsRpc(name,args) {
-    if(!['reserve_equipment','cancel_reservation','record_payment','equipment_busy'].includes(name))throw new Error('Unknown action');
+    if(!['reserve_equipment','cancel_reservation','record_payment','equipment_busy','edit_finance_document'].includes(name))throw new Error('Unknown action');
     if(name==='equipment_busy'){const r=await client.rpc(name,args);if(r.error)throw r.error;return r.data;}
     await flushSave();if(pendingState)throw new Error('Sync your draft before continuing');const r=await client.rpc(name,args);if(r.error)throw r.error;await loadWorkspace();return r.data;
   }
