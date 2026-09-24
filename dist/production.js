@@ -134,7 +134,7 @@
     if (settingsNav) settingsNav.hidden = !isAdmin;
     document.querySelectorAll(".hr-privileged").forEach(element => { element.hidden = !["admin", "manager", "hr"].includes(profile?.role); });
     window.CAGE_PERSONAL?.applyAccess();
-    if (isViewer) document.querySelectorAll("button.primary-button, .mobile-add-button").forEach(button => { if (!button.closest(".auth-card, [data-view-panel=training], .academy-dialog") && !((button.matches('[data-send-document=invoice]')||(button.closest('#send-form')&&document.getElementById('send-form').elements.documentType.value==='invoice'))&&profile?.active&&profile.role!=='shared'&&moduleLevel('finance')!=='none') ) button.disabled = true; });
+    if (isViewer) document.querySelectorAll("button.primary-button, .mobile-add-button").forEach(button => { if (!button.closest(".auth-card, [data-view-panel=training], .academy-dialog") && !((button.matches('[data-send-document=invoice],[data-send-document=quote]')||(button.closest('#send-form')&&['invoice','quote'].includes(document.getElementById('send-form').elements.documentType.value)))&&profile?.active&&profile.role!=='shared'&&moduleLevel('finance')!=='none') ) button.disabled = true; });
   }
 
   async function loadProfile(userId) {
@@ -422,13 +422,13 @@
 
   async function sendDocument(payload) {
     payload={...payload,...window.CAGE_DELIVERY.fields(payload)};
-    if(!profile?.active||profile.role==='shared'||(payload.type==='invoice'?moduleLevel('finance')==='none':moduleLevel('finance')!=='edit')) throw new Error('Access to this document is required.');
+    if(!profile?.active||profile.role==='shared'||moduleLevel('finance')==='none') throw new Error('Access to this document is required.');
     clearTimeout(saveTimer);
     await saveChain;
     if(pendingState) await flushSave();
     if(pendingState) throw new Error("Wait for cloud sync before sending this document.");
-    const prepared=payload.type==='invoice'&&moduleLevel('finance')!=='edit'
-      ?await client.rpc('prepare_staff_invoice_send',{doc_record:payload.record})
+    const prepared=moduleLevel('finance')!=='edit'
+      ?await client.rpc(payload.type==='quote'?'prepare_staff_quote_send':'prepare_staff_invoice_send',{doc_record:payload.record})
       :await client.rpc("prepare_document_delivery",{doc_type:payload.type,doc_record:payload.record});
     if(prepared.error) throw prepared.error;
     workspaceVersion=prepared.data.version;
@@ -448,7 +448,7 @@
     }
     if (!data?.ok) throw new Error(data?.error || "Email delivery failed.");
     localStorage.removeItem(attemptKey);
-    if(payload.type==='invoice')await loadWorkspace();
+    await loadWorkspace();
     return data;
   }
 

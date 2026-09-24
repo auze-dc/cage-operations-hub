@@ -27,7 +27,7 @@ function applyAccess(){
    panel.querySelectorAll('button,input,select,textarea').forEach(el=>{
     if(el.dataset.accessDisabled){el.disabled=false;delete el.dataset.accessDisabled;}
     const isNavigation=el.matches('#cage-online-button,[data-presence-close],[data-presence-refresh],[data-hub-action=notice],[data-hub-action=event],[data-hub-action=close],[data-hub-action=download],[data-hub-action=ack],[data-hub-action=rsvp],[data-hub-action=today],[data-hub-action=previous],[data-hub-action=next],[data-hub-action=more],[data-hub-action=export],[data-hub-action=refresh],[data-hub-action=refresh-calendar],[data-hub-source],#hub-calendar-date,#hub-calendar-view,#hub-notice-filter') || el.matches('[data-delivery-history],[data-view],[data-go-view],[data-chat-thread],[data-chat-filter],[data-open-project],[data-project-tab],[data-play-voice],[data-preview-chat-file],[data-open-receipt],[data-equipment-history],[data-view-document],[data-record-pdf],[data-receipt],[data-chat-info],[data-finance-section],[data-conversation-search],[data-chat-menu-toggle],[data-chat-favourite],#chat-theme-toggle,#message-find-prev,#message-find-next,#message-find-close') || el.type==='search';
-    const invoiceSend=el.matches('[data-send-document=invoice]')&&backend().canSendInvoice?.();
+    const invoiceSend=el.matches('[data-send-document=invoice],[data-send-document=quote]')&&backend().canSendInvoice?.();
     if(level==='view' && !invoiceSend && !isNavigation && !el.closest('[data-personal-readonly]')) { el.disabled=true;el.dataset.accessDisabled='true'; }
    });
  });
@@ -135,7 +135,7 @@ $('equipment-action-form').onsubmit=e=>{e.preventDefault();if(backend().moduleLe
 document.addEventListener('submit',e=>{
  const formModules={'asset-form':'assets','equipment-action-form':'assets','expense-form':'finance','invoice-form':'finance','quote-form':'finance','send-form':'finance','task-form':'tasks','project-form':'projects','chat-form':'chat','training-program-form':'training','training-cohort-form':'training','learner-form':'training'};
  const module=formModules[e.target.id];
- const invoiceSend=e.target.id==='send-form'&&e.target.elements.documentType.value==='invoice'&&backend().canSendInvoice?.();
+ const invoiceSend=e.target.id==='send-form'&&['invoice','quote'].includes(e.target.elements.documentType.value)&&backend().canSendInvoice?.();
  if(module&&!invoiceSend&&backend().moduleLevel(module)!=='edit'&&e.submitter?.value!=='cancel'){e.preventDefault();e.stopImmediatePropagation();showToast('You have view-only access to this module. Ask an administrator for edit access.');}
 },true);
 window.CAGE_PERSONAL={applyAccess,updateBadge,refreshView,refresh,chatUnread(thread){return personal.notifications.filter(n=>!n.read_at&&n.target_view==='chat'&&n.target_id===thread).length;},chatUnreadTotal(){return personal.notifications.filter(n=>!n.read_at&&n.target_view==='chat').length;},view(v){if(v!=='chat'&&recorder?.state==='recording')recorder.stop();if(v==='mywork'||v==='notifications'){refreshView();refresh();}if(v==='access')renderAccess();}};

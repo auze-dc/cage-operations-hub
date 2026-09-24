@@ -34,12 +34,12 @@ Deno.serve(async req => {
  if(!['quote','invoice'].includes(type)||typeof subject!=='string'||!subject.trim()||subject.length>200||typeof message!=='string'||message.length>10000)return json({ok:false,error:'Check document type, subject and message.'},400);
  const access=await userClient.rpc('module_level',{m:'finance'});
  const visible=await userClient.rpc('can_work_record',{k:type==='quote'?'quotes':'invoices',rid:payload.record?.id||''});
- if(access.error||(type==='invoice'?!['view','edit'].includes(access.data):access.data!=='edit')||visible.error||!visible.data)return json({ok:false,error:'Access to this document is required (Finance edit access for quotes).'},403);
+ if(access.error||!['view','edit'].includes(access.data)||visible.error||!visible.data)return json({ok:false,error:'Access to this document is required.'},403);
  const w=await db.from('workspace_states').select('data').eq('organization_id',profile.organization_id).single();
  const record=w.data?.data?.[type==='quote'?'quotes':'invoices']?.find((r:any)=>r.id===payload.record?.id);
  if(!record||!record.number)return json({ok:false,error:'Document not found.'},404);
  if(type==='invoice'&&['Cancelled','Voided'].includes(record.status))return json({ok:false,error:'This invoice is no longer open for sending.'},409);
- if(type==='quote'&&!['Approved','Sent','Accepted'].includes(record.status))return json({ok:false,error:'Quotation must be approved before sending.'},409);
+ if(type==='quote'&&['Cancelled','Voided','Rejected','Declined'].includes(record.status))return json({ok:false,error:'This quote is closed. Create a new quotation.'},409);
  const people=recipients({...payload,record});
  const attemptId=payload.deliveryAttempt;
  if(typeof attemptId!=='string'||! /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(attemptId))return json({ok:false,error:'Refresh the Hub before sending.'},400);
@@ -92,9 +92,9 @@ Deno.serve(async req => {
  frozen=registered.data;
  }
  async function completed(){
-  if(type==='invoice'){
-   const saved=await db.rpc('complete_staff_invoice_send',{attempt:attemptId});
-   if(saved.error)return json({ok:false,error:'Email provider accepted the invoice, but recording its status failed. Retry this unchanged form.'},502);
+  if(['invoice','quote'].includes(type)){
+   const saved=await db.rpc(type==='quote'?'complete_staff_quote_send':'complete_staff_invoice_send',{attempt:attemptId});
+   if(saved.error)return json({ok:false,error:'Email provider accepted the document, but recording its status failed. Retry this unchanged form.'},502);
   }
   return json({ok:true,messageId:frozen.provider_id});
  }
