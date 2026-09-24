@@ -1487,6 +1487,7 @@ function renderCRM() {
         <div class="pipeline-cards">
           ${deals.length ? deals.map(deal => `
             <article class="deal-card" draggable="true" data-deal-card="${deal.id}">
+              ${deal.category ? `<small class="project-client">${escapeHtml(deal.category)}</small>` : ""}
               <input class="inline-deal-company" data-inline-deal-company="${deal.id}" value="${escapeHtml(deal.company)}" aria-label="Edit organisation for ${escapeHtml(deal.name)}">
               <textarea class="inline-deal-title" data-inline-deal-title="${deal.id}" rows="${Math.min(3, Math.max(1, Math.ceil(deal.name.length / 27)))}" aria-label="Edit opportunity name">${escapeHtml(deal.name)}</textarea>
               <strong class="deal-value">${formatMoney(deal.value, true)}</strong>
@@ -3942,6 +3943,7 @@ function openDealDialog(dealId = "") {
   const form = document.getElementById("deal-form");
   form.reset();
   editingDealId = dealId;
+  window.CAGE_CATEGORIES?.select("deal-form",dealById(dealId)?.category||"");
   const deal = dealById(dealId);
   document.getElementById("deal-dialog-kicker").textContent = deal ? "Opportunity details" : "Proactive sales lead";
   document.getElementById("deal-dialog-title").textContent = deal ? "Edit opportunity" : "New opportunity";
@@ -3978,7 +3980,8 @@ function createDeal(event) {
     probability: Number(data.get("probability") || 20),
     nextAction: String(data.get("nextAction") || ""),
     nextStep: String(data.get("nextStep") || "").trim(),
-    project: existing?.project || ""
+    project: existing?.project || "",
+    category: String(data.get("category") || "").trim()
   };
   if (!deal.name || !deal.company || !deal.owner || !deal.value || !deal.nextAction || !deal.nextStep) {
     document.getElementById("deal-form-error").textContent = "Complete the organisation, value, owner and next action.";

@@ -550,7 +550,7 @@ body.auth-pending .session-loader { display: none; }
         <label class="field"><span>Organisation *</span><input name="organisation" required maxlength="100" placeholder="Client, funder or issuing organisation"></label>
         <label class="field"><span>Contact person *</span><input name="contact" required maxlength="100" placeholder="Name or department"></label>
         <label class="field"><span>Email or phone</span><input name="contactDetail" maxlength="120" placeholder="How CAGE should respond"></label>
-        <label class="field"><span>Purpose of request *</span><select name="type" id="request-type-input"></select><small class="field-help">Admins can add more purposes from Request centre.</small></label>
+        <label class="field"><span>Purpose of request *</span><select name="type" id="request-type-input"></select><small class="field-help">Staff can add a shared category below. Administrators can manage the original purposes from Request centre.</small></label>
         <label class="field"><span>Source</span><select name="source"><option>Email</option><option>WhatsApp</option><option>Website</option><option>Telephone</option><option>Referral</option><option>Tender portal</option><option>Grant portal</option><option>LinkedIn</option><option>AI opportunity monitor</option><option>Existing client</option></select></label>
         <label class="field"><span>Assigned owner *</span><select name="owner" id="request-owner-input" required></select></label>
         <label class="field"><span>Priority</span><select name="priority"><option>Normal</option><option>High</option><option>Urgent</option></select></label>
@@ -661,6 +661,7 @@ body.auth-pending .session-loader { display: none; }
       <div class="form-grid">
         <label class="field field-wide"><span>Opportunity name *</span><input name="name" required maxlength="100" placeholder="e.g. ESCOM feeder mapping"></label>
         <label class="field"><span>Organisation *</span><input name="company" required placeholder="Client or partner"></label>
+        <label class="field"><span>Category</span><select name="category"><option value="">Uncategorised</option><option>Mapping &amp; Data</option><option>Training</option><option>Agriculture</option><option>Equipment Hire</option><option>Disaster Risk</option><option>Internal</option></select></label>
         <label class="field"><span>Owner *</span><select name="owner" id="deal-owner-input" required></select></label>
         <label class="field"><span>Expected value (MWK) *</span><input name="value" type="number" min="0" step="1000" required placeholder="0"></label>
         <label class="field"><span>Stage</span><select name="stage"><option>Prospect</option><option>Lead</option><option>Qualified</option><option>Proposal</option><option>Negotiation</option><option>Won</option><option>Lost</option></select></label>
@@ -951,8 +952,8 @@ body.auth-pending .session-loader { display: none; }
   <script src="./runtime-config.js?v=15.9.0" defer></script>
   <script src="./vendor/supabase.js?v=15.9.0" defer></script>
   <script src="./reliable-sync.js?v=15.9.0-sync1" defer></script>
-  <script src="./production.js?v=document-response-20260923-v2" defer></script>
-  <script src="./app.js?v=document-response-20260923-v2" defer></script>
+  <script src="./production.js?v=categories-20260924-1" defer></script>
+  <script src="./app.js?v=categories-20260924-1" defer></script>
   <script src="./hr.js?v=15.9.0" defer></script>
   <script src="./training.js?v=21.0.0" defer></script>
 <script src="./vendor/pdf-lib.min.js?v=15.9.0" defer></script>
@@ -977,5 +978,6 @@ body.auth-pending .session-loader { display: none; }
 <script src="./emoji-picker.js?v=27.0.0" defer></script>
 <script src="./staff-presence.js?v=26.0.0" defer></script>
 <script src="./document-delivery.js?v=20260923-v2" defer></script>
+<script src="./work-categories.js?v=20260924-1" defer></script>
 </body>
 </html>
