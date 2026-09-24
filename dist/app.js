@@ -2026,7 +2026,7 @@ function renderFinance() {
       <td>${formatDate(quote.validUntil)}</td>
       <td class="money-cell">${formatMoney(quote.amount)}</td>
       <td><span class="status-pill ${quote.status === "Sent" ? "doing" : quote.status === "Approved" ? "done" : "to-do"}">${escapeHtml(quote.status)}</span></td>
-      <td><button class="document-action" data-send-document="quote" data-document-id="${quote.id}" ${quote.status === "Draft" ? "disabled title=\"Approval is required before sending\"" : ""}>${quote.status === "Draft" ? "Approval pending" : quote.sentAt ? "Resend" : "Send"}</button>${quote.sentAt ? `<div class="document-sent">Sent ${formatDate(quote.sentAt.slice(0, 10))}</div>` : ""}</td>
+      <td><button class="document-action" data-send-document="quote" data-document-id="${quote.id}" >${quote.sentAt ? "Resend" : "Send"}</button>${quote.sentAt ? `<div class="document-sent">Sent ${formatDate(quote.sentAt.slice(0, 10))}</div>` : ""}</td>
     </tr>
   `).join("") || `<tr><td colspan="6"><div class="empty-state"><p>No quotes yet.</p></div></td></tr>`;
 
@@ -4232,7 +4232,6 @@ async function createQuote(event) {
     request: requestId
   };
   try { Object.assign(quote,window.CAGE_DOCUMENTS.fields(event.currentTarget)); } catch(error) { document.getElementById("quote-form-error").textContent=error.message; return; }
-  if(quote.status === "Approved" && !currentUserCanApprove()) { document.getElementById("quote-form-error").textContent="A manager or administrator must approve quotations. Save this as a draft."; return; }
   if (!quote.client || !quote.issued || !quote.validUntil || !quote.amount || !quote.recipient || !quote.description) {
     document.getElementById("quote-form-error").textContent = "Complete the client, recipient, dates, amount and scope summary.";
     return;
@@ -4241,11 +4240,7 @@ async function createQuote(event) {
     document.getElementById("quote-form-error").textContent = "The validity date cannot be before the issue date.";
     return;
   }
-  if (data.get("sendNow") && !requestId) {
-    if (quote.status !== "Approved") {
-      document.getElementById("quote-form-error").textContent = "Set the standalone quote to Approved before sending it.";
-      return;
-    }
+  if (data.get("sendNow")) {
     try {
       await window.CAGE_BACKEND.sendDocument({
         type: "quote", record: quote, recipient: quote.recipient,
@@ -4260,49 +4255,16 @@ async function createQuote(event) {
     quote.sentAt = new Date().toISOString();
     quote.automaticFollowUp = true;
   }
-  if (requestId && (!currentUserCanSelfApprove() || (!requestById(requestId) || !requestPreReviewComplete(requestById(requestId))))) quote.status = "Draft";
   const savedQuote=state.quotes.find(q=>q.id===quote.id);if(savedQuote)Object.assign(savedQuote,quote);else state.quotes.push(quote);
-  if(quote.status==='Approved'&&requestId&&currentUserCanSelfApprove()){
-    const request=requestById(requestId);request.quote=quote.id;
-    const approval={id:'ap-'+crypto.randomUUID(),type:'Quote',title:'Approve '+quote.number,requester:window.CAGE_BACKEND.currentMemberId(),submitted:TODAY,decided:TODAY,decidedBy:window.CAGE_BACKEND.currentMemberId(),due:dateAfter(1),amount:quote.amount,status:'Approved',summary:quote.description,decisionNote:'Approved by the authorised administrator.',linkedType:'request',linkedId:requestId};
-    state.approvals.push(approval);applyApprovalOutcome(approval);
-  }
-  if (quote.status === "Draft") {
-    const linkedRequest = requestById(requestId);
-    if (linkedRequest) {
-      linkedRequest.quote = quote.id;
-      if (requestPreReviewComplete(linkedRequest)) {
-        linkedRequest.stage = "Internal review";
-        linkedRequest.nextAction = `Await approval of ${quote.number} before sending it to ${linkedRequest.organisation}.`;
-      } else {
-        linkedRequest.stage = "Scoping";
-        linkedRequest.nextAction = `Complete the remaining scope controls, then submit ${quote.number} for approval.`;
-      }
-      syncRequestLinks(linkedRequest);
-    }
-    if (!linkedRequest || requestPreReviewComplete(linkedRequest)) {
-      state.approvals.push({
-        id: `ap-${Date.now() + 1}`,
-        type: "Quote",
-        title: `Approve ${quote.number} for ${quote.client}`,
-        requester:window.CAGE_BACKEND.currentMemberId(),
-        submitted: TODAY,
-        due: dateAfter(1),
-        amount: quote.amount,
-        status: "Pending",
-        summary: quote.description,
-        linkedType: linkedRequest ? "request" : "quote",
-        linkedId: linkedRequest ? linkedRequest.id : quote.id
-      });
-    }
-  }
+  const request=requestById(requestId);
+  if(request){request.quote=quote.id;syncRequestLinks(request);}
   saveState();
   document.getElementById("quote-dialog").close();
   renderAll();
   setView("finance");
   quoteForm.dataset.requestId = "";
   const linkedRequest = requestById(requestId);
-  showToast(quote.sentAt ? `${quote.number} created and sent to ${quote.recipient}.` : quote.status === "Approved" ? `${quote.number} approved and ready to send.` : requestId && linkedRequest && requestPreReviewComplete(linkedRequest) ? `${quote.number} created and sent for internal approval.` : requestId ? `${quote.number} saved as a draft; complete the request controls before approval.` : `${quote.number} created.`);
+  showToast(quote.sentAt ? `${quote.number} sent to ${quote.recipient}.` : `${quote.number} saved as a draft. You can send it without manager approval.`);
   } finally {
     delete submittingForm.dataset.submitting;
     if(actionButton) actionButton.disabled=false;
@@ -4326,10 +4288,10 @@ function openSendDocument(type, id) {
   document.getElementById("send-dialog-title").textContent = `Send ${documentRecord.number}`;
   document.getElementById("send-document-preview").innerHTML = `<strong>${escapeHtml(documentRecord.number)} · ${formatMoney(documentRecord.amount)}</strong><span>${escapeHtml(documentRecord.client)} · ${escapeHtml(documentRecord.description)}</span>`;
   document.getElementById("send-form-error").textContent = "";
-  const canSendInvoice=type==='invoice'&&window.CAGE_BACKEND?.canSendInvoice?.();
+  const canSendInvoice=['invoice','quote'].includes(type)&&window.CAGE_BACKEND?.canSendInvoice?.();
   const sendButton=form.querySelector('button.primary-button');
   if(sendButton)sendButton.disabled=!(canSendInvoice||window.CAGE_BACKEND?.moduleLevel('finance')==='edit');
-  form.elements.automaticFollowUp.disabled=type==='invoice';
+  form.elements.automaticFollowUp.disabled=true;
   document.getElementById("send-dialog").showModal();
 }
 
@@ -4351,23 +4313,6 @@ async function sendDocument(event) {
     document.getElementById("send-form-error").textContent = "Add a recipient and subject before sending.";
     return;
   }
-  if (type === "quote" && documentRecord.status === "Draft") {
-    document.getElementById("send-form-error").textContent = "This quote must be approved before it can be sent.";
-    return;
-  }
-  if (type === "quote" && documentRecord.request) {
-    const request = requestById(documentRecord.request);
-    if (request && !requestHasApprovedReview(request)) {
-      document.getElementById("send-form-error").textContent = "This quote must be approved in the decision inbox before it can be sent.";
-      return;
-    }
-    if (request) {
-      request.checklist ||= {};
-      request.checklist.submission = true;
-      request.stage = "Submitted";
-      request.nextAction = "Confirm receipt and record the client decision or negotiation.";
-    }
-  }
   const submitButton = event.submitter;
   if (submitButton) submitButton.disabled = true;
   try {
@@ -4380,9 +4325,9 @@ async function sendDocument(event) {
     return;
   }
   if (submitButton) submitButton.disabled = false;
-  if(type==='invoice'&&window.CAGE_BACKEND?.isProduction()){
+  if(['invoice','quote'].includes(type)&&window.CAGE_BACKEND?.isProduction()){
     document.getElementById('send-dialog').close();sendingDocument=null;renderAll();
-    showToast(`${documentRecord.number}: email provider accepted the invoice for delivery.`);return;
+    showToast(`${documentRecord.number}: email provider accepted the document for delivery.`);return;
   }
   documentRecord.recipient = recipient;
   documentRecord.sentAt = new Date().toISOString();
