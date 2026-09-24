@@ -163,9 +163,11 @@
     if (workspacePoll) clearInterval(workspacePoll);
     workspacePoll = setInterval(async () => {
       if (!profile || document.hidden || pendingState) return;
+      const pollUser=profile.id,pollGeneration=sessionGeneration;
       try {
         await loadModuleAccess();
-        const result = await client.rpc("get_my_workspace");
+        const result = await client.rpc("get_my_workspace").abortSignal(AbortSignal.timeout(15000));
+        if(pollUser!==profile?.id||pollGeneration!==sessionGeneration)return;
         if (result.error) throw result.error;
         if (result.data && result.data.version !== workspaceVersion) {
           workspaceVersion = result.data.version;
@@ -295,96 +297,84 @@
     }, 650);
   }
 
-  async function establishSession(session) {
-    if (!session?.user) {
-      showLogin();
-      return;
-    }
-    showBanner("Opening the secure CAGE workspace…");
-    try {
-      profile = await loadProfile(session.user.id);
-      await loadModuleAccess();
-      await loadWorkspace();
-      chooseGreetingLanguage();
-      setCurrentUser();
-      applyPermissions();
-      subscribe();
-      hideLogin();
-      hideBanner();
-      window.dispatchEvent(new CustomEvent("cage:session-ready", { detail: { profile } }));
-    } catch (error) {
-      await client.auth.signOut();
-      showLogin(error.message || "Access could not be verified.");
-      banner.className = "sync-banner";
-    }
+  // Login reliability 2026-09-24. Auth callbacks only schedule work outside the auth lock.
+  let sessionLoad=null,sessionLoadUser=null,sessionGeneration=0,sessionReady=false,lastLoadedUser=null,accessRefreshRunning=false,authEventVersion=0,lastAuthSession=null;
+  const retryLogin=document.createElement('button');retryLogin.type='button';retryLogin.className='secondary-button';retryLogin.textContent='Retry opening workspace';retryLogin.hidden=true;loginError.after(retryLogin);
+  function limited(promise,label,ms=20000){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(label+' timed out. Check your connection and retry.')),ms);})]).finally(()=>clearTimeout(timer));}
+  function loginFailure(error){sessionReady=false;profile=null;clearInterval(workspacePoll);workspacePoll=null;showLogin(error?.message||'The workspace could not load. Retry without resetting your password.');retryLogin.hidden=false;banner.className='sync-banner';}
+  async function verifiedProfile(uid){
+    const r=await limited(client.from('profiles').select('id, organization_id, email, full_name, initials, role, active, assignable').eq('id',uid).eq('organization_id',config.organizationId).single().abortSignal(AbortSignal.timeout(15000)),'Staff profile');
+    if(r.error)throw new Error('Your staff profile could not load. '+r.error.message);
+    if(!r.data?.active||r.data.id!==uid||r.data.organization_id!==config.organizationId)throw new Error('This account does not have an active staff profile in this organisation.');
+    if(!['admin','manager','hr','finance','member','viewer','shared'].includes(r.data.role))throw new Error('Your staff role could not be verified. Contact your administrator.');
+    return r.data;
   }
-
-  async function refreshAccess() {
-    if (!client || !profile || Date.now() - lastAccessRefresh < 3000) return;
-    lastAccessRefresh = Date.now();
-    try {
-      profile = await loadProfile(profile.id);
-      await loadModuleAccess();
-      if(!pendingState) await loadWorkspace();
-      setCurrentUser();
-      app?.renderAll?.();
-      applyPermissions();
-    } catch (error) {
-      await client.auth.signOut();
-      showLogin(error.message || "Your access has changed. Sign in again.");
-    }
+  async function establishSession(session,refresh=false){
+    if(!session?.user){sessionGeneration++;sessionReady=false;profile=null;clearInterval(workspacePoll);showLogin();return;}
+    const uid=session.user.id;lastAuthSession=session.access_token||uid;
+    if(sessionLoad&&sessionLoadUser===uid)return sessionLoad;
+    if(sessionReady&&profile?.id===uid&&!refresh)return;
+    const generation=++sessionGeneration;sessionLoadUser=uid;
+    if(!refresh){sessionReady=false;showLogin('Opening your verified workspace…');retryLogin.hidden=true;}
+    sessionLoad=(async()=>{
+      try{
+        const nextProfile=await verifiedProfile(uid);
+        const access=await limited(client.from('module_access').select('module,access').eq('user_id',uid).abortSignal(AbortSignal.timeout(15000)),'Module permissions');
+        if(access.error)throw new Error('Module permissions could not load. '+access.error.message);
+        const workspace=await limited(client.rpc('get_my_workspace').abortSignal(AbortSignal.timeout(15000)),'Workspace loading');
+        if(workspace.error)throw new Error('Workspace data could not load. '+workspace.error.message);
+        if(!workspace.data?.data||typeof workspace.data.data!=='object')throw new Error('Workspace data is unavailable. Please contact your administrator.');
+        if(generation!==sessionGeneration)return;
+        if(lastLoadedUser&&lastLoadedUser!==uid){pendingState=null;syncConflicts=[];cloudBase={};clearTimeout(saveTimer);}
+        profile=nextProfile;moduleAccess=Object.fromEntries((access.data||[]).map(row=>[row.module,row.access]));lastLoadedUser=uid;
+        if(!pendingState){workspaceVersion=workspace.data.version||0;cloudBase=structuredClone(workspace.data.data);app.replaceState(workspace.data.data);}
+        try{chooseGreetingLanguage();}catch{greetingLanguage="English";}setCurrentUser();applyPermissions();subscribe();sessionReady=true;retryLogin.hidden=true;hideLogin();hideBanner();
+        if(!refresh)window.dispatchEvent(new CustomEvent('cage:session-ready',{detail:{profile}}));
+      }catch(error){if(generation===sessionGeneration)loginFailure(error);}
+      finally{if(generation===sessionGeneration){sessionLoad=null;sessionLoadUser=null;}}
+    })();
+    return sessionLoad;
   }
-
-  async function boot(appApi) {
-    app = appApi;
-    document.body.classList.add("auth-pending");
-    if (!configured()) {
-      showLogin("Deployment setup is incomplete. Add the Supabase settings described in DEPLOYMENT_GUIDE.md and rebuild.");
-      return;
-    }
-    if (!window.supabase?.createClient) {
-      showLogin("The secure database client could not load. Check the deployment build.");
-      return;
-    }
-    client = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
-    });
-    const { data } = await client.auth.getSession();
-    if (passwordSetupPending && data.session) showPasswordSetup();
-    else await establishSession(data.session);
-    client.auth.onAuthStateChange((event, session) => {
-      if (event === "PASSWORD_RECOVERY") {
-        passwordSetupPending = true;
-        showPasswordSetup();
-        return;
-      }
-      if (event === "SIGNED_IN" && passwordSetupPending) {
-        showPasswordSetup();
-        return;
-      }
-      if (event === "SIGNED_IN" && session?.user && profile?.id !== session.user.id) establishSession(session);
-      if (event === "SIGNED_OUT") {
-        profile = null;
-        window.CAGE_PRESENCE?.stop?.();
-        showLogin();
-      }
-    });
+  async function refreshAccess(){
+    if(!client||!profile||!sessionReady||sessionLoad||accessRefreshRunning||Date.now()-lastAccessRefresh<3000)return;
+    lastAccessRefresh=Date.now();accessRefreshRunning=true;const refreshGeneration=sessionGeneration;
+    try{const r=await limited(client.auth.getSession(),'Session check');if(refreshGeneration!==sessionGeneration)return;if(r.error)throw r.error;await establishSession(r.data.session,true);}
+    catch(error){if(refreshGeneration===sessionGeneration)loginFailure(error);}finally{accessRefreshRunning=false;}
   }
-
-  loginForm.addEventListener("submit", async event => {
-    event.preventDefault();
-    if (!client) return;
-    loginError.textContent = "";
-    const button = event.submitter;
-    button.disabled = true;
-    button.textContent = "Signing in…";
-    const { error } = await client.auth.signInWithPassword({
-      email: document.getElementById("login-email").value.trim().toLowerCase(),
-      password: document.getElementById("login-password").value
-    });
-    if (error) loginError.textContent = "The email or password is incorrect, or the account has not been invited.";
-    button.disabled = false;
-    button.textContent = "Sign in";
+  retryLogin.addEventListener('click',async()=>{retryLogin.disabled=true;try{const r=await limited(client.auth.getSession(),'Session check');if(r.error)throw r.error;if(!r.data.session){showLogin('Please sign in again.');retryLogin.hidden=true;}else await establishSession(r.data.session);}catch(error){loginFailure(error);}finally{retryLogin.disabled=false;}});
+  async function boot(appApi){
+    app=appApi;document.body.classList.add('auth-pending');
+    if(!configured()){showLogin('Deployment setup is incomplete. Ask your administrator to verify the runtime configuration.');return;}
+    if(!window.supabase?.createClient){showLogin('The database client could not load. Refresh the page or check your connection.');return;}
+    try{
+      client=window.supabase.createClient(config.supabaseUrl,config.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+      client.auth.onAuthStateChange((event,session)=>{
+        if(!['SIGNED_IN','SIGNED_OUT','PASSWORD_RECOVERY'].includes(event))return;
+        const eventVersion=++authEventVersion;
+        if(event==='SIGNED_OUT'){lastAuthSession=null;sessionGeneration++;sessionReady=false;profile=null;sessionLoad=null;sessionLoadUser=null;clearInterval(workspacePoll);}
+        setTimeout(()=>{
+          if(eventVersion!==authEventVersion)return;
+          if(event==='PASSWORD_RECOVERY'){passwordSetupPending=true;showPasswordSetup();return;}
+          if(event==='SIGNED_OUT'){window.CAGE_LOCATION?.stop?.();window.CAGE_PRESENCE?.stop?.();retryLogin.hidden=true;showLogin();return;}
+          if(event==='SIGNED_IN'&&passwordSetupPending){showPasswordSetup();return;}
+          if(event==='SIGNED_IN'&&session?.user&&!passwordSetupPending&&(session.access_token||session.user.id)!==lastAuthSession)establishSession(session);
+        },0);
+      });
+      const bootVersion=authEventVersion;
+      const r=await limited(client.auth.getSession(),'Session check');if(bootVersion!==authEventVersion)return;if(r.error)throw r.error;
+      if(passwordSetupPending&&r.data.session)showPasswordSetup();else await establishSession(r.data.session);
+    }catch(error){loginFailure(error);}
+  }
+  loginForm.addEventListener('submit',async event=>{
+    event.preventDefault();if(!client)return;
+    const button=event.submitter||loginForm.querySelector('[type=submit]');if(button.disabled)return;
+    button.disabled=true;button.textContent='Signing in…';loginError.textContent='';retryLogin.hidden=true;
+    try{
+      const r=await limited(client.auth.signInWithPassword({email:document.getElementById('login-email').value.trim().toLowerCase(),password:document.getElementById('login-password').value}),'Sign-in');
+      if(r.error)throw r.error;
+      if(passwordSetupPending)showPasswordSetup();else await establishSession(r.data.session);
+    }catch(error){showLogin(error?.message||'Sign-in could not complete. Check your connection and retry.');retryLogin.hidden=false;}
+    finally{button.disabled=false;button.textContent='Sign in';}
   });
 
   passwordSetupForm.addEventListener("submit", async event => {
@@ -651,7 +641,10 @@
   });
 
   async function loadModuleAccess() {
-    const result = await client.from("module_access").select("module,access").eq("user_id",profile.id);
+    const accessUser=profile?.id,accessGeneration=sessionGeneration;
+    if(!accessUser)return;
+    const result = await client.from("module_access").select("module,access").eq("user_id",accessUser).abortSignal(AbortSignal.timeout(15000));
+    if(accessUser!==profile?.id||accessGeneration!==sessionGeneration)return;
     if(result.error) throw new Error("Install the Hub 14 database update before using this version. " + result.error.message);
     const previous = JSON.stringify(moduleAccess);
     moduleAccess = Object.fromEntries((result.data||[]).map(row=>[row.module,row.access]));
