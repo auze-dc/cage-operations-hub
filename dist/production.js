@@ -18,7 +18,7 @@
   let workspaceVersion = 0;
   let saveTimer = null;
   let pendingState = null;
-  let cloudBase = {}, syncConflicts = [], savingNow=false;
+  let cloudBase = {}, syncConflicts = [], savingNow=false, remoteSnapshot=null;
   const draftKey=()=>"cage-unsynced-"+profile?.id;
   let saveChain = Promise.resolve();
   let realtimeChannel = null;
@@ -149,33 +149,26 @@
   }
 
   async function loadWorkspace() {
-    const { data, error } = await client.rpc("get_my_workspace");
-    if (error) throw error;
-    if (!data) {
-      throw new Error("No workspace record was found for this organisation. Ask an administrator to verify the project configuration or restore the workspace backup. No sample records have been created.");
-    }
-    workspaceVersion = data.version || 0;
-    cloudBase=structuredClone(data.data);
-    app.replaceState(data.data);
+    const uid=profile?.id,generation=sessionGeneration;
+    const {data,error}=await client.rpc('get_my_workspace').abortSignal(AbortSignal.timeout(15000));
+    if(uid!==profile?.id||generation!==sessionGeneration)return;
+    if(error)throw error;
+    if(!data?.data)throw new Error('Workspace data is unavailable. Ask an administrator to review it.');
+    receiveWorkspace(data);
   }
 
   function subscribe() {
     if (workspacePoll) clearInterval(workspacePoll);
     workspacePoll = setInterval(async () => {
-      if (!profile || document.hidden || pendingState) return;
+      if (!profile || document.hidden || savingNow) return;
       const pollUser=profile.id,pollGeneration=sessionGeneration;
       try {
         await loadModuleAccess();
         const result = await client.rpc("get_my_workspace").abortSignal(AbortSignal.timeout(15000));
-        if(pollUser!==profile?.id||pollGeneration!==sessionGeneration)return;
+        if(pollUser!==profile?.id||pollGeneration!==sessionGeneration||savingNow)return;
         if (result.error) throw result.error;
-        if (result.data && result.data.version !== workspaceVersion) {
-          workspaceVersion = result.data.version;
-          applyingRemote = true;
-          cloudBase=structuredClone(result.data.data);
-          app.replaceState(result.data.data);
-          applyingRemote = false;
-        }
+        if(result.data && (result.data.version!==workspaceVersion || !window.CAGE_SYNC.equal(result.data.data,remoteSnapshot)))receiveWorkspace(result.data);
+        if(pendingState&&!savingNow)flushSave();
         applyPermissions();
       } catch (error) { applyingRemote = false; showBanner(error.message || "Connection interrupted", "error"); }
     }, 8000);
@@ -224,7 +217,7 @@
       try {
         if (!navigator.onLine) throw new Error('You are offline');
         if (attempt) { try { await client.auth.refreshSession(); } catch {} await new Promise(r=>setTimeout(r,350*attempt)); }
-        const result=await client.rpc("save_workspace_changes",{changes:patches,expected_epoch:expectedEpoch});
+        const result=await client.rpc("save_workspace_changes_isolated",{changes:patches,expected_epoch:expectedEpoch}).abortSignal(AbortSignal.timeout(20000));
         if(result.error)throw result.error;
         return result.data;
       } catch(error) {
@@ -235,35 +228,107 @@
     throw lastError;
   }
 
-  async function flushSave() {
-    if(!pendingState||!profile||applyingRemote||savingNow||syncConflicts.length)return;
-    const snapshot=structuredClone(pendingState),base=structuredClone(cloudBase),patches=writableChanges(base,snapshot);
-    if(!patches.length){pendingState=null;localStorage.removeItem(draftKey());hideBanner(0);app.replaceState(cloudBase);window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:false}}));return;}
-    savingNow=true;showBanner("Saving changes…");
-    try {
-      const data=await syncRpcWithRetry(patches,resetEpoch(base));
-      if(data?.conflicts?.length){syncConflicts=data.conflicts;window.dispatchEvent(new CustomEvent("cage:conflicts",{detail:{conflicts:syncConflicts,patches}}));showBanner("Your draft is safe. Review the conflicting changes.","error");return;}
-      await loadWorkspace();
-      if(resetEpoch(base)!==resetEpoch(cloudBase)) {
-        quarantineResetDraft({base,next:pendingState||snapshot});
-        showBanner("The workspace was reset. Your old draft was kept separately and was not restored.","error");
-        return;
-      }
-      const newer=writableChanges(snapshot,pendingState||snapshot);
-      pendingState=null;
-      if(newer.length){pendingState=window.CAGE_SYNC.apply(cloudBase,newer);app.replaceState(pendingState);localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));}
-      else localStorage.removeItem(draftKey());
-      hideBanner(0);window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:!!pendingState}}));
-    } catch(error){
-      if(/Workspace was reset/i.test(error.message||"")) {
-        quarantineResetDraft({base,next:pendingState||snapshot});
-        await loadWorkspace();
-        showBanner("The workspace was reset. Your old draft was kept separately and was not restored.","error");
-        return;
-      }
-      showBanner("Not synced: "+error.message+". Your draft is kept on this device.","error");window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:true,error:error.message}}));}
-    finally {savingNow=false;if(pendingState&&!syncConflicts.length)setTimeout(()=>{if(navigator.onLine)flushSave();},6000);}
+  // Rejected edits are preserved separately and never suppress normal refresh.
+  function blockedDrafts(){
+    const saved=JSON.parse(localStorage.getItem(draftKey()+':blocked')||'[]');
+    if(!Array.isArray(saved))throw new Error('Draft recovery storage needs review. Do not clear browser data.');
+    return saved;
   }
+  function recordLabel(change){
+    const r=change.after||change.before||{};
+    const module={quotes:'Quote',invoices:'Invoice',contacts:'Contact',messages:'Message',requests:'Request',projects:'Project',tasks:'Task',approvals:'Approval'}[change.key]||change.key;
+    return `${module}: ${r.number||r.title||r.name||change.id||'settings'}`;
+  }
+  function syncNotice(){
+    const blocked=blockedDrafts();
+    if(blocked.length)showBanner(`${recordLabel(blocked[0].change)} could not be saved. ${blocked.length} draft(s) need attention. Open “Drafts needing attention” for the reason; other work continues.`,'error');
+    else if(!pendingState)hideBanner(0);
+    window.dispatchEvent(new CustomEvent('cage:sync',{detail:{pending:!!pendingState,blocked:blocked.length}}));
+  }
+  function persistActive(base,next){
+    // Persist before changing the in-memory or rendered state.
+    if(next)localStorage.setItem(draftKey(),JSON.stringify({base,next}));
+    else localStorage.removeItem(draftKey());
+  }
+  function showWorkspace(data,patches){
+    const nextBase=window.CAGE_SYNC.apply(data.data,patches.map(c=>({...c,after:c.before})));
+    const next=patches.length?window.CAGE_SYNC.apply(data.data,patches):null;
+    if(pendingState||patches.length)persistActive(nextBase,next);cloudBase=nextBase;pendingState=next;workspaceVersion=data.version||0;remoteSnapshot=structuredClone(data.data);
+    applyingRemote=true;try{app.replaceState(next||data.data);}finally{applyingRemote=false;}
+  }
+  function receiveWorkspace(data){
+    if(!data?.data)throw new Error('Workspace data is unavailable.');
+    if(pendingState&&resetEpoch(cloudBase)!==resetEpoch(data.data))quarantineResetDraft({base:cloudBase,next:pendingState});
+    const patches=pendingState?writableChanges(cloudBase,pendingState):[];
+    showWorkspace(data,patches);
+  }
+  async function retryBlockedDraft(id){
+    const item=blockedDrafts().find(x=>x.id===id);if(!item)throw new Error('This recovery draft is no longer listed.');
+    if(savingNow)throw new Error('A save is in progress. Try again shortly.');
+    if(item.epoch!==resetEpoch(cloudBase))throw new Error('This draft belongs to an earlier workspace. Download it for review; it cannot be replayed.');
+    const active=pendingState?writableChanges(cloudBase,pendingState):[];
+    if(active.some(c=>c.key===item.change.key&&c.id===item.change.id))throw new Error('This record already has an active edit. Save or review it first.');
+    // Retain the original before-value: permission recovery must not overwrite
+    // a colleague's intervening changes. Keep the recovery copy until success.
+    const base=window.CAGE_SYNC.apply(cloudBase,[{...item.change,after:item.change.before}]);
+    const next=window.CAGE_SYNC.apply(pendingState||cloudBase,[item.change]);
+    persistActive(base,next);cloudBase=base;pendingState=next;app.replaceState(next);
+    await flushSave();
+  }
+  function downloadBlockedDrafts(){
+    const blob=new Blob([JSON.stringify({savedAt:new Date().toISOString(),drafts:blockedDrafts()},null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='cage-drafts-needing-attention.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+  async function flushSave(){
+    if(!pendingState||!profile||applyingRemote||savingNow)return;
+    const snapshot=structuredClone(pendingState),base=structuredClone(cloudBase),patches=writableChanges(base,snapshot);
+    if(!patches.length){persistActive(cloudBase,null);pendingState=null;app.replaceState(cloudBase);syncNotice();return;}
+    const user=profile.id,generation=sessionGeneration,key=draftKey();
+    savingNow=true;showBanner('Saving changes…');
+    try{
+      const data=await syncRpcWithRetry(patches,resetEpoch(base));
+      if(user!==profile?.id||generation!==sessionGeneration)return;
+      if(!Array.isArray(data?.results)||data.results.length!==patches.length||patches.some(c=>data.results.filter(r=>r.key===c.key&&r.id===c.id&&['saved','blocked','conflict'].includes(r.status)).length!==1))throw new Error('Unexpected sync response. Your drafts remain on this device.');
+      const latest=structuredClone(pendingState||snapshot),newer=writableChanges(snapshot,latest);
+      let recovery=blockedDrafts();const rejected=[];
+      for(const c of patches){
+        const outcome=data.results.find(r=>r.key===c.key&&r.id===c.id);
+        if(outcome.status==='saved'){
+          recovery=recovery.filter(x=>!(x.change.key===c.key&&x.change.id===c.id&&window.CAGE_SYNC.equal(x.change.after,c.after)));
+        }else{
+          const change={...c,after:newer.find(x=>x.key===c.key&&x.id===c.id)?.after??c.after};
+          // Preserve deletions too (null is a real after-value).
+          const edit=newer.find(x=>x.key===c.key&&x.id===c.id);if(edit)change.after=edit.after;
+          const old=recovery.find(x=>window.CAGE_SYNC.equal(x.change,change)&&x.epoch===resetEpoch(base));
+          const item={id:old?.id||crypto.randomUUID(),savedAt:old?.savedAt||new Date().toISOString(),epoch:resetEpoch(base),change,reason:outcome.reason||'This record could not be saved.',kind:outcome.status,code:outcome.code};
+          recovery=recovery.filter(x=>x.id!==item.id);recovery.push(item);rejected.push(change);
+        }
+      }
+      // Recovery write MUST succeed before taking rejected items out of the queue.
+      localStorage.setItem(key+':blocked',JSON.stringify(recovery));
+      const remaining=newer.filter(c=>!rejected.some(x=>x.key===c.key&&x.id===c.id));
+      // Build a confirmed base even if the following refresh fails. Successful
+      // edits are no longer dirty; newer edits keep their original before-values.
+      const savedPatches=patches.filter(c=>data.results.some(r=>r.key===c.key&&r.id===c.id&&r.status==='saved'));
+      const confirmed=window.CAGE_SYNC.apply(base,savedPatches);
+      const next=remaining.length?window.CAGE_SYNC.apply(confirmed,remaining):null;
+      persistActive(confirmed,next);cloudBase=confirmed;pendingState=next;syncConflicts=[];
+      applyingRemote=true;try{app.replaceState(next||confirmed);}finally{applyingRemote=false;}
+      await loadWorkspace();
+      if(user!==profile?.id||generation!==sessionGeneration)return;
+      syncNotice();
+    }catch(error){
+      if(user!==profile?.id||generation!==sessionGeneration)return;
+      if(/Workspace was reset/i.test(error.message||'')){
+        quarantineResetDraft({base,next:pendingState||snapshot});await loadWorkspace();
+      }else showBanner('Not synced: '+error.message+'. Your draft is kept on this device.','error');
+      window.dispatchEvent(new CustomEvent('cage:sync',{detail:{pending:!!pendingState,error:error.message}}));
+    }finally{
+      savingNow=false;
+      if(user===profile?.id&&generation===sessionGeneration&&pendingState)setTimeout(()=>{if(user===profile?.id&&generation===sessionGeneration&&navigator.onLine)flushSave();},6000);
+    }
+  }
+
   async function resolveSync(choices) {
     for(const c of syncConflicts){const choice=choices.find(x=>x.key===c.key&&x.id===c.id)?.choice;if(!choice)throw new Error("Choose which version to keep for every conflict");cloudBase=window.CAGE_SYNC.apply(cloudBase,[{...c,after:c.current}]);if(choice==='theirs')pendingState=window.CAGE_SYNC.apply(pendingState,[{...c,after:c.current}]);}
     syncConflicts=[];localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));app.replaceState(pendingState);await flushSave();
@@ -325,9 +390,9 @@
         if(workspace.error)throw new Error('Workspace data could not load. '+workspace.error.message);
         if(!workspace.data?.data||typeof workspace.data.data!=='object')throw new Error('Workspace data is unavailable. Please contact your administrator.');
         if(generation!==sessionGeneration)return;
-        if(lastLoadedUser&&lastLoadedUser!==uid){pendingState=null;syncConflicts=[];cloudBase={};clearTimeout(saveTimer);}
+        if(lastLoadedUser&&lastLoadedUser!==uid){pendingState=null;syncConflicts=[];cloudBase={};remoteSnapshot=null;clearTimeout(saveTimer);}
         profile=nextProfile;moduleAccess=Object.fromEntries((access.data||[]).map(row=>[row.module,row.access]));lastLoadedUser=uid;
-        if(!pendingState){workspaceVersion=workspace.data.version||0;cloudBase=structuredClone(workspace.data.data);app.replaceState(workspace.data.data);}
+        if(!savingNow)receiveWorkspace(workspace.data);
         try{chooseGreetingLanguage();}catch{greetingLanguage="English";}setCurrentUser();applyPermissions();subscribe();sessionReady=true;retryLogin.hidden=true;hideLogin();hideBanner();
         if(!refresh)window.dispatchEvent(new CustomEvent('cage:session-ready',{detail:{profile}}));
       }catch(error){if(generation===sessionGeneration)loginFailure(error);}
@@ -922,7 +987,7 @@
     academyAttendance,
     academyData, academySave, academyCompletion,
     opsData,opsSave,opsRpc,sendCohort,
-    resolveSync, restoreDraft, flushSave, reviewSync, discardDraftRecord, downloadPreservedSettings, syncState:()=>({pending:!!pendingState,conflicts:syncConflicts.length,localSettings:preservedSettings().length}),
+    resolveSync, restoreDraft, flushSave, reviewSync, discardDraftRecord, downloadPreservedSettings, blockedDrafts, recordLabel, retryBlockedDraft, downloadBlockedDrafts, syncState:()=>({pending:!!pendingState,conflicts:syncConflicts.length,blocked:blockedDrafts().length,localSettings:preservedSettings().length}),
     emailPreferences, saveEmailPreferences, emailRouting, saveEmailRouting, readChatNotifications, requestTaskHelp,
     plannerData, saveTaskPlan, savePlanningCapacity, updatePlannedTask,
     moduleLevel, personalData, saveReminder, readNotification, accessAccounts, saveModuleAccess, fileUrl,
