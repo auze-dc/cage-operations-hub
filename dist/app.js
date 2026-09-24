@@ -4326,6 +4326,10 @@ function openSendDocument(type, id) {
   document.getElementById("send-dialog-title").textContent = `Send ${documentRecord.number}`;
   document.getElementById("send-document-preview").innerHTML = `<strong>${escapeHtml(documentRecord.number)} · ${formatMoney(documentRecord.amount)}</strong><span>${escapeHtml(documentRecord.client)} · ${escapeHtml(documentRecord.description)}</span>`;
   document.getElementById("send-form-error").textContent = "";
+  const canSendInvoice=type==='invoice'&&window.CAGE_BACKEND?.canSendInvoice?.();
+  const sendButton=form.querySelector('button.primary-button');
+  if(sendButton)sendButton.disabled=!(canSendInvoice||window.CAGE_BACKEND?.moduleLevel('finance')==='edit');
+  form.elements.automaticFollowUp.disabled=type==='invoice';
   document.getElementById("send-dialog").showModal();
 }
 
@@ -4376,6 +4380,10 @@ async function sendDocument(event) {
     return;
   }
   if (submitButton) submitButton.disabled = false;
+  if(type==='invoice'&&window.CAGE_BACKEND?.isProduction()){
+    document.getElementById('send-dialog').close();sendingDocument=null;renderAll();
+    showToast(`${documentRecord.number}: email provider accepted the invoice for delivery.`);return;
+  }
   documentRecord.recipient = recipient;
   documentRecord.sentAt = new Date().toISOString();
   documentRecord.automaticFollowUp = type === "quote" && documentRecord.clientResponse ? false : Boolean(data.get("automaticFollowUp"));
