@@ -2019,7 +2019,7 @@ function renderFinance() {
   ]);
   document.getElementById("auto-reminders").checked = state.settings.autoReminders !== false;
 
-  document.getElementById("finance-quote-list").innerHTML = [...state.quotes].sort((a, b) => b.issued.localeCompare(a.issued)).map(quote => `
+  document.getElementById("finance-quote-list").innerHTML = (window.CAGE_RECORDS?.financeRows('quotes',state.quotes)||[...state.quotes].sort((a,b)=>String(b.issued).localeCompare(String(a.issued)))).map(quote => `
     <tr>
       <td><button type="button" class="financial-record-link" data-view-document="quote" data-record-id="${quote.id}">${escapeHtml(quote.number)}</button><br><span class="project-client">${escapeHtml(quote.description)}</span></td>
       <td>${escapeHtml(quote.client)}<br><span class="project-client">${escapeHtml(dealById(quote.deal)?.name || "Direct quote")}</span></td>
@@ -2030,13 +2030,14 @@ function renderFinance() {
     </tr>
   `).join("") || `<tr><td colspan="6"><div class="empty-state"><p>No quotes yet.</p></div></td></tr>`;
 
-  const invoices = state.invoices.filter(invoice => {
+  const invoiceCandidates = state.invoices.filter(invoice => {
     const status = effectiveInvoiceStatus(invoice);
     if (financeFilter === "open") return !["Paid", "Draft"].includes(status);
     if (financeFilter === "overdue") return status === "Overdue";
     if (financeFilter === "paid") return status === "Paid";
     return true;
   }).sort((a, b) => a.due.localeCompare(b.due));
+  const invoices=window.CAGE_RECORDS?.financeRows('invoices',invoiceCandidates)||invoiceCandidates;
   document.getElementById("finance-invoice-list").innerHTML = invoices.map(invoice => {
     const effective = effectiveInvoiceStatus(invoice);
     return `<tr><td><button type="button" class="financial-record-link" data-view-document="invoice" data-record-id="${invoice.id}">${escapeHtml(invoice.number)}</button><br><span class="project-client">${escapeHtml(invoice.description)}</span></td><td>${escapeHtml(invoice.client)}<br><span class="project-client">${escapeHtml(projectById(invoice.project)?.name || "Unlinked")}</span></td><td><span class="due-date ${effective === "Overdue" ? "overdue" : ""}">${formatDate(invoice.due)}</span></td><td class="money-cell">${formatMoney(invoice.amount)}</td><td><select class="invoice-status-select ${statusClass(effective)}" data-invoice-status="${invoice.id}" aria-label="Status for ${escapeHtml(invoice.number)}">${["Draft", "Sent", "Overdue", "Paid"].map(option => `<option ${option === effective ? "selected" : ""}>${option}</option>`).join("")}</select></td><td><button class="document-action" data-send-document="invoice" data-document-id="${invoice.id}">${invoice.sentAt ? "Resend" : "Send"}</button>${invoice.sentAt ? `<div class="document-sent">Sent ${formatDate(invoice.sentAt.slice(0, 10))}</div>` : ""}</td></tr>`;
