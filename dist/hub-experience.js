@@ -11,6 +11,10 @@ function layout(){document.body.classList.toggle('chat-mode',activeView==='chat'
 const oldSet=setView;setView=function(view,...args){const previous=activeView;const result=oldSet(view,...args);layout();if(view==='chat'&&previous!=='chat'){try{input.value=sessionStorage.getItem(draftKey(activeChatThread))||input.value;}catch{}refreshReceipts();}if(view!==previous)document.querySelector('.main-content')?.scrollTo?.({top:0});return result;};
 input.addEventListener('input',()=>{autoSize();saveDraft();});window.addEventListener('pagehide',()=>saveDraft());
 function receiptLabel(id){
+ const sync=api().recordSaveStatus?.('messages',id);
+ if(sync?.state==='pending')return 'Waiting to sync';
+ if(sync?.state==='blocked')return 'Not sent · Needs attention';
+ if(sync?.state==='unknown')return 'Not confirmed';
  if(api()?.reviewSync?.().some(p=>p.key==='messages'&&p.id===id&&p.before==null))return 'Sending…';
  if(!receiptReady||receiptThread!==activeChatThread)return 'Checking…';if(receiptError)return 'Receipt unavailable';
  const r=receipts.filter(r=>r.message_id===id);if(!r.length)return 'Sent · no receipt data';
