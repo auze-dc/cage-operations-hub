@@ -57,6 +57,7 @@
   }
 
   function showLogin(message = "") {
+    window.dispatchEvent(new CustomEvent("cage:access-closed"));
     document.body.classList.remove("session-checking");
     document.body.classList.add("auth-pending");
     gate.hidden = false;
@@ -601,6 +602,23 @@
     return { path, name: file.name };
   }
 
+  async function managedRecords(kind){
+    if(!profile)throw new Error('Sign in first.');
+    const allowed=["hub_work_categories", "task_plans", "daily_priorities", "training_courses", "training_cohorts", "learners", "training_sessions", "learner_attendance", "training_assessments", "training_certificates", "training_practical_logs", "training_documents", "training_materials", "cohort_messages", "academy_intakes", "academy_applications", "academy_application_files", "stem_applications", "job_openings", "job_applications", "interviews", "employee_documents", "equipment_kits", "equipment_reservations", "invoice_payments", "personal_reminders", "hub_events", "hub_notices", "hub_notice_files", "attachments"];
+    if(!allowed.includes(kind))throw new Error('Unknown record type');
+    const rows=[];for(let offset=0;;offset+=500){let query=client.from(kind).select('*');for(const column of kind==='learner_attendance'?['session_id','learner_id']:kind==='task_plans'?['user_id','task_id']:kind==='daily_priorities'?['user_id','day']:['id'])query=query.order(column);const r=await query.range(offset,offset+499);if(r.error)throw r.error;rows.push(...r.data);if(r.data.length<500)break;}return rows;
+  }
+  async function deleteManagedRecord(source,kind,record){
+    await flushSave();if(pendingState||savingNow)throw new Error('Wait for your pending changes to sync, then retry deletion.');
+    const id=record.id||(record.session_id?[record.session_id,record.learner_id]:[record.user_id,record.task_id||record.day]).join(':');
+    const r=await client.functions.invoke('delete-record',{body:{source,kind,id,expected:record}});
+    if(r.error){let message=r.error.message;try{message=(await r.error.context.json()).error||message;}catch{}throw new Error(message);}
+    if(!r.data?.ok)throw new Error(r.data?.error||'Deletion failed');
+    projectFileCache.clear();try{await loadWorkspace();}catch{r.data.warning=(r.data.warning||'Record deleted.')+' Refresh the workspace to update the list.';}window.dispatchEvent(new CustomEvent('cage:records-deleted'));
+    return r.data;
+  }
+  async function deletionReceipts(){const r=await client.from('record_deletion_log').select('id,kind,record_id,deleted_at,storage_path,storage_removed_at').order('deleted_at',{ascending:false}).limit(100);if(r.error)throw r.error;return r.data;}
+  async function retryFileCleanup(id){const r=await client.functions.invoke('delete-record',{body:{retry:id}});if(r.error)throw r.error;if(!r.data?.ok)throw new Error(r.data?.error||'Retry failed');return r.data;}
   async function openFile(path) {
     const result = await client.storage.from("cage-files").createSignedUrl(path, 60);
     if (result.error || !result.data?.signedUrl) throw new Error(result.error?.message || "The file link could not be created.");
@@ -1036,6 +1054,7 @@
     scheduleSave,
     sendDocument,
     scanOpportunities, opportunityData, admissionBalance, admissionReminder, admissionReminderHistory,
+    managedRecords, deleteManagedRecord, deletionReceipts, retryFileCleanup,
     projectFiles, projectFilesNotice, refreshProjectFiles, uploadFile,
     openFile,
     loadHR,
