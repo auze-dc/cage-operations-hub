@@ -234,10 +234,16 @@
     if(!Array.isArray(saved))throw new Error('Draft recovery storage needs review. Do not clear browser data.');
     return saved;
   }
+  function recordSaveStatus(key,id){
+    const blocked=blockedDrafts().find(x=>x.change.key===key&&x.change.id===id);
+    if(blocked)return {state:'blocked',reason:blocked.reason};
+    if(pendingState&&writableChanges(cloudBase,pendingState).some(x=>x.key===key&&x.id===id))return {state:'pending'};
+    return {state:cloudBase[key]?.some?.(r=>r.id===id)?'saved':'unknown'};
+  }
   function recordLabel(change){
     const r=change.after||change.before||{};
     const module={quotes:'Quote',invoices:'Invoice',contacts:'Contact',messages:'Message',requests:'Request',projects:'Project',tasks:'Task',approvals:'Approval'}[change.key]||change.key;
-    return `${module}: ${r.number||r.title||r.name||change.id||'settings'}`;
+    return `${module}: ${r.number||r.title||r.name||(change.key==='messages'?String(r.text||'').slice(0,100):'')||change.id||'settings'}`;
   }
   function syncNotice(){
     const blocked=blockedDrafts();
@@ -367,9 +373,20 @@
   const retryLogin=document.createElement('button');retryLogin.type='button';retryLogin.className='secondary-button';retryLogin.textContent='Retry opening workspace';retryLogin.hidden=true;loginError.after(retryLogin);
   function limited(promise,label,ms=20000){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(label+' timed out. Check your connection and retry.')),ms);})]).finally(()=>clearTimeout(timer));}
   function loginFailure(error){sessionReady=false;profile=null;clearInterval(workspacePoll);workspacePoll=null;showLogin(error?.message||'The workspace could not load. Retry without resetting your password.');retryLogin.hidden=false;banner.className='sync-banner';}
+  let accessRetryTimer=null;
+  function sessionCheckFailure(error,refresh,uid,generation){
+    const transient=![401,403].includes(Number(error?.status))&&error?.code!=='PGRST116'&&(/fetch|network|timeout|timed out|connection|502|503|504/i.test(error?.message||'')||[502,503,504].includes(Number(error?.status)));
+    if(refresh&&transient&&sessionReady&&profile?.id===uid){
+      showBanner('Connection interrupted while checking your access. Your workspace stays open; changes may wait for sync. Retrying…','error');
+      clearTimeout(accessRetryTimer);
+      accessRetryTimer=setTimeout(()=>{if(generation===sessionGeneration&&profile?.id===uid){lastAccessRefresh=0;refreshAccess();}},15000);
+      return;
+    }
+    clearTimeout(accessRetryTimer);loginFailure(error);
+  }
   async function verifiedProfile(uid){
     const r=await limited(client.from('profiles').select('id, organization_id, email, full_name, initials, role, active, assignable').eq('id',uid).eq('organization_id',config.organizationId).single().abortSignal(AbortSignal.timeout(15000)),'Staff profile');
-    if(r.error)throw new Error('Your staff profile could not load. '+r.error.message);
+    if(r.error)throw Object.assign(new Error('Your staff profile could not load. '+r.error.message),{status:r.status,code:r.error.code});
     if(!r.data?.active||r.data.id!==uid||r.data.organization_id!==config.organizationId)throw new Error('This account does not have an active staff profile in this organisation.');
     if(!['admin','manager','hr','finance','member','viewer','shared'].includes(r.data.role))throw new Error('Your staff role could not be verified. Contact your administrator.');
     return r.data;
@@ -379,15 +396,15 @@
     const uid=session.user.id;lastAuthSession=session.access_token||uid;
     if(sessionLoad&&sessionLoadUser===uid)return sessionLoad;
     if(sessionReady&&profile?.id===uid&&!refresh)return;
-    const generation=++sessionGeneration;sessionLoadUser=uid;
+    const generation=refresh&&sessionReady&&profile?.id===uid?sessionGeneration:++sessionGeneration;sessionLoadUser=uid;
     if(!refresh){sessionReady=false;showLogin('Opening your verified workspace…');retryLogin.hidden=true;}
     sessionLoad=(async()=>{
       try{
         const nextProfile=await verifiedProfile(uid);
         const access=await limited(client.from('module_access').select('module,access').eq('user_id',uid).abortSignal(AbortSignal.timeout(15000)),'Module permissions');
-        if(access.error)throw new Error('Module permissions could not load. '+access.error.message);
+        if(access.error)throw Object.assign(new Error('Module permissions could not load. '+access.error.message),{status:access.status,code:access.error.code});
         const workspace=await limited(client.rpc('get_my_workspace').abortSignal(AbortSignal.timeout(15000)),'Workspace loading');
-        if(workspace.error)throw new Error('Workspace data could not load. '+workspace.error.message);
+        if(workspace.error)throw Object.assign(new Error('Workspace data could not load. '+workspace.error.message),{status:workspace.status,code:workspace.error.code});
         if(!workspace.data?.data||typeof workspace.data.data!=='object')throw new Error('Workspace data is unavailable. Please contact your administrator.');
         if(generation!==sessionGeneration)return;
         if(lastLoadedUser&&lastLoadedUser!==uid){pendingState=null;syncConflicts=[];cloudBase={};remoteSnapshot=null;clearTimeout(saveTimer);}
@@ -395,7 +412,7 @@
         if(!savingNow)receiveWorkspace(workspace.data);
         try{chooseGreetingLanguage();}catch{greetingLanguage="English";}setCurrentUser();applyPermissions();subscribe();sessionReady=true;retryLogin.hidden=true;hideLogin();hideBanner();
         if(!refresh)window.dispatchEvent(new CustomEvent('cage:session-ready',{detail:{profile}}));
-      }catch(error){if(generation===sessionGeneration)loginFailure(error);}
+      }catch(error){if(generation===sessionGeneration)sessionCheckFailure(error,refresh,uid,generation);}
       finally{if(generation===sessionGeneration){sessionLoad=null;sessionLoadUser=null;}}
     })();
     return sessionLoad;
@@ -404,7 +421,7 @@
     if(!client||!profile||!sessionReady||sessionLoad||accessRefreshRunning||Date.now()-lastAccessRefresh<3000)return;
     lastAccessRefresh=Date.now();accessRefreshRunning=true;const refreshGeneration=sessionGeneration;
     try{const r=await limited(client.auth.getSession(),'Session check');if(refreshGeneration!==sessionGeneration)return;if(r.error)throw r.error;await establishSession(r.data.session,true);}
-    catch(error){if(refreshGeneration===sessionGeneration)loginFailure(error);}finally{accessRefreshRunning=false;}
+    catch(error){if(refreshGeneration===sessionGeneration)sessionCheckFailure(error,true,profile?.id,refreshGeneration);}finally{accessRefreshRunning=false;}
   }
   retryLogin.addEventListener('click',async()=>{retryLogin.disabled=true;try{const r=await limited(client.auth.getSession(),'Session check');if(r.error)throw r.error;if(!r.data.session){showLogin('Please sign in again.');retryLogin.hidden=true;}else await establishSession(r.data.session);}catch(error){loginFailure(error);}finally{retryLogin.disabled=false;}});
   async function boot(appApi){
@@ -535,23 +552,47 @@
     return data;
   }
 
+  const projectFileCache=new Map();
+  function projectCacheKey(id){return (profile?.id||'signed-out')+':'+id;}
+  function projectFiles(id){return projectFileCache.get(projectCacheKey(id))?.rows||[];}
+  function projectFilesNotice(id){const entry=projectFileCache.get(projectCacheKey(id));return entry?.error|| (entry?.loading?'Loading saved project files…':'');}
+  async function refreshProjectFiles(id,force=false){
+    if(!profile||moduleLevel('projects')==='none')return false;
+    const key=projectCacheKey(id),prior=projectFileCache.get(key);
+    if(prior?.loading){if(!force)return false;await prior.done;if(!profile||projectCacheKey(id)!==key)return false;return refreshProjectFiles(id,true);}
+    if(!force&&prior&&Date.now()-prior.at<15000)return false;
+    const uid=profile.id,org=profile.organization_id,entry={rows:prior?.rows||[],at:Date.now(),loading:true,error:''};let complete;entry.done=new Promise(resolve=>{complete=resolve;});projectFileCache.set(key,entry);
+    try{
+      const rows=[];
+      for(let offset=0;;offset+=1000){
+        const r=await client.from('attachments').select('id,file_name,storage_path,created_at,uploaded_by').eq('organization_id',org).eq('record_type','project').eq('record_id',id).order('created_at',{ascending:true}).order('id',{ascending:true}).range(offset,offset+999).abortSignal(AbortSignal.timeout(15000));
+        if(r.error)throw r.error;rows.push(...r.data);if(r.data.length<1000)break;
+      }
+      if(profile?.id!==uid)return false;
+      entry.rows=rows.map(r=>({id:'attachment-'+r.id,name:r.file_name,path:r.storage_path,uploaded:r.created_at?.slice(0,10),by:r.uploaded_by,source:'Project upload'}));
+    }catch(e){entry.error='Project files could not refresh: '+e.message+'. Retry from Documents.';}
+    finally{entry.loading=false;entry.at=Date.now();complete();}
+    return profile?.id===uid;
+  }
   async function uploadFile(file, recordType, recordId) {
     if (!client || !profile) throw new Error("Sign in before uploading files.");
+    if(recordType==='project'&&moduleLevel('projects')!=='edit')throw new Error('Projects edit access is required to upload. Contact your administrator.');
     if (file.size > 50 * 1024 * 1024) throw new Error("Files must be 50 MB or smaller.");
+    const uploader=profile.id,organizationId=profile.organization_id;
     const safeName = file.name.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "file";
     const safeRecord = String(recordId || "general").replace(/[^a-zA-Z0-9._-]+/g, "-");
-    const path = `${config.organizationId}/${recordType}/${safeRecord}/${Date.now()}-${safeName}`;
+    const path = `${organizationId}/${recordType}/${safeRecord}/${crypto.randomUUID()}-${safeName}`;
     const uploaded = await client.storage.from("cage-files").upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
     if (uploaded.error) throw new Error(uploaded.error.message);
     const logged = await client.from("attachments").insert({
-      organization_id: config.organizationId,
+      organization_id: organizationId,
       record_type: recordType,
       record_id: String(recordId || ""),
       file_name: file.name,
       storage_path: path,
       mime_type: file.type || null,
       size_bytes: file.size,
-      uploaded_by: profile.id
+      uploaded_by: uploader
     });
     if (logged.error) {
       await client.storage.from("cage-files").remove([path]);
@@ -987,7 +1028,7 @@
     academyAttendance,
     academyData, academySave, academyCompletion,
     opsData,opsSave,opsRpc,sendCohort,
-    resolveSync, restoreDraft, flushSave, reviewSync, discardDraftRecord, downloadPreservedSettings, blockedDrafts, recordLabel, retryBlockedDraft, downloadBlockedDrafts, syncState:()=>({pending:!!pendingState,conflicts:syncConflicts.length,blocked:blockedDrafts().length,localSettings:preservedSettings().length}),
+    recordSaveStatus, resolveSync, restoreDraft, flushSave, reviewSync, discardDraftRecord, downloadPreservedSettings, blockedDrafts, recordLabel, retryBlockedDraft, downloadBlockedDrafts, syncState:()=>({pending:!!pendingState,conflicts:syncConflicts.length,blocked:blockedDrafts().length,localSettings:preservedSettings().length}),
     emailPreferences, saveEmailPreferences, emailRouting, saveEmailRouting, readChatNotifications, requestTaskHelp,
     plannerData, saveTaskPlan, savePlanningCapacity, updatePlannedTask,
     moduleLevel, personalData, saveReminder, readNotification, accessAccounts, saveModuleAccess, fileUrl,
@@ -995,7 +1036,7 @@
     scheduleSave,
     sendDocument,
     scanOpportunities, opportunityData, admissionBalance, admissionReminder, admissionReminderHistory,
-    uploadFile,
+    projectFiles, projectFilesNotice, refreshProjectFiles, uploadFile,
     openFile,
     loadHR,
     createJob,

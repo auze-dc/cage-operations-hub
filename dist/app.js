@@ -2056,9 +2056,15 @@ function renderFinance() {
 }
 
 function threadIdForMessage(message) {
-  if (message.thread) return message.thread;
-  const project = projectById(message.project);
-  return project?.request || (project ? `project:${project.id}` : "");
+  // Follow a visible project's current request/deal thread without rewriting history.
+  const raw=message.thread|| (message.project?'project:'+message.project:'');
+  if((state.chatGroups||[]).some(g=>g.id===raw))return raw;
+  const project=raw.startsWith('project:')?projectById(raw.slice(8)):(!message.thread?projectById(message.project):null);
+  if(!project)return raw;
+  const request=state.requests.find(r=>r.id===project.request||r.project===project.id);
+  if(request)return request.id;
+  const deal=state.deals.find(d=>d.project===project.id);
+  return deal?'deal:'+deal.id:'project:'+project.id;
 }
 
 function workThreads() {
@@ -2100,7 +2106,7 @@ function workThreads() {
     const project = projectById(deal.project);
     threads.push({ id: `deal:${deal.id}`, title: deal.name, organisation: deal.company, owner: deal.owner, type: "Proactive opportunity", stage: project ? `${projectProgress(project.id)}% delivered` : deal.stage, category: project ? "delivery" : "intake", deal, project });
   });
-  state.projects.filter(project => !project.request && !state.requests.some(request => request.project === project.id) && !state.deals.some(deal => deal.project === project.id)).forEach(project => threads.push({ id: `project:${project.id}`, title: project.name, organisation: project.client, owner: project.owner, type: project.category, stage: `${projectProgress(project.id)}% delivered`, category: "delivery", project }));
+  state.projects.filter(project => !state.requests.some(request => request.project === project.id||request.id===project.request) && !state.deals.some(deal => deal.project === project.id)).forEach(project => threads.push({ id: `project:${project.id}`, title: project.name, organisation: project.client, owner: project.owner, type: project.category, stage: `${projectProgress(project.id)}% delivered`, category: "delivery", project }));
   state.commercialRecords.filter(record => !record.request && !state.requests.some(request => request.commercial === record.id)).forEach(record => threads.push({ id: `commercial:${record.id}`, title: record.title, organisation: record.organisation, owner: record.owner, type: record.type, stage: record.stage, category: "commercial", commercial: record }));
   return threads;
 }
@@ -2249,8 +2255,10 @@ function sendChatMessage(text, attachment = "", attachmentPath = "", extra = {})
   if ((!cleanText && !attachment) || !threadById(activeChatThread)) return;
   const now = new Date();
   const type = document.getElementById("chat-message-type").value || "Update";
+  if(window.CAGE_BACKEND?.isProduction()&&(!window.CAGE_BACKEND.currentProfile()||window.CAGE_BACKEND.moduleLevel('chat')!=='edit')){showToast('Chat edit access and an active session are required. Your text is still in the composer.');return;}
+  const messageId='msg-'+crypto.randomUUID();
   state.messages.push({
-    id: `msg-${Date.now()}`,
+    id: messageId,
     thread: activeChatThread,
     sender: window.CAGE_BACKEND?.currentMemberId?.() || "alexander",
     date: TODAY,
@@ -2265,7 +2273,8 @@ function sendChatMessage(text, attachment = "", attachmentPath = "", extra = {})
     mentionAll: /(^|\s)@all(?=\s|[.,!?:;]|$)/i.test(cleanText),
     ...extra
   });
-  saveState();
+  try{saveState();}catch(error){state.messages=state.messages.filter(m=>m.id!==messageId);showToast('Message was not queued: '+error.message+'. Keep your text and retry.');return;}
+  window.CAGE_BACKEND?.flushSave();
   document.getElementById("chat-input").value = "";
   window.CAGE_CHAT?.sent(activeChatThread);
   document.getElementById("chat-message-type").value = "Update";
@@ -3626,9 +3635,10 @@ function projectLinkedQuotes(projectId) {
 }
 
 function projectReferenceFiles(project) {
-  const uploaded = project.files.map(file => ({ ...file, source: "Project upload" }));
+  const registered=window.CAGE_BACKEND?.projectFiles?.(project.id)||[];
+  const uploaded=[...registered,...project.files.filter(f=>!registered.some(r=>r.path===f.path)).map(file=>({...file,source:'Project upload'}))];
   const taskFiles = projectTasks(project.id).filter(task => task.evidence).map(task => ({ id: `task-${task.id}`, name: task.evidence, uploaded: task.updated, source: task.title }));
-  const chatFiles = state.messages.filter(message => message.project === project.id && message.attachment).map(message => ({ id: `chat-${message.id}`, name: message.attachment, path: message.attachmentPath, uploaded: message.date, source: "Work chat" }));
+  const chatFiles = state.messages.filter(message => (message.project === project.id || workThreads().some(t=>t.project?.id===project.id&&threadIdForMessage(message)===t.id)) && message.attachment).map(message => ({ id: `chat-${message.id}`, name: message.attachment, path: message.attachmentPath, uploaded: message.date, source: "Work chat" }));
   const references = state.knowledge.filter(item => item.project === project.id && item.link).map(item => ({ id: `knowledge-${item.id}`, name: item.link, uploaded: item.updated, source: item.title }));
   return [...uploaded, ...taskFiles, ...chatFiles, ...references];
 }
@@ -3657,7 +3667,8 @@ function projectWorkspaceTab(project, context) {
 
   if (activeProjectTab === "members") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Project team</span><h3>${members.length} members</h3></div><div class="project-inline-action"><select id="project-member-select" aria-label="Select a member"><option value="">Add a colleague…</option>${assignableTeam().filter(member => !project.team.includes(member.id)).map(member => `<option value="${member.id}">${escapeHtml(member.name)}</option>`).join("")}</select><button data-add-project-member="${project.id}">＋ Add</button></div></div><div class="project-member-grid">${members.map(member => `<article><span class="owner-avatar">${member.initials}</span><div><strong>${escapeHtml(member.name)}</strong><small>${escapeHtml(member.role)}</small><em>${member.id === project.owner ? "Project lead" : "Project member"}</em></div>${member.id !== project.owner ? `<button data-remove-project-member="${project.id}" data-member-id="${member.id}" aria-label="Remove ${escapeHtml(member.name)}">×</button>` : ""}</article>`).join("")}</div></section>`;
 
-  if (activeProjectTab === "files") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Documents and evidence</span><h3>${files.length} project files</h3></div><label class="project-upload-button">＋ Upload file<input type="file" data-project-file-input="${project.id}" hidden></label></div><div class="project-file-list">${files.map(file => `<button ${file.path ? `data-open-project-file="${escapeHtml(file.id)}"` : ""} class="${file.path ? "" : "reference-only"}"><span class="project-file-icon">▤</span><span><strong>${escapeHtml(file.name)}</strong><small>${escapeHtml(file.source)}${file.uploaded ? ` · ${formatDate(file.uploaded)}` : ""}</small></span><b>${file.path ? "Open" : "Reference"}</b></button>`).join("") || `<div class="project-empty"><strong>No files recorded</strong><span>Upload a project document or attach evidence to a task.</span></div>`}</div></section>`;
+  if (activeProjectTab === 'files') window.CAGE_BACKEND?.refreshProjectFiles?.(project.id).then(changed=>{if(changed&&activeProjectId===project.id&&activeProjectTab==='files')renderProjectWorkspace();});
+  if (activeProjectTab === "files") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Documents and evidence</span><h3>${files.length} project files</h3><p role="status">${escapeHtml(window.CAGE_BACKEND?.projectFilesNotice?.(project.id)||'')}</p><button type="button" data-refresh-project-files="${project.id}">Refresh files</button></div><label class="project-upload-button">＋ Upload file<input type="file" data-project-file-input="${project.id}" hidden></label></div><div class="project-file-list">${files.map(file => `<button ${file.path ? `data-open-project-file="${escapeHtml(file.id)}"` : ""} class="${file.path ? "" : "reference-only"}"><span class="project-file-icon">▤</span><span><strong>${escapeHtml(file.name)}</strong><small>${escapeHtml(file.source)}${file.uploaded ? ` · ${formatDate(file.uploaded)}` : ""}</small></span><b>${file.path ? "Open" : "Reference"}</b></button>`).join("") || `<div class="project-empty"><strong>No files recorded</strong><span>Upload a project document or attach evidence to a task.</span></div>`}</div></section>`;
 
   if (activeProjectTab === "milestones") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Delivery checkpoints</span><h3>Milestones</h3></div><button data-add-project-milestone="${project.id}">＋ Add milestone</button></div><div class="milestone-list">${project.milestones.slice().sort((a,b) => a.due.localeCompare(b.due)).map(item => `<label class="milestone-row ${item.complete ? "complete" : ""}"><input type="checkbox" data-project-milestone-toggle="${item.id}" ${item.complete ? "checked" : ""}><span><strong>${escapeHtml(item.title)}</strong><small>Due ${formatDate(item.due, { year: true })}${Number(item.cost || 0) ? ` · Budget ${formatMoney(Number(item.cost), true)}` : ""}</small></span><em>${item.complete ? "Complete" : item.due < TODAY ? "Overdue" : "Upcoming"}</em></label>`).join("") || `<div class="project-empty"><strong>No milestones yet</strong><span>Add the major approval, delivery and completion checkpoints for this project.</span></div>`}</div></section>`;
 
@@ -3740,30 +3751,25 @@ function createMilestone(event) {
 }
 
 async function uploadProjectFile(input) {
-  const project = projectById(input.dataset.projectFileInput);
-  const file = input.files?.[0];
-  if (!project || !file) return;
-  ensureProjectWorkspace(project);
-  try {
-    if (!window.CAGE_BACKEND?.uploadFile) throw new Error("Secure file storage is not connected.");
-    showToast("Uploading project file…");
-    const uploaded = await window.CAGE_BACKEND.uploadFile(file, "project", project.id);
-    project.files.push({
-      id: `project-file-${Date.now()}`,
-      name: uploaded.name || file.name,
-      path: uploaded.path,
-      uploaded: TODAY,
-      by: window.CAGE_BACKEND.currentMemberId?.() || ""
-    });
-    saveState();
-    renderProjectWorkspace();
-    showToast("File added to the project.");
-  } catch (error) {
-    showToast(error.message || "The project file could not be uploaded.");
-  } finally {
-    input.value = "";
-  }
+  const projectId=input.dataset.projectFileInput,file=input.files?.[0];
+  if(!projectById(projectId)||!file||input.dataset.uploading)return;
+  input.dataset.uploading='true';input.disabled=true;
+  try{
+    showToast('Uploading project file…');
+    await window.CAGE_BACKEND.uploadFile(file,'project',projectId);
+    // Storage + attachment registry are authoritative. Never mutate a stale project object.
+    await window.CAGE_BACKEND.refreshProjectFiles(projectId,true);
+    if(activeProjectId===projectId)renderProjectWorkspace();
+    showToast(window.CAGE_BACKEND.projectFilesNotice(projectId)||'File saved to the project.');
+    input.value='';
+  }catch(error){showToast('Project upload failed: '+(error.message||'Please retry.')+' Your local file is unchanged.');}
+  finally{delete input.dataset.uploading;input.disabled=false;}
 }
+document.addEventListener('click',async event=>{
+ const button=event.target.closest('[data-refresh-project-files]');if(!button)return;
+ const id=button.dataset.refreshProjectFiles;await window.CAGE_BACKEND.refreshProjectFiles(id,true);
+ if(activeProjectId===id)renderProjectWorkspace();
+});
 
 function openTask(taskId) {
   openTaskDialog("", taskId);
@@ -5288,7 +5294,7 @@ document.getElementById("chat-file-input").addEventListener("change", async even
     const uploaded = await window.CAGE_BACKEND.uploadFile(file, "chat", originalThread);
     if(activeChatThread!==originalThread) selectChatThread(originalThread);
     sendChatMessage(draft, file.name, uploaded.path);
-    showToast("File attached to the official work record.");
+    showToast("Attachment uploaded. Check the message status for server confirmation.");
   } catch (error) {
     showToast(error.message || "The file could not be uploaded.");
   } finally {
