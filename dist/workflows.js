@@ -129,4 +129,5 @@ async function refresh(){if(!profile())return;const results=await Promise.allSet
 window.CAGE_OPS={async reserveForTraining(projectId,name){await reserve();const f=$('ops-reserve-form');f.elements.project.value=projectId;f.elements.notes.value='Training cohort: '+name;},ask,addDays,period:()=>({from,to}),taskFields,refreshTaskDependencies:refreshDependencies,applyTemplate,openCohort,leaveDays(member){const u=accounts.find(p=>p.email?.split('@')[0]===member)||((profile()?.email?.split('@')[0]===member)?profile():null);return settings.find(s=>s.user_id===u?.id)?.annual_leave_days??20;},onLeave:(member,date)=>state.leaveRequests.some(r=>r.person===member&&r.status==='Approved'&&r.start<=date&&r.end>=date)};
 const baseRefresh=window.CAGE_PERSONAL.refreshView;window.CAGE_PERSONAL.refreshView=function(...args){baseRefresh.apply(this,args);management();showPriorities();};
 window.addEventListener('cage:session-ready',async()=>{try{await api().restoreDraft();await refresh();await loadAccess();}finally{window.dispatchEvent(new CustomEvent('cage:workspace-ready'));}});
+window.CAGE_PAYMENTS={open:payment};
 })();

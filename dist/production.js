@@ -357,9 +357,11 @@
   window.addEventListener("online",()=>flushSave());
 
   function scheduleSave(nextState) {
-    if (!configured() || !profile || applyingRemote) return;
-    pendingState = JSON.parse(JSON.stringify(nextState));
-    localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));
+    if (!configured() || !profile || applyingRemote) return false;
+    const next = JSON.parse(JSON.stringify(nextState));
+    // Storage must succeed before accepting the edit into the in-memory queue.
+    localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next}));
+    pendingState = next;
     window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:true}}));
     window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => {
@@ -367,6 +369,7 @@
         showBanner(error.message || "Cloud sync failed", "error");
       });
     }, 650);
+    return true;
   }
 
   // Login reliability 2026-09-24. Auth callbacks only schedule work outside the auth lock.
@@ -892,6 +895,17 @@
     if(['equipment_busy','get_payment_receipt'].includes(name)){const r=await client.rpc(name,args);if(r.error)throw r.error;return r.data;}
     await flushSave();if(pendingState)throw new Error('Sync your draft before continuing');const r=await client.rpc(name,args);if(r.error)throw r.error;await loadWorkspace();return r.data;
   }
+  async function quoteOrder(qid,action,expected,details={},version=0){
+    if(action==='read'){const r=await client.rpc('quote_order_read',{qid});if(r.error)throw r.error;return r.data;}
+    await flushSave();if(pendingState||savingNow)throw new Error('Wait for your changes to sync, then retry.');
+    const r=await client.rpc('quote_order_action',{qid,action_name:action,expected,details,expected_version:version});if(r.error)throw r.error;
+    try{await loadWorkspace();}catch{showBanner('Workflow saved. Refresh the workspace to see the latest records.','error');}return r.data;
+  }
+  async function sendOrderDocument(payload){
+    const r=await client.functions.invoke('send-order-document',{body:payload});
+    if(r.error){let e;try{e=await r.error.context?.json();}catch{}throw new Error(e?.error||r.error.message);}
+    if(!r.data?.ok)throw new Error(r.data?.error||'Email delivery was not confirmed. Retry unchanged.');return r.data;
+  }
   async function sendPaymentReceipt(paymentId,recipient){
     const r=await client.functions.invoke('send-payment-receipt',{body:{paymentId,recipient}});
     if(r.error){let detail;try{detail=await r.error.context?.json();}catch{}throw new Error(detail?.error||r.error.message||'Receipt email could not be confirmed. Retry the same recipient.');}
@@ -1050,7 +1064,7 @@
     academyActivity: async()=>{const r=await client.from("academy_activity_log").select("*").order("created_at",{ascending:false}).order("id",{ascending:false}).limit(200);if(r.error)throw r.error;return r.data||[];},
     academyAttendance,
     academyData, academySave, academyCompletion,
-    opsData,opsSave,opsRpc,sendCohort,sendPaymentReceipt,
+    opsData,opsSave,opsRpc,sendCohort,sendPaymentReceipt,quoteOrder,sendOrderDocument,
     recordSaveStatus, resolveSync, restoreDraft, flushSave, reviewSync, discardDraftRecord, downloadPreservedSettings, blockedDrafts, recordLabel, retryBlockedDraft, downloadBlockedDrafts, syncState:()=>({pending:!!pendingState,conflicts:syncConflicts.length,blocked:blockedDrafts().length,localSettings:preservedSettings().length}),
     emailPreferences, saveEmailPreferences, emailRouting, saveEmailRouting, readChatNotifications, requestTaskHelp,
     plannerData, saveTaskPlan, savePlanningCapacity, updatePlannedTask,
