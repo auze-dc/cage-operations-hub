@@ -31,6 +31,7 @@ body.auth-pending .session-loader { display: none; }
 <link rel="icon" type="image/png" href="./cage-browser-logo.png?v=20260924-staff">
 <link rel="stylesheet" href="./record-management.css?v=popup-month-20260925">
 <link rel="stylesheet" href="./quote-order.css?v=20260927">
+<link rel="stylesheet" href="./opportunities.css?v=20260927">
 </head>
 <body class="session-checking">
   <div class="session-loader" role="status" aria-live="polite"><span></span><strong>Opening CAGE Operations Hub…</strong></div>
@@ -506,7 +507,7 @@ body.auth-pending .session-loader { display: none; }
             <form id="workspace-settings-form" class="settings-form surface">
               <section class="settings-panel active" data-settings-panel="workspace"><div class="settings-panel-heading"><h3>Workspace</h3><p>Company-wide names and defaults.</p></div><div class="form-grid"><label class="field field-wide"><span>Workspace name</span><input name="workspaceName" maxlength="60" value="Operations Hub"></label><label class="field"><span>Default task owner</span><select name="defaultOwner" id="settings-default-owner"></select></label><label class="field"><span>Default request purpose</span><select name="defaultRequestPurpose" id="settings-default-purpose"></select></label><div class="settings-info field-wide"><strong>Dates and greeting time</strong><span>The Hub automatically uses each person’s phone or computer time zone.</span></div></div></section>
               <section class="settings-panel" data-settings-panel="workflow"><div class="settings-panel-heading"><h3>Workflow controls</h3><p>Set the controls that protect work quality and approvals.</p></div><div class="settings-toggle-list"><label><span><strong>Require evidence before completing tasks</strong><small>Users must add a completion note, file or evidence link before marking work Done.</small></span><input name="requireTaskEvidence" type="checkbox"></label><div class="settings-info"><strong>Approval authority</strong><span>Only Managers and Administrators can approve or return requests. This control cannot be weakened here.</span></div></div></section>
-              <section class="settings-panel" data-settings-panel="notifications"><div class="settings-panel-heading"><h3>Notifications</h3><p>Choose the reminders that should run for the team.</p></div><div class="settings-toggle-list"><label><span><strong>Payment reminders</strong><small>Prepare follow-ups for overdue invoices.</small></span><input name="autoReminders" type="checkbox"></label><label><span><strong>Compliance reminders</strong><small>Highlight licences and records approaching renewal.</small></span><input name="complianceReminders" type="checkbox"></label><label><span><strong>Opportunity alerts</strong><small>Notify administrators when the monitor finds a strong match.</small></span><input name="opportunityAlerts" type="checkbox"></label></div></section>
+              <section class="settings-panel" data-settings-panel="notifications"><div class="settings-panel-heading"><h3>Notifications</h3><p>Choose the reminders that should run for the team.</p></div><div class="settings-toggle-list"><label><span><strong>Payment reminders</strong><small>Prepare follow-ups for overdue invoices.</small></span><input name="autoReminders" type="checkbox"></label><label><span><strong>Compliance reminders</strong><small>Highlight licences and records approaching renewal.</small></span><input name="complianceReminders" type="checkbox"></label><label><span><strong>Opportunity alerts</strong><small>Manage sources and deadline reminders in Tenders, grants &amp; contracts → Scan settings.</small></span><input name="opportunityAlerts" type="checkbox" hidden disabled></label></div></section>
               <section class="settings-panel" data-settings-panel="collaboration"><div class="settings-panel-heading"><h3>Chat & collaboration</h3><p>Control how team conversations behave.</p></div><div class="settings-toggle-list"><label><span><strong>Enter sends a message</strong><small>Shift + Enter will always create a new line.</small></span><input name="enterToSend" type="checkbox"></label><label><span><strong>Staff mention suggestions</strong><small>Typing @ opens the staff picker.</small></span><input name="mentionSuggestions" type="checkbox"></label><div class="settings-info"><strong>Official work record</strong><span>Project, request and general enquiry chats remain part of the shared workspace history.</span></div></div></section>
               <p class="form-error" id="workspace-settings-error" role="alert"></p>
               <div class="dialog-actions settings-save-row"><button class="primary-button" type="submit">Save settings</button></div>
@@ -955,8 +956,8 @@ body.auth-pending .session-loader { display: none; }
   <script src="./runtime-config.js?v=15.9.0" defer></script>
   <script src="./vendor/supabase.js?v=15.9.0" defer></script>
   <script src="./reliable-sync.js?v=15.9.0-sync1" defer></script>
-  <script src="./production.js?v=quote-order-20260927" defer></script>
-  <script src="./app.js?v=chat-send-20260927" defer></script>
+  <script src="./production.js?v=opportunities-20260927" defer></script>
+  <script src="./app.js?v=opportunities-20260927" defer></script>
   <script src="./hr.js?v=15.9.0" defer></script>
   <script src="./training.js?v=21.0.0" defer></script>
 <script src="./vendor/pdf-lib.min.js?v=15.9.0" defer></script>
@@ -988,5 +989,6 @@ body.auth-pending .session-loader { display: none; }
 <script src="./payment-receipts.js?v=receipts-20260925" defer></script>
 <script src="./order-document.js?v=20260927" defer></script>
 <script src="./quote-order.js?v=20260927" defer></script>
+<script src="./opportunities.js?v=20260927" defer></script>
 </body>
 </html>
