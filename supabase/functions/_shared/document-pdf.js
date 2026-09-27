@@ -10,7 +10,7 @@ function stampDateAt(value=new Date()){
 async function createDocumentPDF(PDFLib,record,type,logoBytes,sendingAt=new Date(),layout={}){
  const {PDFDocument,StandardFonts,rgb,degrees}=PDFLib;
  const stampDate=stampDateAt(sendingAt);
- const doc=await PDFDocument.create();const regular=await doc.embedFont(StandardFonts.TimesRoman),bold=await doc.embedFont(StandardFonts.TimesRomanBold);
+ const doc=await PDFDocument.create();const regular=await doc.embedFont(type==='receipt'?StandardFonts.Helvetica:StandardFonts.TimesRoman),bold=await doc.embedFont(type==='receipt'?StandardFonts.HelveticaBold:StandardFonts.TimesRomanBold);
  const stamp=await doc.embedPng(Uint8Array.from(atob(stampBase64),c=>c.charCodeAt(0)));
  const stampFont=await doc.embedFont(StandardFonts.HelveticaBold);
  const logo=await doc.embedPng(logoBytes),blue=rgb(0,173/255,239/255),navy=rgb(.09,.10,.20),black=rgb(0,0,0),grey=rgb(.85,.85,.85);
@@ -29,8 +29,21 @@ async function createDocumentPDF(PDFLib,record,type,logoBytes,sendingAt=new Date
  function paragraph(v,width=525,size=11,font=regular){for(const line of lines(v,width,size,font)){ensure(size+6);text(line,35,y,size,font);y-=size+5;}}
  newPage();
  const clientLines=lines('TO: '+record.client,355,12);for(const line of clientLines){text(line,35,y,12);y-=16;}for(const line of lines(record.recipient||'',355,11)){text(line,35,y,11);y-=15;}
- const metaTop=710;text((type==='quote'?'Quotation':'Invoice')+' No:',418,metaTop,12,bold,blue);text(record.number,418,metaTop-17,12,bold,blue);text('Date: '+(record.issued||''),418,metaTop-34,11,bold);text((type==='quote'?'Valid until: ':'Due: ')+(record.validUntil||record.due||''),418,metaTop-51,10,bold);
+ const metaTop=710;text((type==='receipt'?'Receipt':type==='quote'?'Quotation':'Invoice')+' No:',418,metaTop,12,bold,blue);text(record.number,418,metaTop-17,12,bold,blue);text('Date: '+(record.issued||''),418,metaTop-34,11,bold);if(type!=='receipt')text((type==='quote'?'Valid until: ':'Due: ')+(record.validUntil||record.due||''),418,metaTop-51,10,bold);
  y=Math.min(y-24,622);paragraph(record.description||'',525,13,bold);y-=20;
+ if(type==='receipt'){
+  paragraph('PAYMENT RECEIPT',525,16,bold);y-=14;
+  paragraph('Invoice: '+record.invoiceNumber,525,12,bold);
+  paragraph('Amount received: '+currency+' '+num(record.amount),525,15,bold);y-=10;
+  paragraph('Payment method: '+record.method);
+  paragraph('Payment reference: '+record.reference);y-=14;
+  paragraph('Invoice total: '+currency+' '+num(record.invoiceTotal));
+  paragraph('Total received: '+currency+' '+num(record.paidTotal));
+  paragraph('Remaining balance: '+currency+' '+num(record.balance),525,12,bold);
+  paragraph(Number(record.balance)===0?'PAID IN FULL':'PART PAYMENT',525,12,bold);y-=18;
+  paragraph(record.legacy?'Balance shown as at receipt issue; payment date is shown above.':'Balance shown immediately after this payment.');
+  paragraph('Thank you for your payment.');
+ }else{
  const columns=[35,66,260,365,435,560];
  function tableHeader(){ensure(40);rectangle({x:35,y:y-29,width:525,height:29,color:blue});['sn','Deliverables Description','Unit Price ('+currency+')','Quantity','Total ('+currency+')'].forEach((v,i)=>text(v,columns[i]+5,y-18,i===2?9:10,bold));y-=29;}
  tableHeader();
@@ -46,6 +59,7 @@ async function createDocumentPDF(PDFLib,record,type,logoBytes,sendingAt=new Date
  ensure(48);rectangle({x:35,y:y-45,width:525,height:45,color:grey});text('Grand Total ('+currency+')',305,y-26,12,bold);text(num(total),440,y-26,11,bold);y-=77;
  if(record.serviceDetails){paragraph('Service Description',525,12,bold);paragraph(record.serviceDetails);y-=22;}
  ensure(110);paragraph('Payment Details',525,12,bold);paragraph(record.paymentDetails||'CAGE\n1013608314\nGateway Mall Branch\nNational Bank');y-=24;
+ }
  // Choose a blank rectangle only after content layout has finished.
  const width=118,height=121,pad=8;
  let seed=2166136261;for(const c of String(record.id||record.number||'CAGE')+':'+String(record.revision||0)){seed=Math.imul(seed^c.charCodeAt(0),16777619)>>>0;}
