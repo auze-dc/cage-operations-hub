@@ -29,8 +29,11 @@ async function createDocumentPDF(PDFLib,record,type,logoBytes,sendingAt=new Date
  function paragraph(v,width=525,size=11,font=regular){for(const line of lines(v,width,size,font)){ensure(size+6);text(line,35,y,size,font);y-=size+5;}}
  newPage();
  const clientLines=lines('TO: '+record.client,355,12);for(const line of clientLines){text(line,35,y,12);y-=16;}for(const line of lines(record.recipient||'',355,11)){text(line,35,y,11);y-=15;}
- const metaTop=710;text((type==='receipt'?'Receipt':type==='quote'?'Quotation':'Invoice')+' No:',418,metaTop,12,bold,blue);text(record.number,418,metaTop-17,12,bold,blue);text('Date: '+(record.issued||''),418,metaTop-34,11,bold);if(type!=='receipt')text((type==='quote'?'Valid until: ':'Due: ')+(record.validUntil||record.due||''),418,metaTop-51,10,bold);
- y=Math.min(y-24,622);paragraph(record.description||'',525,13,bold);y-=20;
+ const metaTop=710;text((type==='order'?'Order':type==='receipt'?'Receipt':type==='quote'?'Quotation':'Invoice')+' No:',418,metaTop,12,bold,blue);const refLines=lines(record.number,142,12,bold);refLines.forEach((v,i)=>text(v,418,metaTop-17-i*15,12,bold,blue));text('Date: '+(record.issued||''),418,metaTop-34-(refLines.length-1)*15,11,bold);if(type==='order')y=Math.min(y,metaTop-50-(refLines.length-1)*15);if(!['receipt','order'].includes(type))text((type==='quote'?'Valid until: ':'Due: ')+(record.validUntil||record.due||''),418,metaTop-51,10,bold);
+ y=Math.min(y-24,622);
+ if(type==='order'){paragraph(record.orderTitle,525,15,bold);paragraph(record.orderNotice,525,10);y-=12;}
+ if(type==='invoice'&&(record.clientPoNumber||record.orderReference)){paragraph(record.clientPoNumber?'Client LPO: '+record.clientPoNumber:'Order reference: '+record.orderReference,525,11,bold);if(record.quoteNumber)paragraph('Quotation: '+record.quoteNumber);y-=10;}
+ paragraph(record.description||'',525,13,bold);y-=20;
  if(type==='receipt'){
   paragraph('PAYMENT RECEIPT',525,16,bold);y-=14;
   paragraph('Invoice: '+record.invoiceNumber,525,12,bold);
@@ -101,7 +104,7 @@ async function createDocumentPDF(PDFLib,record,type,logoBytes,sendingAt=new Date
  offset+=widths[i]+tracking;
  });
 
- doc.getPages().forEach((p,i)=>p.drawText(`${record.number} | ${i+1} / ${doc.getPageCount()}`,{x:252,y:26,size:8,font:regular,color:navy}));
+ doc.getPages().forEach((p,i)=>p.drawText(`${clean(record.number).slice(0,42)} | ${i+1} / ${doc.getPageCount()}`,{x:252,y:26,size:8,font:regular,color:navy}));
  return doc.save();
 }
 root.CagePDF={createDocumentPDF,stampDateAt};
