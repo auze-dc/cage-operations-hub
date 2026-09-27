@@ -888,9 +888,14 @@
     const r=await client.from(table).upsert(values,table==='cohort_messages'?{onConflict:'id',ignoreDuplicates:true}:conflict?{onConflict:conflict}:undefined).select();if(r.error)throw r.error;return r.data;
   }
   async function opsRpc(name,args) {
-    if(!['reserve_equipment','cancel_reservation','record_payment','equipment_busy','edit_finance_document'].includes(name))throw new Error('Unknown action');
-    if(name==='equipment_busy'){const r=await client.rpc(name,args);if(r.error)throw r.error;return r.data;}
+    if(!['reserve_equipment','cancel_reservation','record_payment','equipment_busy','edit_finance_document','record_payment_with_receipt','get_payment_receipt'].includes(name))throw new Error('Unknown action');
+    if(['equipment_busy','get_payment_receipt'].includes(name)){const r=await client.rpc(name,args);if(r.error)throw r.error;return r.data;}
     await flushSave();if(pendingState)throw new Error('Sync your draft before continuing');const r=await client.rpc(name,args);if(r.error)throw r.error;await loadWorkspace();return r.data;
+  }
+  async function sendPaymentReceipt(paymentId,recipient){
+    const r=await client.functions.invoke('send-payment-receipt',{body:{paymentId,recipient}});
+    if(r.error){let detail;try{detail=await r.error.context?.json();}catch{}throw new Error(detail?.error||r.error.message||'Receipt email could not be confirmed. Retry the same recipient.');}
+    if(!r.data?.ok)throw new Error(r.data?.error||'Receipt email could not be confirmed.');return r.data;
   }
   async function sendCohort(payload) {const r=await client.functions.invoke('send-cohort-message',{body:payload});if(r.error)throw r.error;if(!r.data?.ok)throw new Error(r.data?.error||'Email failed');return r.data;}
   async function academyData() {
@@ -1045,7 +1050,7 @@
     academyActivity: async()=>{const r=await client.from("academy_activity_log").select("*").order("created_at",{ascending:false}).order("id",{ascending:false}).limit(200);if(r.error)throw r.error;return r.data||[];},
     academyAttendance,
     academyData, academySave, academyCompletion,
-    opsData,opsSave,opsRpc,sendCohort,
+    opsData,opsSave,opsRpc,sendCohort,sendPaymentReceipt,
     recordSaveStatus, resolveSync, restoreDraft, flushSave, reviewSync, discardDraftRecord, downloadPreservedSettings, blockedDrafts, recordLabel, retryBlockedDraft, downloadBlockedDrafts, syncState:()=>({pending:!!pendingState,conflicts:syncConflicts.length,blocked:blockedDrafts().length,localSettings:preservedSettings().length}),
     emailPreferences, saveEmailPreferences, emailRouting, saveEmailRouting, readChatNotifications, requestTaskHelp,
     plannerData, saveTaskPlan, savePlanningCapacity, updatePlannedTask,
