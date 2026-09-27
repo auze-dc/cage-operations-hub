@@ -538,6 +538,11 @@
     return data;
   }
 
+  async function opportunityDashboard(){const r=await client.rpc('opportunity_dashboard');if(r.error)throw r.error;return r.data;}
+  async function opportunitySave(target,version,details){const r=await client.rpc('opportunity_save',{target,expected_version:version,details});if(r.error)throw r.error;return r.data;}
+  async function opportunitySettings(details){const r=await client.rpc('opportunity_settings_save',{details});if(r.error)throw r.error;return r.data;}
+  async function opportunityAdd(details){const r=await client.rpc('opportunity_add',{details});if(r.error)throw r.error;return r.data;}
+  async function opportunityFiles(id){const r=await client.from('attachments').select('*').eq('record_type','opportunity').eq('record_id',id).order('created_at',{ascending:false});if(r.error)throw r.error;return r.data;}
   async function opportunityData(){
     const rows=[];for(let offset=0;;offset+=1000){
       const r=await client.from('opportunity_matches').select('*').eq('organization_id',profile.organization_id).order('found_at',{ascending:false}).order('id').range(offset,offset+999);
@@ -551,7 +556,7 @@
     if (!client || !profile) throw new Error("Sign in before running an opportunity scan.");
     if (!['admin', 'manager'].includes(profile.role)) throw new Error("Only an Administrator or Manager can run a live scan.");
     const { data, error } = await client.functions.invoke("opportunity-scan", { body: { organizationId: config.organizationId, manual: true } });
-    if (error) throw new Error(error.message || "Live opportunity search failed.");
+    if (error) {let detail;try{detail=await error.context?.json();}catch{}throw new Error(detail?.error||error.message||"Live opportunity search failed.");}
     if (!data?.ok) throw new Error(data?.error || "Live opportunity search failed.");
     return data;
   }
@@ -1072,7 +1077,7 @@
     boot,
     scheduleSave,
     sendDocument,
-    scanOpportunities, opportunityData, admissionBalance, admissionReminder, admissionReminderHistory,
+    scanOpportunities, opportunityData, opportunityDashboard, opportunitySave, opportunitySettings, opportunityAdd, opportunityFiles, admissionBalance, admissionReminder, admissionReminderHistory,
     managedRecords, deleteManagedRecord, deletionReceipts, retryFileCleanup,
     projectFiles, projectFilesNotice, refreshProjectFiles, uploadFile,
     openFile,

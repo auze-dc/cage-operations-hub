@@ -650,11 +650,13 @@ function loadState() {
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   window.CAGE_PERSONAL?.refreshView();
-  window.CAGE_BACKEND?.scheduleSave(state);
+  return window.CAGE_BACKEND?.scheduleSave(state);
 }
 
 function replaceStateFromCloud(nextState) {
   if (!nextState || typeof nextState !== "object") return;
+  // Never let editable UI records alias the confirmed sync baseline.
+  nextState = structuredClone(nextState);
   const removedLegacySamples = Array.isArray(nextState.opportunityMatches) && nextState.opportunityMatches.some(item => /^sample:/i.test(String(item?.title || "")));
   localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
   state = loadState();
@@ -1829,6 +1831,7 @@ function opportunityRows(){
 }
 function opportunityExpired(m){return Boolean(m.deadline&&m.deadline!=='Rolling'&&/^\d{4}-\d{2}-\d{2}$/.test(m.deadline)&&m.deadline<new Date(Date.now()+7200000).toISOString().slice(0,10));}
 async function refreshOpportunityResults(force=false){
+ if(window.CAGE_OPPORTUNITIES){return window.CAGE_OPPORTUNITIES.refresh(force);}
  if(opportunityLoading||(!force&&Date.now()-opportunityLoadedAt<60000)||!window.CAGE_BACKEND?.opportunityData||!window.CAGE_BACKEND?.isProduction())return;
  opportunityLoading=true;opportunityLoadedAt=Date.now();
  try{const rows=await window.CAGE_BACKEND.opportunityData();liveOpportunityMatches=rows.map(r=>({...r.raw_data,id:r.raw_data?.id||r.id,title:r.title,organisation:r.organization,source:r.source_name,platform:r.source_name,url:r.source_url,deadline:r.deadline||'Rolling',match:r.match_score,reason:r.match_reason,status:r.status==='Intake created'?'Added':r.status,foundAt:r.found_at}));opportunityLoadError='';}
@@ -1843,6 +1846,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-oppo
 });
 document.addEventListener('input',e=>{if(e.target.id!=='opportunity-search')return;opportunityQuery=e.target.value;const pos=e.target.selectionStart;renderOpportunityMonitor();const el=document.getElementById('opportunity-search');el.focus();el.setSelectionRange(pos,pos);});
 function renderOpportunityMonitor() {
+  if(window.CAGE_OPPORTUNITIES){window.CAGE_OPPORTUNITIES.mount();return;}
   // Missing scan history is normal in a fresh workspace. Never seed demo results.
   const savedMonitor = state.opportunityMonitor || {};
   const monitor = {
@@ -2253,16 +2257,17 @@ function addSystemWorkMessage(threadId, text) {
 
 function sendChatMessage(text, attachment = "", attachmentPath = "", extra = {}) {
   const cleanText = String(text || "").trim();
-  if ((!cleanText && !attachment) || !threadById(activeChatThread)) return;
+  if (!cleanText && !attachment) return false;
+  if (!threadById(activeChatThread)) {showToast('This conversation is unavailable. Your text is still in the composer. Reopen the conversation and retry.');return false;}
   const now = new Date();
   const type = document.getElementById("chat-message-type").value || "Update";
-  if(window.CAGE_BACKEND?.isProduction()&&(!window.CAGE_BACKEND.currentProfile()||window.CAGE_BACKEND.moduleLevel('chat')!=='edit')){showToast('Chat edit access and an active session are required. Your text is still in the composer.');return;}
+  if(window.CAGE_BACKEND?.isProduction()&&(!window.CAGE_BACKEND.currentProfile()||window.CAGE_BACKEND.moduleLevel('chat')!=='edit')){showToast('Chat edit access and an active session are required. Your text is still in the composer.');return false;}
   const messageId='msg-'+crypto.randomUUID();
   state.messages.push({
     id: messageId,
     thread: activeChatThread,
     sender: window.CAGE_BACKEND?.currentMemberId?.() || "alexander",
-    date: TODAY,
+    date: new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Blantyre',year:'numeric',month:'2-digit',day:'2-digit'}).format(now),
     time: now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }),
     type,
     pinned: type === "Decision",
@@ -2274,14 +2279,15 @@ function sendChatMessage(text, attachment = "", attachmentPath = "", extra = {})
     mentionAll: /(^|\s)@all(?=\s|[.,!?:;]|$)/i.test(cleanText),
     ...extra
   });
-  try{saveState();}catch(error){state.messages=state.messages.filter(m=>m.id!==messageId);showToast('Message was not queued: '+error.message+'. Keep your text and retry.');return;}
-  window.CAGE_BACKEND?.flushSave();
+  try{const queued=saveState();if(window.CAGE_BACKEND?.isProduction()&&queued!==true)throw new Error('The session is refreshing. Please retry');}catch(error){state.messages=state.messages.filter(m=>m.id!==messageId);showToast('Message was not queued: '+error.message+'. Your text has been kept.');return false;}
+  Promise.resolve(window.CAGE_BACKEND?.flushSave()).catch(error=>showToast('Message is waiting to sync: '+error.message));
   document.getElementById("chat-input").value = "";
   window.CAGE_CHAT?.sent(activeChatThread);
   document.getElementById("chat-message-type").value = "Update";
   hideChatMentionPicker();
   renderChat();
   requestAnimationFrame(() => document.getElementById("chat-input")?.focus({ preventScroll: true }));
+  return true;
 }
 
 function chatMentionMatch() {
@@ -5294,8 +5300,8 @@ document.getElementById("chat-file-input").addEventListener("change", async even
     const draft=document.getElementById("chat-input").value;
     const uploaded = await window.CAGE_BACKEND.uploadFile(file, "chat", originalThread);
     if(activeChatThread!==originalThread) selectChatThread(originalThread);
-    sendChatMessage(draft, file.name, uploaded.path);
-    showToast("Attachment uploaded. Check the message status for server confirmation.");
+    const queued=sendChatMessage(draft, file.name, uploaded.path);
+    if(queued)showToast("Attachment uploaded. Check the message status for server confirmation.");
   } catch (error) {
     showToast(error.message || "The file could not be uploaded.");
   } finally {
