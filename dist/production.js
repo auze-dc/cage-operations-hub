@@ -1107,6 +1107,12 @@
     applyPermissions,
     canApprove: () => ["admin", "manager"].includes(profile?.role),
     isProduction: configured,
+    askEinstein: async(payload)=>{
+      if(!client||!profile)throw Error('Sign in to use Einstein.');
+      const r=await client.functions.invoke('einstein',{body:payload});
+      if(r.error){let message='Einstein could not connect. Built-in guides are still available.';try{const detail=await r.error.context?.json();if(detail?.error)message=detail.error;}catch{}throw Error(message);}
+      if(!r.data?.answer)throw Error(r.data?.error||'Einstein returned no answer. Please retry.');return r.data;
+    },
     currentProfile: () => profile,
     currentMemberId: () => profile?.email?.split("@")[0] === "bonfancio" ? "bonifancio" : profile?.email?.split("@")[0] || "alexander"
   };
