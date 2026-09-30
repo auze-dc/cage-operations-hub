@@ -1,3 +1,4 @@
+import { companyRecipients } from "../_shared/document-recipients.js";
 import { cageSender } from "../_shared/cage-sender.js";
 import * as PDFLib from "npm:pdf-lib@1.17.1";
 import "../_shared/document-pdf.js";
@@ -33,8 +34,8 @@ Deno.serve(async req => {
   if (authError || !auth.user) return json({ ok: false, error: "Unauthorized" }, 401);
 
   const { data: profile } = await adminClient.from("profiles")
-    .select("organization_id, active").eq("id", auth.user.id).single();
-  if (!profile?.active) return json({ ok: false, error: "Account is not active" }, 403);
+    .select("organization_id, active, email, role").eq("id", auth.user.id).single();
+  if (!profile?.active || profile.role === "shared") return json({ ok: false, error: "Account is not active" }, 403);
 
   const payload = await req.json().catch(()=>({}));
   const { type, recipient, subject, message } = payload;
@@ -50,13 +51,16 @@ Deno.serve(async req => {
     return json({ ok: false, error: "Required document fields are missing" }, 400);
   }
 
+  let people;
+  try { people=companyRecipients({...payload,type:'invoice'},profile.email); }
+  catch(error) { return json({ok:false,error:error instanceof Error?error.message:String(error)},400); }
   const resendKey = Deno.env.get("RESEND_API_KEY");
   const from = cageSender(Deno.env.get("EMAIL_FROM") || "CAGE <operations@cagemw.com>");
   if (!resendKey) return json({ ok: false, error: "Email delivery has not been configured" }, 503);
 
   const attemptId=payload.deliveryAttempt;
   if(typeof attemptId!=='string'||! /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(attemptId))return json({ok:false,error:'Refresh the Hub before sending this document.'},400);
-  const requestHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([type,record,recipient,subject,message]))))).map(b=>b.toString(16).padStart(2,'0')).join('');
+  const requestHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([type,record,people,subject,message]))))).map(b=>b.toString(16).padStart(2,'0')).join('');
   const previous=await adminClient.from('document_delivery_attempts').select('*').eq('id',attemptId).maybeSingle();
   if(previous.error)return json({ok:false,error:'Install the document delivery database update before sending.'},503);
   if(previous.data&&(previous.data.organization_id!==profile.organization_id||previous.data.sender_id!==auth.user.id||previous.data.request_hash!==requestHash))return json({ok:false,error:'This send attempt belongs to different document contents. Reopen the send form.'},409);
@@ -86,7 +90,7 @@ Deno.serve(async req => {
       </div>
     </div></body></html>`;
 
-  const freshPayload={from,to:[recipient],subject,html,attachments:[{filename,content:btoa(binary)}]};
+  const freshPayload={from,to:people.to,...(people.cc.length?{cc:people.cc}:{}),...(people.bcc.length?{bcc:people.bcc}:{}),reply_to:profile.email,subject,html,attachments:[{filename,content:btoa(binary)}]};
   if(!previous.data){
     const inserted=await adminClient.from('document_delivery_attempts').upsert({id:attemptId,organization_id:profile.organization_id,sender_id:auth.user.id,document_id:record.id,request_hash:requestHash,payload:freshPayload},{onConflict:'id',ignoreDuplicates:true});
     if(inserted.error)return json({ok:false,error:'Could not preserve this send attempt. Please retry.'},503);
