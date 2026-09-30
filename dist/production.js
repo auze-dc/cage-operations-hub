@@ -900,7 +900,7 @@
     const r=await client.from(table).upsert(values,table==='cohort_messages'?{onConflict:'id',ignoreDuplicates:true}:conflict?{onConflict:conflict}:undefined).select();if(r.error)throw r.error;return r.data;
   }
   async function collaborationRpc(name,args) {
-    if(!['collaboration_create_project','collaboration_add_members'].includes(name))throw Error('Unknown collaboration action');
+    if(!['collaboration_create_project','collaboration_add_members','save_standalone_task'].includes(name))throw Error('Unknown collaboration action');
     await flushSave();if(pendingState||savingNow)throw Error('Wait for your changes to sync, then retry.');
     const result=await client.rpc(name,args);if(result.error)throw result.error;
     try{await loadWorkspace();}catch{showBanner('Saved. Refresh to load the updated workspace.','error');}

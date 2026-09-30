@@ -1273,12 +1273,12 @@ function renderOwnerOptions() {
 
 function renderProjectOptions() {
   const options = state.projects.map(project => `<option value="${project.id}">${escapeHtml(project.name)}</option>`).join("");
-  document.getElementById("task-project-input").innerHTML = `<option value="">Select project</option>${options}`;
+  document.getElementById("task-project-input").innerHTML = `<option value="">No project — standalone task</option>${options}`;
   document.getElementById("event-project-input").innerHTML = `<option value="">No linked project</option>${options}`;
-  document.getElementById("invoice-project-input").innerHTML = `<option value="">Select project</option>${options}`;
-  document.getElementById("expense-project-input").innerHTML = `<option value="">Select project</option>${options}`;
+  document.getElementById("invoice-project-input").innerHTML = `<option value="">No project — standalone task</option>${options}`;
+  document.getElementById("expense-project-input").innerHTML = `<option value="">No project — standalone task</option>${options}`;
   document.getElementById("knowledge-project-input").innerHTML = `<option value="">General CAGE reference</option>${options}`;
-  document.getElementById("mission-project-input").innerHTML = `<option value="">Select project</option>${options}`;
+  document.getElementById("mission-project-input").innerHTML = `<option value="">No project — standalone task</option>${options}`;
   document.getElementById("asset-project-input").innerHTML = `<option value="">Not assigned to a project</option>${options}`;
   const boardFilter = document.getElementById("board-project-filter");
   boardFilter.innerHTML = `<option value="all">All projects</option>${options}`;
@@ -2620,7 +2620,7 @@ function openRequestDialog() {
   const form = document.getElementById("request-form");
   form.reset();
   renderRequestPurposeOptions(state.settings.defaultRequestPurpose || "Drone mapping");
-  form.elements.owner.value = state.settings.defaultOwner || "alexander";
+  form.elements.owner.value = window.CAGE_BACKEND?.currentMemberId?.() || state.settings.defaultOwner || "alexander";
   form.elements.priority.value = "Normal";
   form.elements.deadline.value = dateAfter(3);
   window.CAGE_TEAMWORK?.memberPicker("request-form",null);
@@ -3859,17 +3859,19 @@ function openTaskDialog(projectId = "", taskId = "") {
     form.elements.blocker.value = task.blocker || "";
     form.elements.evidence.value = task.evidence || "";
   } else {
-    form.elements.owner.value = state.settings.defaultOwner || "alexander";
+    form.elements.owner.value = window.CAGE_BACKEND?.currentMemberId?.() || state.settings.defaultOwner || "alexander";
     if (typeof projectId === "string" && projectId) form.elements.project.value = projectId;
   }
   document.getElementById("blocker-field").hidden = form.elements.status.value !== "Blocked";
   document.getElementById("blocker-field").querySelector("input").required = form.elements.status.value === "Blocked";
   window.CAGE_TEAMWORK?.memberPicker("task-form",task);
   document.getElementById("task-form-error").textContent = "";
+  const syncTaskOwner=()=>{form.elements.owner.disabled=!form.elements.project.value;if(!form.elements.project.value)form.elements.owner.value=window.CAGE_BACKEND?.currentMemberId?.()||form.elements.owner.value;};
+  form.elements.project.onchange=syncTaskOwner;syncTaskOwner();
   document.getElementById("task-dialog").showModal();
 }
 
-function createTask(event) {
+async function createTask(event) {
   event.preventDefault();
   if (event.submitter?.value === "cancel") {
     document.getElementById("task-dialog").close();
@@ -3879,11 +3881,11 @@ function createTask(event) {
   const title = String(data.get("title") || "").trim();
   const output = String(data.get("output") || "").trim();
   const project = String(data.get("project") || "");
-  const owner = String(data.get("owner") || "");
+  const owner = String(data.get("owner") || event.currentTarget.elements.owner.value || "");
   const due = String(data.get("due") || "");
   const status = String(data.get("status") || "To Do");
   const blocker = String(data.get("blocker") || "").trim();
-  if (!title || !output || !project || !owner || !due) {
+  if (!title || !output || !owner || !due) {
     document.getElementById("task-form-error").textContent = "Complete every required field before creating the task.";
     return;
   }
@@ -3895,6 +3897,15 @@ function createTask(event) {
   if (status === "Done" && !evidence) {
     document.getElementById("task-form-error").textContent = "Completion evidence is required before moving a card to Done.";
     return;
+  }
+  const existingPersonal=state.tasks.find(item=>item.id===editingTaskId);
+  if(!project && window.CAGE_BACKEND?.isProduction() && (!existingPersonal || (!existingPersonal.project && existingPersonal.owner===window.CAGE_BACKEND.currentMemberId()))) {
+    const button=event.submitter;if(button)button.disabled=true;
+    try {
+      await window.CAGE_BACKEND.collaborationRpc('save_standalone_task',{details:{...window.CAGE_OPS?.taskFields(),id:editingTaskId||`t-${crypto.randomUUID()}`,title,output,due,status,priority:String(data.get('priority')||'Medium'),blocker,evidence,team:window.CAGE_TEAMWORK?.memberValues(data,existingPersonal)?.team||[]}});
+      document.getElementById('task-dialog').close();editingTaskId='';renderAll();setView('mywork');window.CAGE_PERSONAL?.refreshView();showToast('Task saved to My Work.');
+    } catch(error){document.getElementById('task-form-error').textContent=error.message||'Could not save task. Please retry.';}
+    finally{if(button)button.disabled=false;}return;
   }
   const matchingList = state.boardLists.find(list => list.status === status);
   const existing = state.tasks.find(item => item.id === editingTaskId);

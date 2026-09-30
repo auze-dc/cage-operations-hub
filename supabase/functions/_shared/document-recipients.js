@@ -31,6 +31,7 @@ export function expiry(record, now=Date.now()){
 
 export function companyRecipients(input, senderEmail) {
  if (!senderEmail) throw new Error('Your staff email is missing. Ask an administrator to update your profile.');
+ if(input.ccReviewed===true)return recipients(input);
  const required=['alexander@cagemw.com','ndapile@cagemw.com',senderEmail];
  const manual=Array.isArray(input.cc)?input.cc:String(input.cc||'').split(/[,;\n]/);
  return recipients({...input,cc:[...required,...manual]});
