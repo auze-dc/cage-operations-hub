@@ -1056,22 +1056,23 @@ function renderDashboard() {
 }
 
 function renderRequests() {
+  const scopeRows=window.CAGE_TEAMWORK?.rows("requests",state.requests)||state.requests;
   const searchInput = document.getElementById("request-search");
   const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
-  const active = state.requests.filter(request => !["Converted", "Lost / Declined"].includes(request.stage));
-  const needsInformation = state.requests.filter(request => ["New", "Needs information"].includes(request.stage));
-  const awaitingReview = state.requests.filter(request => request.stage === "Internal review");
-  const converted = state.requests.filter(request => request.stage === "Converted");
+  const active = scopeRows.filter(request => !["Converted", "Lost / Declined"].includes(request.stage));
+  const needsInformation = scopeRows.filter(request => ["New", "Needs information"].includes(request.stage));
+  const awaitingReview = scopeRows.filter(request => request.stage === "Internal review");
+  const converted = scopeRows.filter(request => request.stage === "Converted");
   const deadlineActions = active.filter(request => daysUntil(request.deadline) <= 7);
   renderMetricCards("request-metric-grid", [
     { label: "Open requests", value: String(active.length), unit: "requests", note: `${needsInformation.length} still need clarification`, icon: "↳", tone: "#008fc8", tint: "#e6f7fe" },
-    { label: "Needs action", value: String(state.requests.filter(requestNeedsAction).length), unit: "requests", note: "Owner, deadline or gate action", icon: "!", tone: "#d64e4b", tint: "#feeceb" },
+    { label: "Needs action", value: String(scopeRows.filter(requestNeedsAction).length), unit: "requests", note: "Owner, deadline or gate action", icon: "!", tone: "#d64e4b", tint: "#feeceb" },
     { label: "Internal review", value: String(awaitingReview.length), unit: "requests", note: "Nothing is sent before approval", icon: "✓", tone: "#e99a24", tint: "#fff4df" },
     { label: "Converted value", value: formatMoney(converted.reduce((sum, request) => sum + Number(request.value || 0), 0), true), unit: "", note: `${converted.length} requests became projects`, icon: "¤", tone: "#168a65", tint: "#e5f5ef" },
     { label: "Due within 7 days", value: String(deadlineActions.length), unit: "requests", note: "Including overdue responses", icon: "□", tone: "#7357c8", tint: "#f0edfb" }
   ]);
 
-  const matches = state.requests.filter(request => {
+  const matches = scopeRows.filter(request => {
     const matchesFilter = requestFilter === "all"
       || (requestFilter === "action" && requestNeedsAction(request))
       || (requestFilter === "service" && !["Tender / RFQ", "Grant"].includes(request.type))
@@ -1089,6 +1090,7 @@ function renderRequests() {
       <button class="request-quick-add" data-new-request-stage="${escapeHtml(column.stages[0])}">＋ Add request</button>
     </section>`;
   }).join("");
+  window.CAGE_TEAMWORK?.applyAccess();
 }
 
 function requestCard(request) {
@@ -1144,6 +1146,7 @@ function renderRequestDetail(requestId = activeRequestId) {
     ${request.stage === "Lost / Declined" ? `<div class="request-review-note returned"><strong>Closed ${formatDate(request.lostDate || TODAY, { year: true })}: ${escapeHtml(request.lostReason || "Lost or declined")}</strong><span>${escapeHtml(request.lostNote || "No outcome note recorded.")}${request.lostFollowUp ? ` Future follow-up: ${formatDate(request.lostFollowUp, { year: true })}.` : ""}</span></div>` : ""}
     <div class="request-detail-actions"><button data-open-work-chat="request" data-work-chat-id="${request.id}">◌ Open work chat</button>${actionButtons}${request.deal ? `<button data-request-open-deal="${request.id}">Open CRM opportunity</button>` : ""}${linkedCommercial ? `<button data-request-open-commercial="${request.id}">Open ${escapeHtml(linkedCommercial.type.toLowerCase())}</button>` : ""}${request.project ? `<button class="primary" data-request-open-project="${request.id}">Open delivery project</button>` : ""}</div>
   `;
+  window.CAGE_TEAMWORK?.applyAccess();
 }
 
 function requestActionButtons(request) {
@@ -1217,8 +1220,9 @@ function closeRequestAsLost(event) {
 }
 
 function renderProjects() {
+  const scopeRows=window.CAGE_TEAMWORK?.rows("projects",state.projects)||state.projects;
   const query = document.getElementById("project-search").value.trim().toLowerCase();
-  const projects = state.projects.filter(project => {
+  const projects = scopeRows.filter(project => {
     const health = projectHealth(project);
     const matchesFilter = projectFilter === "all" || health === projectFilter;
     const matchesSearch = !query || `${project.name} ${project.client} ${project.category}`.toLowerCase().includes(query);
@@ -1346,7 +1350,7 @@ function renderTasks() {
             `;
           }).join("")}
         </div>
-        ${boardAddingListId === list.id ? `<form class="quick-card-form" data-quick-card-form="${list.id}"><textarea class="quick-card-input" name="title" maxlength="120" placeholder="Type a card title…" required autofocus></textarea><div class="quick-card-actions"><button class="quick-card-save" type="submit">Add card</button><button class="quick-card-cancel" type="button" data-cancel-quick-card>Cancel</button></div></form>` : `<button class="quick-card-button" data-add-card-list="${list.id}">＋ Add a card</button>`}
+        ${boardAddingListId === list.id ? `<form class="quick-card-form" data-quick-card-form="${list.id}"><textarea class="quick-card-input" name="title" maxlength="120" placeholder="Type a card title…" required autofocus></textarea>${window.CAGE_TEAMWORK?.quickMembers()||""}<div class="quick-card-actions"><button class="quick-card-save" type="submit">Add card</button><button class="quick-card-cancel" type="button" data-cancel-quick-card>Cancel</button></div></form>` : `<button class="quick-card-button" data-add-card-list="${list.id}">＋ Add a card</button>`}
       </section>
     `;
   }).join("")}<section class="kanban-add-list">${addingBoardList ? `<form class="quick-card-form" id="quick-list-form"><input class="quick-list-input" name="title" maxlength="50" placeholder="List heading…" required autofocus><div class="quick-card-actions"><button class="quick-card-save" type="submit">Add list</button><button class="quick-card-cancel" type="button" data-cancel-list>Cancel</button></div></form>` : `<button class="add-list-button" data-add-list>＋ Add another heading</button>`}</section>`;
@@ -1355,7 +1359,7 @@ function renderTasks() {
   requestAnimationFrame(() => document.querySelector("[autofocus]")?.focus());
 }
 
-function addQuickCard(listId, title) {
+function addQuickCard(listId, title, members=[]) {
   const cleanTitle = String(title || "").trim();
   const list = boardListById(listId);
   if (!cleanTitle || !list) return;
@@ -1365,7 +1369,9 @@ function addQuickCard(listId, title) {
     id: `t-${Date.now()}`,
     project: boardProjectFilter !== "all" ? boardProjectFilter : "p-internal",
     title: cleanTitle,
-    owner: "alexander",
+    owner: window.CAGE_BACKEND.currentMemberId(),
+    createdBy:window.CAGE_BACKEND.currentMemberId(),
+    team:[...new Set([window.CAGE_BACKEND.currentMemberId(),...members])],
     due: due.toISOString().slice(0, 10),
     priority: "Medium",
     status: list.status || "To Do",
@@ -1469,8 +1475,9 @@ function renderMetricCards(targetId, metrics) {
 }
 
 function renderCRM() {
+  const scopeRows=window.CAGE_TEAMWORK?.rows("deals",state.deals)||state.deals;
   const stages = ["Prospect", "Lead", "Qualified", "Proposal", "Negotiation", "Won", "Lost"];
-  const activeDeals = state.deals.filter(deal => !["Won", "Lost"].includes(deal.stage));
+  const activeDeals = scopeRows.filter(deal => !["Won", "Lost"].includes(deal.stage));
   const pipelineValue = activeDeals.reduce((sum, deal) => sum + deal.value, 0);
   const weightedValue = activeDeals.reduce((sum, deal) => sum + (deal.value * deal.probability / 100), 0);
   const dueFollowUps = activeDeals.filter(deal => deal.nextAction <= TODAY).length;
@@ -1478,11 +1485,11 @@ function renderCRM() {
     { label: "Open opportunities", value: String(activeDeals.length), unit: "deals", note: `${dueFollowUps} follow-ups due`, icon: "◇", tone: "#7357c8", tint: "#f0edfb" },
     { label: "Pipeline value", value: formatMoney(pipelineValue, true), unit: "", note: "Total open potential", icon: "↗", tone: "#008fc8", tint: "#e6f7fe" },
     { label: "Weighted forecast", value: formatMoney(weightedValue, true), unit: "", note: "Value adjusted by probability", icon: "≈", tone: "#e99a24", tint: "#fff4df" },
-    { label: "Won value", value: formatMoney(state.deals.filter(deal => deal.stage === "Won").reduce((sum, deal) => sum + deal.value, 0), true), unit: "", note: "Ready for delivery and billing", icon: "✓", tone: "#168a65", tint: "#e5f5ef" }
+    { label: "Won value", value: formatMoney(scopeRows.filter(deal => deal.stage === "Won").reduce((sum, deal) => sum + deal.value, 0), true), unit: "", note: "Ready for delivery and billing", icon: "✓", tone: "#168a65", tint: "#e5f5ef" }
   ]);
 
   document.getElementById("crm-pipeline").innerHTML = stages.map(stage => {
-    const deals = state.deals.filter(deal => deal.stage === stage).sort((a, b) => b.value - a.value);
+    const deals = scopeRows.filter(deal => deal.stage === stage).sort((a, b) => b.value - a.value);
     return `
       <section class="pipeline-column crm-stage-column" data-stage="${stage}" data-deal-stage-column="${stage}">
         <div class="pipeline-column-heading"><strong>${stage}</strong><span>${deals.length} · ${formatMoney(deals.reduce((sum, deal) => sum + deal.value, 0), true)}</span></div>
@@ -1507,7 +1514,7 @@ function renderCRM() {
             </article>
           `).join("") : `<div class="kanban-empty">No opportunities</div>`}
         </div>
-        ${crmAddingStage === stage ? `<form class="quick-deal-form" data-quick-deal-form="${stage}"><textarea name="name" maxlength="120" placeholder="Type opportunity name…" required autofocus></textarea><input name="company" maxlength="80" placeholder="Organisation (optional)"><div class="quick-card-actions"><button class="quick-card-save" type="submit">Add opportunity</button><button class="quick-card-cancel" type="button" data-cancel-quick-deal>Cancel</button></div></form>` : `<button class="quick-card-button" data-add-deal-stage="${stage}">＋ Add opportunity</button>`}
+        ${crmAddingStage === stage ? `<form class="quick-deal-form" data-quick-deal-form="${stage}"><textarea name="name" maxlength="120" placeholder="Type opportunity name…" required autofocus></textarea><input name="company" maxlength="80" placeholder="Organisation (optional)">${window.CAGE_TEAMWORK?.quickMembers()||""}<div class="quick-card-actions"><button class="quick-card-save" type="submit">Add opportunity</button><button class="quick-card-cancel" type="button" data-cancel-quick-deal>Cancel</button></div></form>` : `<button class="quick-card-button" data-add-deal-stage="${stage}">＋ Add opportunity</button>`}
       </section>
     `;
   }).join("");
@@ -1518,6 +1525,7 @@ function renderCRM() {
       const owner = teamMember(contact.owner);
       return `<tr class="clickable-contact-row" data-contact-detail="${contact.id}" tabindex="0" aria-label="Open ${escapeHtml(contact.company)} relationship"><td><button class="contact-name-button" data-contact-detail="${contact.id}"><span class="project-glyph">${initials(contact.company)}</span><span><strong>${escapeHtml(contact.company)}</strong><span>${escapeHtml(contact.contact)}</span></span></button></td><td><span class="status-pill ${contact.relationship === "Client" ? "done" : contact.relationship === "Partner" ? "on-track" : "to-do"}">${escapeHtml(contact.relationship)}</span></td><td><span class="owner-chip"><span class="owner-avatar">${owner.initials}</span>${escapeHtml(owner.name.split(" ")[0])}</span></td><td>${formatDate(contact.lastActivity)}</td><td><strong>${formatDate(contact.nextAction)}</strong><br><span class="project-client">${escapeHtml(contact.note)}</span></td></tr>`;
     }).join("");
+  window.CAGE_TEAMWORK?.applyAccess();
 }
 
 function openContactDetail(contactId) {
@@ -1574,7 +1582,7 @@ function saveContactDetail(event) {
   showToast("Relationship updated.");
 }
 
-function addQuickDeal(stage, name, company) {
+function addQuickDeal(stage, name, company, members=[]) {
   const cleanName = String(name || "").trim();
   const cleanCompany = String(company || "").trim() || "Organisation to confirm";
   if (!cleanName) return;
@@ -1583,7 +1591,9 @@ function addQuickDeal(stage, name, company) {
     id: `d-${Date.now()}`,
     name: cleanName,
     company: cleanCompany,
-    owner: "alexander",
+    owner: window.CAGE_BACKEND.currentMemberId(),
+    createdBy:window.CAGE_BACKEND.currentMemberId(),
+    team:[...new Set([window.CAGE_BACKEND.currentMemberId(),...members])],
     value: 0,
     stage,
     probability: probabilityByStage[stage] ?? 10,
@@ -1989,14 +1999,15 @@ async function runOpportunityScan() {
 }
 
 function renderCommercial() {
+  const scopeRows=window.CAGE_TEAMWORK?.rows("commercialRecords",state.commercialRecords)||state.commercialRecords;
   renderOpportunityMonitor();
   const query = document.getElementById("commercial-search").value.trim().toLowerCase();
-  const records = state.commercialRecords.filter(record => {
+  const records = scopeRows.filter(record => {
     const matchesFilter = commercialFilter === "all" || (commercialFilter === "attention" ? commercialNeedsAttention(record) : record.type === commercialFilter);
     const matchesSearch = !query || `${record.title} ${record.organisation} ${record.type} ${record.nextAction}`.toLowerCase().includes(query);
     return matchesFilter && matchesSearch;
   }).sort((a, b) => Number(commercialNeedsAttention(b)) - Number(commercialNeedsAttention(a)) || a.deadline.localeCompare(b.deadline));
-  const active = state.commercialRecords.filter(record => !["Closed", "Awarded"].includes(record.stage));
+  const active = scopeRows.filter(record => !["Closed", "Awarded"].includes(record.stage));
   renderMetricCards("commercial-metric-grid", [
     { label: "Active records", value: String(active.length), unit: "records", note: "Tenders, grants and contracts", icon: "▣", tone: "#008fc8", tint: "#e6f7fe" },
     { label: "Due within 14 days", value: String(active.filter(record => daysUntil(record.deadline) >= 0 && daysUntil(record.deadline) <= 14).length), unit: "records", note: "Submission or renewal deadline", icon: "!", tone: "#d64e4b", tint: "#feeceb" },
@@ -2008,6 +2019,7 @@ function renderCommercial() {
     const pendingReview = state.approvals.some(item => item.status === "Pending" && ((item.linkedType === "commercial" && item.linkedId === record.id) || (record.request && item.linkedType === "request" && item.linkedId === record.request)));
     return `<article class="commercial-card ${commercialNeedsAttention(record) ? "attention" : ""}"><div class="commercial-card-head"><span class="commercial-type ${record.type.toLowerCase()}">${escapeHtml(record.type)}</span><span class="deadline-chip ${due < 0 ? "overdue" : due <= 14 ? "soon" : ""}">${due < 0 ? `${Math.abs(due)}d overdue` : `${due}d left`}</span></div><h3>${escapeHtml(record.title)}</h3><p class="commercial-org">${escapeHtml(record.organisation)}</p><div class="commercial-progress-head"><span>Completion</span><strong>${record.progress}%</strong></div><div class="progress-track commercial-progress"><span style="width:${record.progress}%"></span></div><div class="commercial-facts"><span><small>Owner</small><strong>${escapeHtml(teamMember(record.owner).name)}</strong></span><span><small>Deadline</small><strong>${formatDate(record.deadline, { year: true })}</strong></span><span><small>Value</small><strong>${record.value ? formatMoney(record.value, true) : "Not recorded"}</strong></span></div><div class="commercial-next"><span>Next action</span><p>${escapeHtml(record.nextAction)}</p></div><div class="commercial-controls"><select data-commercial-stage="${record.id}">${["Monitoring", "Preparing", "Internal review", "Submitted", "Negotiation", "Active", "Awarded", "Closed"].map(stage => `<option ${stage === record.stage ? "selected" : ""}>${stage}</option>`).join("")}</select><label><span>Progress</span><input data-commercial-progress="${record.id}" type="number" min="0" max="100" value="${record.progress}"></label><button data-open-work-chat="commercial" data-work-chat-id="${record.id}">Work chat</button>${record.request ? `<button data-commercial-request="${record.request}">Open request</button>` : ""}${pendingReview ? `<span class="review-requested">Review requested</span>` : `<button data-commercial-review="${record.id}">Request review</button>`}</div></article>`;
   }).join("") : `<div class="empty-state"><div>▣</div><h3>No matching records</h3><p>Clear the filters or add a tender, grant or contract.</p></div>`;
+  window.CAGE_TEAMWORK?.applyAccess();
 }
 
 function renderFinance() {
@@ -2113,7 +2125,7 @@ function workThreads() {
   });
   state.projects.filter(project => !state.requests.some(request => request.project === project.id||request.id===project.request) && !state.deals.some(deal => deal.project === project.id)).forEach(project => threads.push({ id: `project:${project.id}`, title: project.name, organisation: project.client, owner: project.owner, type: project.category, stage: `${projectProgress(project.id)}% delivered`, category: "delivery", project }));
   state.commercialRecords.filter(record => !record.request && !state.requests.some(request => request.commercial === record.id)).forEach(record => threads.push({ id: `commercial:${record.id}`, title: record.title, organisation: record.organisation, owner: record.owner, type: record.type, stage: record.stage, category: "commercial", commercial: record }));
-  return threads;
+  return window.CAGE_TEAMWORK?threads.filter(t=>window.CAGE_TEAMWORK.canThread(t)):threads;
 }
 
 function threadById(id) {
@@ -2127,6 +2139,7 @@ function messagesForThread(threadId) {
 function threadMemberIds(thread) {
   if (Array.isArray(thread?.memberIds)) return [...new Set(thread.memberIds)];
   if (thread?.teamWide) return assignableTeam().map(member => member.id);
+  if (window.CAGE_TEAMWORK) return window.CAGE_TEAMWORK.threadMembers(thread);
   if (thread?.project?.team?.length) return [...new Set(thread.project.team)];
   return thread?.owner ? [thread.owner] : [];
 }
@@ -2219,7 +2232,7 @@ function renderChat() {
     if (message.type === "System") return `${day}<div class="message-system"><span>↻</span>${escapeHtml(message.text)}<small>${escapeHtml(message.time)}</small></div>`;
     const type = message.type || "Update";
     const currentMember = window.CAGE_BACKEND?.currentMemberId?.() || "alexander";
-    return `${day}<div data-message-id="${escapeHtml(message.id)}" class="message-row ${message.sender === currentMember ? "mine" : ""} ${type === "Decision" ? "decision" : ""}">${message.sender !== currentMember ? `<span class="owner-avatar">${sender.initials}</span>` : ""}<div class="message-bubble"><div class="message-bubble-head"><span class="message-author">${escapeHtml(sender.name)}</span><span class="message-type ${type === "Update" ? "routine-message " : ""}${type.toLowerCase().replaceAll(" ", "-")}">${escapeHtml(type)}</span></div><p>${escapeHtml(message.text)}</p>${message.audio ? `<button type="button" class="message-attachment" data-play-voice="${message.id}">▶ Voice message · ${Math.ceil(message.audioDuration || 0)}s</button><div data-voice-player="${message.id}"></div>` : message.attachment ? `<button class="message-attachment" data-preview-chat-file="${message.id}">⌁ ${escapeHtml(message.attachment)}</button>` : ""}<span class="message-meta">${escapeHtml(message.time)} ${message.pinned ? "· Pinned decision" : ""} ${message.sender === currentMember ? `<button type="button" class="message-receipt" data-receipt="${escapeHtml(message.id)}">${window.CAGE_CHAT?.receiptLabel(message.id)||"Checking…"}</button>` : ""}</span></div></div>`;
+    return `${day}<div data-message-id="${escapeHtml(message.id)}" class="message-row ${message.sender === currentMember ? "mine" : ""} ${type === "Decision" ? "decision" : ""}">${message.sender !== currentMember ? `<span class="owner-avatar">${sender.initials}</span>` : ""}<div class="message-bubble"><div class="message-bubble-head"><span class="message-author">${escapeHtml(sender.name)}</span><span class="message-type ${type === "Update" ? "routine-message " : ""}${type.toLowerCase().replaceAll(" ", "-")}">${escapeHtml(type)}</span></div>${window.CAGE_TEAMWORK?.replyMarkup(message)||""}<p>${escapeHtml(message.text)}</p><button type="button" class="message-reply-action" data-reply-message="${escapeHtml(message.id)}" aria-label="Reply to ${escapeHtml(sender.name)}">Reply</button>${message.audio ? `<button type="button" class="message-attachment" data-play-voice="${message.id}">▶ Voice message · ${Math.ceil(message.audioDuration || 0)}s</button><div data-voice-player="${message.id}"></div>` : message.attachment ? `<button class="message-attachment" data-preview-chat-file="${message.id}">⌁ ${escapeHtml(message.attachment)}</button>` : ""}<span class="message-meta">${escapeHtml(message.time)} ${message.pinned ? "· Pinned decision" : ""} ${message.sender === currentMember ? `<button type="button" class="message-receipt" data-receipt="${escapeHtml(message.id)}">${window.CAGE_CHAT?.receiptLabel(message.id)||"Checking…"}</button>` : ""}</span></div></div>`;
   }).join("") : thread.customChat
     ? `<div class="empty-state"><div>${thread.direct ? "↔" : "◎"}</div><h3>${thread.direct ? "Start your private conversation" : "Start the group conversation"}</h3><p>Messages and files here are available only to the selected members.</p></div>`
     : thread.teamWide
@@ -2277,11 +2290,13 @@ function sendChatMessage(text, attachment = "", attachmentPath = "", extra = {})
     createdAt: now.toISOString(),
     mentions: assignableTeam().filter(person => cleanText.includes("@" + person.name)).map(person => person.id),
     mentionAll: /(^|\s)@all(?=\s|[.,!?:;]|$)/i.test(cleanText),
-    ...extra
+    ...extra,
+    replyTo:window.CAGE_TEAMWORK?.replyId(activeChatThread)||null
   });
   try{const queued=saveState();if(window.CAGE_BACKEND?.isProduction()&&queued!==true)throw new Error('The session is refreshing. Please retry');}catch(error){state.messages=state.messages.filter(m=>m.id!==messageId);showToast('Message was not queued: '+error.message+'. Your text has been kept.');return false;}
   Promise.resolve(window.CAGE_BACKEND?.flushSave()).catch(error=>showToast('Message is waiting to sync: '+error.message));
   document.getElementById("chat-input").value = "";
+  window.CAGE_TEAMWORK?.clearReply(activeChatThread);
   window.CAGE_CHAT?.sent(activeChatThread);
   document.getElementById("chat-message-type").value = "Update";
   hideChatMentionPicker();
@@ -2608,6 +2623,7 @@ function openRequestDialog() {
   form.elements.owner.value = state.settings.defaultOwner || "alexander";
   form.elements.priority.value = "Normal";
   form.elements.deadline.value = dateAfter(3);
+  window.CAGE_TEAMWORK?.memberPicker("request-form",null);
   document.getElementById("request-form-error").textContent = "";
   document.getElementById("request-dialog").showModal();
 }
@@ -2650,8 +2666,9 @@ function createRequest(event) {
     document.getElementById("request-form-error").textContent = "The expected delivery date cannot be in the past.";
     return;
   }
+  Object.assign(request,window.CAGE_TEAMWORK?.memberValues(data,request));
   state.requests.push(request);
-  addSystemWorkMessage(request.id, `${request.number} created by the AI opportunity monitor. Source verification and eligibility review are required before CAGE proceeds.`);
+  addSystemWorkMessage(request.id, `${request.number} created. Review the requirements and agree the next action.`);
   if (!contactByCompany(request.organisation)) {
     state.contacts.push({ id: `c-${Date.now() + 1}`, company: request.organisation, contact: request.contact, relationship: "Prospect", owner: request.owner, lastActivity: TODAY, nextAction: request.deadline, note: request.title });
   }
@@ -3527,6 +3544,7 @@ function openCommercialDialog() {
   form.elements.owner.value = "alexander";
   form.elements.deadline.value = dateAfter(14);
   form.elements.progress.value = "10";
+  window.CAGE_TEAMWORK?.memberPicker("commercial-form",null);
   document.getElementById("commercial-form-error").textContent = "";
   document.getElementById("commercial-dialog").showModal();
 }
@@ -3554,6 +3572,7 @@ function createCommercialRecord(event) {
     document.getElementById("commercial-form-error").textContent = "Add the organisation, owner, deadline and one clear next action.";
     return;
   }
+  Object.assign(record,window.CAGE_TEAMWORK?.memberValues(data,record));
   state.commercialRecords.push(record);
   saveState();
   document.getElementById("commercial-dialog").close();
@@ -3708,6 +3727,7 @@ function renderProjectWorkspace() {
   const primaryDeal = state.deals.find(deal => deal.project === project.id || deal.id === sourceRequest?.deal);
   const context = { owner, tasks, progress, revenue, costs, invoices, expenses, quotes: projectLinkedQuotes(project.id), events: state.events.filter(event => event.project === project.id), missions: state.missions.filter(mission => mission.project === project.id), members: project.team.map(teamMember), files: projectReferenceFiles(project), primaryDeal };
   document.getElementById("project-dialog-content").innerHTML = `<header class="project-workspace-header"><div><p class="section-kicker">${escapeHtml(project.category)} · ${escapeHtml(project.client)}</p><h2>${escapeHtml(project.name)}</h2><p>Led by ${escapeHtml(owner.name)} · Due ${formatDate(project.deadline, { year: true })}</p></div><div><button class="project-header-chat" data-open-project-chat="${project.id}">◌ Project chat</button><span class="status-pill ${health}">${healthLabel(health)}</span><button class="icon-button" data-close-project-workspace aria-label="Close project">×</button></div></header><nav class="project-workspace-tabs" aria-label="Project sections">${PROJECT_WORKSPACE_TABS.map(([id,label]) => `<button class="${activeProjectTab === id ? "active" : ""}" data-project-tab="${id}">${label}</button>`).join("")}</nav><main class="project-workspace-body">${projectWorkspaceTab(project, context)}</main>`;
+  window.CAGE_TEAMWORK?.applyAccess();
 }
 
 function openProject(projectId) {
@@ -3844,6 +3864,7 @@ function openTaskDialog(projectId = "", taskId = "") {
   }
   document.getElementById("blocker-field").hidden = form.elements.status.value !== "Blocked";
   document.getElementById("blocker-field").querySelector("input").required = form.elements.status.value === "Blocked";
+  window.CAGE_TEAMWORK?.memberPicker("task-form",task);
   document.getElementById("task-form-error").textContent = "";
   document.getElementById("task-dialog").showModal();
 }
@@ -3884,7 +3905,7 @@ function createTask(event) {
   } else {
     state.tasks.push({ id: `t-${Date.now()}`, project, title, owner, due, priority: String(data.get("priority") || "Medium"), status, list: matchingList?.id, output, blocker: status === "Blocked" ? blocker : undefined, evidence, updated: TODAY });
   }
-  const savedTask=existing||state.tasks[state.tasks.length-1];Object.assign(savedTask,window.CAGE_OPS?.taskFields()||{});
+  const savedTask=existing||state.tasks[state.tasks.length-1];Object.assign(savedTask,window.CAGE_OPS?.taskFields()||{},window.CAGE_TEAMWORK?.memberValues(data,savedTask));
   saveState();
   document.getElementById("task-dialog").close();
   renderAll();
@@ -3909,11 +3930,12 @@ function openProjectDialog(dealId = "") {
     form.elements.category.value = /farm|agri/i.test(deal.name) ? "Agriculture" : /hire/i.test(deal.name) ? "Equipment Hire" : "Mapping & Data";
     form.elements.outcome.value = `Deliver the agreed ${deal.name.toLowerCase()} scope for ${deal.company}, with completion evidence and client acceptance.`;
   }
+  window.CAGE_TEAMWORK?.memberPicker("project-form",null);
   document.getElementById("project-form-error").textContent = "";
   document.getElementById("new-project-dialog").showModal();
 }
 
-function createProject(event) {
+async function createProject(event) {
   event.preventDefault();
   if (event.submitter?.value === "cancel") {
     document.getElementById("new-project-dialog").close();
@@ -3926,7 +3948,7 @@ function createProject(event) {
     name: String(data.get("name") || "").trim(),
     client: String(data.get("client") || "").trim(),
     owner: String(data.get("owner") || ""),
-    team: [String(data.get("owner") || "")],
+    team: [...new Set([String(data.get("owner")||""),window.CAGE_BACKEND.currentMemberId(),...data.getAll("collaborators")])],
     deadline: String(data.get("deadline") || ""),
     category: String(data.get("category") || ""),
     outcome: String(data.get("outcome") || "").trim()
@@ -3935,8 +3957,16 @@ function createProject(event) {
     document.getElementById("project-form-error").textContent = "Every project needs a client, lead, deadline and required outcome.";
     return;
   }
+  const form=event.currentTarget;
+  if(window.CAGE_BACKEND?.isProduction()){
+    const button=form.querySelector('button.primary-button');button.disabled=true;
+    try{await window.CAGE_BACKEND.collaborationRpc('collaboration_create_project',{details:project,source_deal:form.dataset.dealId||null});
+      form.dataset.dealId='';document.getElementById('new-project-dialog').close();renderAll();setView('projects');showToast('Project created.');
+    }catch(error){document.getElementById('project-form-error').textContent=error.message;}finally{button.disabled=false;}
+    return;
+  }
   state.projects.push(project);
-  const sourceDeal = dealById(event.currentTarget.dataset.dealId);
+  const sourceDeal = dealById(form.dataset.dealId);
   if (sourceDeal) {
     sourceDeal.project = project.id;
     sourceDeal.stage = "Won";
@@ -3971,6 +4001,7 @@ function openDealDialog(dealId = "") {
     form.elements.stage.value = "Prospect";
     form.elements.probability.value = "20";
   }
+  window.CAGE_TEAMWORK?.memberPicker("deal-form",deal);
   document.getElementById("deal-form-error").textContent = "";
   document.getElementById("deal-dialog").showModal();
 }
@@ -4000,6 +4031,7 @@ function createDeal(event) {
     document.getElementById("deal-form-error").textContent = "Complete the organisation, value, owner and next action.";
     return;
   }
+  Object.assign(deal,window.CAGE_TEAMWORK?.memberValues(data,existing||deal));
   if (deal.stage === "Won") deal.probability = 100;
   if (existing) {
     const index = state.deals.findIndex(item => item.id === existing.id);
@@ -4849,7 +4881,7 @@ document.addEventListener("click", event => {
   if (addProjectMemberButton) {
     const project = projectById(addProjectMemberButton.dataset.addProjectMember);
     const memberId = document.getElementById("project-member-select")?.value;
-    if (project && memberId && !project.team.includes(memberId)) {
+    if (project && memberId && window.CAGE_TEAMWORK?.manages("projects",project) && !project.team.includes(memberId)) {
       project.team.push(memberId);
       saveState();
       renderAll();
@@ -4862,7 +4894,7 @@ document.addEventListener("click", event => {
   if (removeProjectMemberButton) {
     const project = projectById(removeProjectMemberButton.dataset.removeProjectMember);
     const memberId = removeProjectMemberButton.dataset.memberId;
-    if (project && memberId && memberId !== project.owner) {
+    if (project && memberId && window.CAGE_TEAMWORK?.manages("projects",project) && memberId !== project.owner) {
       project.team = project.team.filter(id => id !== memberId);
       saveState();
       renderAll();
@@ -5122,13 +5154,13 @@ document.addEventListener("submit", event => {
   if (quickDealForm) {
     event.preventDefault();
     const data = new FormData(quickDealForm);
-    addQuickDeal(quickDealForm.dataset.quickDealForm, data.get("name"), data.get("company"));
+    addQuickDeal(quickDealForm.dataset.quickDealForm, data.get("name"), data.get("company"),data.getAll("collaborators"));
     return;
   }
   const quickCardForm = event.target.closest("[data-quick-card-form]");
   if (quickCardForm) {
     event.preventDefault();
-    addQuickCard(quickCardForm.dataset.quickCardForm, new FormData(quickCardForm).get("title"));
+    addQuickCard(quickCardForm.dataset.quickCardForm, new FormData(quickCardForm).get("title"),new FormData(quickCardForm).getAll("collaborators"));
     return;
   }
   if (event.target.id === "quick-list-form") {

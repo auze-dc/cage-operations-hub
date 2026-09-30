@@ -19,7 +19,7 @@ const money = (amount: unknown) => new Intl.NumberFormat("en-MW", {
   style: "currency", currency: "MWK", maximumFractionDigits: 0,
 }).format(Number(amount) || 0);
 
-import { recipients, content, canonical, sha256, expiry } from "../_shared/document-recipients.js";
+import { companyRecipients, content, canonical, sha256, expiry } from "../_shared/document-recipients.js";
 Deno.serve(async req => {
  if(req.method==='OPTIONS')return new Response('ok',{headers:cors});
  if(req.method!=='POST')return json({ok:false,error:'Method not allowed'},405);
@@ -40,7 +40,7 @@ Deno.serve(async req => {
  if(!record||!record.number)return json({ok:false,error:'Document not found.'},404);
  if(type==='invoice'&&['Cancelled','Voided'].includes(record.status))return json({ok:false,error:'This invoice is no longer open for sending.'},409);
  if(type==='quote'&&['Cancelled','Voided','Rejected','Declined'].includes(record.status))return json({ok:false,error:'This quote is closed. Create a new quotation.'},409);
- const people=recipients({...payload,record});
+ const people=companyRecipients({...payload,record},profile.email);
  const attemptId=payload.deliveryAttempt;
  if(typeof attemptId!=='string'||! /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(attemptId))return json({ok:false,error:'Refresh the Hub before sending.'},400);
  const hash=await sha256(canonical([type,content(record),people,subject,message]));

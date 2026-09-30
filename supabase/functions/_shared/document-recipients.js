@@ -28,3 +28,10 @@ export function expiry(record, now=Date.now()){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(record.validUntil)||!Number.isFinite(end)||end<=now)throw new Error('The quote validity date has expired or is missing. Revise and approve the quote first.');
  return new Date(Math.min(end,now+30*86400000)).toISOString();
 }
+
+export function companyRecipients(input, senderEmail) {
+ if (!senderEmail) throw new Error('Your staff email is missing. Ask an administrator to update your profile.');
+ const required=['alexander@cagemw.com','ndapile@cagemw.com',senderEmail];
+ const manual=Array.isArray(input.cc)?input.cc:String(input.cc||'').split(/[,;\n]/);
+ return recipients({...input,cc:[...required,...manual]});
+}

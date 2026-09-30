@@ -16,6 +16,7 @@
   let app = null;
   let profile = null;
   let workspaceVersion = 0;
+  let collaborationAccess = {};
   let saveTimer = null;
   let pendingState = null;
   let cloudBase = {}, syncConflicts = [], savingNow=false, remoteSnapshot=null;
@@ -136,6 +137,7 @@
     document.querySelectorAll(".hr-privileged").forEach(element => { element.hidden = !["admin", "manager", "hr"].includes(profile?.role); });
     window.CAGE_PERSONAL?.applyAccess();
     if (isViewer) document.querySelectorAll("button.primary-button, .mobile-add-button").forEach(button => { if (!button.closest(".auth-card, [data-view-panel=training], .academy-dialog") && !((button.matches('[data-send-document=invoice],[data-send-document=quote]')||(button.closest('#send-form')&&['invoice','quote'].includes(document.getElementById('send-form').elements.documentType.value)))&&profile?.active&&profile.role!=='shared'&&moduleLevel('finance')!=='none') ) button.disabled = true; });
+    window.CAGE_TEAMWORK?.applyAccess();
   }
 
   async function loadProfile(userId) {
@@ -264,6 +266,7 @@
     applyingRemote=true;try{app.replaceState(next||data.data);}finally{applyingRemote=false;}
   }
   function receiveWorkspace(data){
+    collaborationAccess=data.collaboration||{};
     if(!data?.data)throw new Error('Workspace data is unavailable.');
     if(pendingState&&resetEpoch(cloudBase)!==resetEpoch(data.data))quarantineResetDraft({base:cloudBase,next:pendingState});
     const patches=pendingState?writableChanges(cloudBase,pendingState):[];
@@ -792,7 +795,8 @@
     if(module === "training") return profile.active === false || profile.role === "shared" ? "none" : "edit";
     if(profile.role === "admin") return "edit";
     if(["admin","settings"].includes(module)) return "none";
-    if(profile.role === "viewer") return moduleAccess[module] === "none" ? "none" : "view";
+    if(profile.role === "viewer") return ['projects','requests','crm','commercial'].includes(module)?'view':moduleAccess[module] === "none" ? "none" : "view";
+    if(['projects','requests','crm','commercial'].includes(module)&&profile.active&&profile.role!=='shared')return moduleAccess[module]==='edit'||(!moduleAccess[module]&&profile.role!=='viewer')?'edit':'view';
     if(moduleAccess[module]) return moduleAccess[module];
     if(module === "approvals") return profile.role === "manager" ? "edit" : "none";
     if(module === "hr") return ["manager","hr"].includes(profile.role) ? "edit" : "view";
@@ -894,6 +898,13 @@
     if(table==='learner_attendance')values={...values,recorded_by:profile.id};
     if(table==='daily_priorities')values={...values,user_id:profile.id};
     const r=await client.from(table).upsert(values,table==='cohort_messages'?{onConflict:'id',ignoreDuplicates:true}:conflict?{onConflict:conflict}:undefined).select();if(r.error)throw r.error;return r.data;
+  }
+  async function collaborationRpc(name,args) {
+    if(!['collaboration_create_project','collaboration_add_members'].includes(name))throw Error('Unknown collaboration action');
+    await flushSave();if(pendingState||savingNow)throw Error('Wait for your changes to sync, then retry.');
+    const result=await client.rpc(name,args);if(result.error)throw result.error;
+    try{await loadWorkspace();}catch{showBanner('Saved. Refresh to load the updated workspace.','error');}
+    return result.data;
   }
   async function opsRpc(name,args) {
     if(!['reserve_equipment','cancel_reservation','record_payment','equipment_busy','edit_finance_document','record_payment_with_receipt','get_payment_receipt'].includes(name))throw new Error('Unknown action');
@@ -1073,6 +1084,7 @@
     recordSaveStatus, resolveSync, restoreDraft, flushSave, reviewSync, discardDraftRecord, downloadPreservedSettings, blockedDrafts, recordLabel, retryBlockedDraft, downloadBlockedDrafts, syncState:()=>({pending:!!pendingState,conflicts:syncConflicts.length,blocked:blockedDrafts().length,localSettings:preservedSettings().length}),
     emailPreferences, saveEmailPreferences, emailRouting, saveEmailRouting, readChatNotifications, requestTaskHelp,
     plannerData, saveTaskPlan, savePlanningCapacity, updatePlannedTask,
+    collaborationRpc, collaborationAccess:()=>collaborationAccess,
     moduleLevel, personalData, saveReminder, readNotification, accessAccounts, saveModuleAccess, fileUrl,
     boot,
     scheduleSave,

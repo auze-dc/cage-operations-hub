@@ -15,6 +15,7 @@ channels.insertAdjacentHTML('afterbegin',`<div class="messenger-heading"><h2>Cha
 const create=document.querySelector('.chat-create-actions');create.id='chat-create-menu';create.hidden=true;
 $('new-direct-chat').textContent='New direct message';$('new-group-chat').textContent='New group';
 const tools=document.querySelector('.chat-compose-tools');tools.id='chat-extra-tools';tools.hidden=true;
+const emoji=$('chat-emoji');if(emoji){$('chat-attach').after(emoji);emoji.className='messenger-icon';emoji.textContent='☺';emoji.title='Add emoji';}
 const voice=$('record-voice');if(voice){form.classList.add('has-voice');form.append(voice);voice.className='messenger-icon messenger-voice';voice.innerHTML=svg('mic');voice.title='Record a voice message';}
 $('chat-attach').innerHTML=svg('plus');$('chat-attach').title='Attach a file';
 form.querySelector('.chat-send').innerHTML=svg('send');form.querySelector('.chat-send').setAttribute('aria-label','Send message');form.querySelector('.chat-send').title='Send message';
