@@ -1,4 +1,4 @@
-export const VERSION="elder-20261001-1";
+export const VERSION="elder-20261001-2";
 export const GUIDES=[
   {id:"tasks",title:"Find a task on the Work board",view:"tasks",keywords:"work board task assigned status",steps:["Open Work board to see the tasks available to you.","Open a task to review its details, owner, collaborators and due date.","For a task without a project, use Add task in My Work."]},
   {
@@ -137,7 +137,7 @@ export const GUIDES=[
     "keywords": "calendar meeting link google event",
     "steps": [
       "Open Calendar and create an event. Enter the title, date and time.",
-      "Select the meeting link from Link 1, Link 2 or Link 3.",
+      "Select the meeting link from Elon Musk, Chisale or Nabanda.",
       "Review the participants and event details before saving."
     ]
   },

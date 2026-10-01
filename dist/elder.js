@@ -1,4 +1,4 @@
-import {GUIDES} from './elder-guide.js';
+import {GUIDES} from './elder-guide.js?v=20261001-2';
 const $=id=>document.getElementById(id),backend=()=>window.CAGE_BACKEND;
 let blocked=false,user='',tour=null;
 const profile=()=>blocked?null:backend()?.currentProfile?.();
@@ -6,7 +6,7 @@ const allowed=view=>{const p=profile();return !!p&&p.active!==false&&p.role!=='s
 const current=()=>typeof activeView==='string'?activeView:'mywork';
 const label=view=>document.querySelector(`.nav-item[data-view="${view}"]>span:nth-child(2)`)?.textContent||view;
 const visible=el=>el&&!el.hidden&&el.getClientRects().length&&getComputedStyle(el).visibility!=='hidden';
-const launcher=document.createElement('button');launcher.id='elder-launcher';launcher.textContent='Elder · Help';launcher.hidden=true;launcher.setAttribute('aria-controls','elder-panel');launcher.setAttribute('aria-expanded','false');document.body.append(launcher);
+const launcher=document.createElement('button');launcher.id='elder-launcher';launcher.textContent='Ask Elder';launcher.hidden=true;launcher.setAttribute('aria-controls','elder-panel');launcher.setAttribute('aria-expanded','false');document.body.append(launcher);
 const panel=document.createElement('aside');panel.id='elder-panel';panel.hidden=true;panel.setAttribute('aria-label','Elder help');panel.innerHTML=`<header><div><span class="elder-mark" aria-hidden="true">E</span><div><h2>Elder</h2><p>Your guide to CAGE</p></div></div><button id="elder-close" aria-label="Close Elder">×</button></header><p class="elder-intro">Find your way, one step at a time. Built-in help, with no AI connection.</p><button id="elder-around">Show me around</button><label for="elder-search">What would you like to do?</label><input id="elder-search" type="search" placeholder="Search: invoice, task, upload…"><p id="elder-status" role="status"></p><div id="elder-results"></div><div id="elder-detail" hidden></div>`;document.body.append(panel);
 function close(){panel.hidden=true;launcher.setAttribute('aria-expanded','false');}
 function list(){const terms=$('elder-search').value.toLowerCase().match(/[a-z]{3,}/g)||[];const ignored=new Set(['how','can','the','and','with','for','want']);const words=terms.filter(t=>!ignored.has(t));const matches=GUIDES.filter(g=>allowed(g.view)).map(g=>({g,score:words.reduce((n,t)=>n+((g.title+' '+g.keywords).toLowerCase().includes(t)?1:0),0)})).filter(x=>!words.length||x.score).sort((a,b)=>b.score-a.score||Number(b.g.view===current())-Number(a.g.view===current()));const box=$('elder-results');box.replaceChildren();$('elder-detail').hidden=true;$('elder-status').textContent=matches.length?'Choose a guide or start a walkthrough.':'No matching guide. Try “invoice”, “project”, “task” or “chat”.';for(const {g}of matches){const b=document.createElement('button');b.className='elder-guide';b.textContent=g.title;b.onclick=()=>show(g);box.append(b);}}
