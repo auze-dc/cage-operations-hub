@@ -2,6 +2,7 @@
 (function(){'use strict';
 const api=()=>window.CAGE_BACKEND,me=()=>api()?.currentMemberId?.(),profile=()=>api()?.currentProfile?.(),esc=escapeHtml;
 const scopes=new Set(['projects','requests','crm','commercial']);let mine=false;const replies=new Map();
+const meetingNames=['Elon Musk','Chisale','Nabanda'];
 const meetingLinks=['https://meet.google.com/tai-aetz-gqe','https://meet.google.com/ise-jvne-hci','https://meet.google.com/twx-mknz-ntd'];
 const ids=r=>[r?.owner,r?.lead,r?.createdBy,...(r?.team||[]),...(r?.members||[]),...(r?.collaborators||[])].filter(Boolean);
 function belongs(r){return ids(r).includes(me())||ids(r).includes(profile()?.id);}
@@ -40,9 +41,9 @@ const rendered=window.CAGE_CHAT?.rendered;if(rendered)window.CAGE_CHAT.rendered=
 for(const name of ['cage:session-ready','cage:access-closed'])window.addEventListener(name,()=>{mine=false;replies.clear();updateScope();document.getElementById('teamwork-members-dialog')?.close();renderReply();applyAccess();});
 // Interview video rooms use the same three choices; physical locations remain text.
 const interview=document.getElementById('interview-form');
-function interviewRoom(){if(!interview)return;const old=interview.elements.location,video=interview.elements.format.value==='Video';if(video&&old.tagName!=='SELECT'){const select=document.createElement('select');select.name='location';select.required=true;select.innerHTML='<option value="">Choose meeting link</option>'+meetingLinks.map((u,i)=>`<option value="${u}">Link ${i+1}</option>`).join('');old.replaceWith(select);}else if(!video&&old.tagName==='SELECT'){const input=document.createElement('input');input.name='location';input.required=true;old.replaceWith(input);}}
+function interviewRoom(){if(!interview)return;const old=interview.elements.location,video=interview.elements.format.value==='Video';if(video&&old.tagName!=='SELECT'){const select=document.createElement('select');select.name='location';select.required=true;select.innerHTML='<option value="">Choose meeting link</option>'+meetingLinks.map((u,i)=>`<option value="${u}">${meetingNames[i]}</option>`).join('');old.replaceWith(select);}else if(!video&&old.tagName==='SELECT'){const input=document.createElement('input');input.name='location';input.required=true;old.replaceWith(input);}}
 interview?.elements.format.addEventListener('change',interviewRoom);interview?.addEventListener('reset',()=>setTimeout(interviewRoom,0));
 function quickMembers(){return `<details class="teamwork-picker"><summary>Add members</summary><div>${assignableTeam().map(p=>`<label><input type="checkbox" name="collaborators" value="${esc(p.id)}"> ${esc(p.name)}</label>`).join('')}</div></details>`;}
-window.CAGE_TEAMWORK={quickMembers,rows,belongs,opportunityMine,memberPicker,memberValues,canWork,canThread,threadMembers,replyId,replyMarkup,clearReply,applyAccess,manages,meetingOptions:old=>[['','No online meeting'],...meetingLinks.map((u,i)=>[u,'Link '+(i+1)]),...(old&&!meetingLinks.includes(old)?[[old,'Existing meeting link (keep)']]:[])]};
+window.CAGE_TEAMWORK={quickMembers,rows,belongs,opportunityMine,memberPicker,memberValues,canWork,canThread,threadMembers,replyId,replyMarkup,clearReply,applyAccess,manages,meetingOptions:old=>[['','No online meeting'],...meetingLinks.map((u,i)=>[u,meetingNames[i]]),...(old&&!meetingLinks.includes(old)?[[old,'Existing meeting link (keep)']]:[])]};
 applyAccess();if(activeView==='chat')decorateChat();
 })();
