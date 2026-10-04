@@ -1029,7 +1029,7 @@
   }
   async function enrolStem(application,cohort,details) {const r=await client.rpc('enrol_stem_application',{application_key:application,cohort_key:cohort,details});if(r.error)throw r.error;return r.data;}
   async function hubCall(name,args={}) {
-    if(!['hub_delivery_status','hub_notice_save','hub_notice_mark','hub_notice_file','hub_calendar_list','hub_event_save','hub_event_exception','hub_event_reply','hub_event_conflicts'].includes(name))throw new Error('Unknown Hub operation');
+    if(!['hub_push_save','hub_push_remove','hub_push_settings','hub_push_preferences','hub_push_read','hub_partner_list','hub_partner_create','hub_partner_revoke','hub_partner_enrol','hub_delivery_status','hub_notice_save','hub_notice_mark','hub_notice_file','hub_calendar_list','hub_event_save','hub_event_exception','hub_event_reply','hub_event_conflicts'].includes(name))throw new Error('Unknown Hub operation');
     const r=await client.rpc(name,args);if(r.error)throw r.error;return r.data;
   }
   async function hubRows(table,columns='*') {
@@ -1060,6 +1060,7 @@
   async function hubEvent(id) {const r=await client.from('hub_events').select('*').eq('id',id).single();if(r.error)throw r.error;const g=await client.from('hub_event_guests').select('*').eq('event_id',id);if(g.error)throw g.error;return {...r.data,guests:g.data};}
   async function presenceHeartbeat(sid,availability) {const r=await client.rpc("hub_presence_heartbeat",{sid,availability}).abortSignal(AbortSignal.timeout(10000));if(r.error)throw r.error;return r.data;}
   window.CAGE_BACKEND = {
+    pushConfig: async()=>{const r=await client.functions.invoke('hub-push',{body:{action:'config'}});if(r.error)throw r.error;return r.data;},
     documentHistory: async(doc_type,doc_id)=>{const r=await client.rpc("document_history_v2",{doc_type,doc_id});if(r.error)throw r.error;return r.data||[];},
     canSendInvoice: ()=>!!profile?.active&&profile.role!=='shared'&&moduleLevel('finance')!=='none',
     locationCanRead: async()=>{const r=await client.rpc('hub_location_can_read');if(r.error)throw r.error;return r.data;},
