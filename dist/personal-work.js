@@ -34,7 +34,8 @@ function applyAccess(){
  if(backend().moduleLevel(activeView)==='none' || (activeView==='access' && profile().role!=='admin')) setView('mywork');
 }
 function updateBadge(){const count=personal.notifications.filter(n=>!n.read_at).length;$('notification-count').textContent=count;bell.setAttribute('aria-label',`Notifications: ${count} unread`);}
-async function refresh(){if(!profile())return;try{personal=await backend().personalData();window.dispatchEvent(new CustomEvent("cage:personal-notifications",{detail:personal.notifications}));updateBadge();refreshView();$('personal-error').textContent='';}catch(e){$('personal-error').textContent=e.message||'Could not load personal reminders.';window.dispatchEvent(new Event('cage:personal-notifications-error'));}}
+let refreshSequence=0;
+async function refresh(){if(!profile())return;const request=++refreshSequence,owner=profile().id;try{const result=await backend().personalData();if(request!==refreshSequence||profile()?.id!==owner)return;personal=result;window.dispatchEvent(new CustomEvent("cage:personal-notifications",{detail:personal.notifications}));updateBadge();refreshView();window.dispatchEvent(new Event('cage:unread-updated'));$('personal-error').textContent='';}catch(e){$('personal-error').textContent=e.message||'Could not load personal reminders.';window.dispatchEvent(new Event('cage:personal-notifications-error'));}}
 function formatWhen(value){return new Date(value).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});}
 function refreshView(){
  if(activeView==='mywork')renderMine();
