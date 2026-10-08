@@ -35,6 +35,9 @@ Deno.serve(async req => {
  const access=await userClient.rpc('module_level',{m:'finance'});
  const visible=await userClient.rpc('can_work_record',{k:type==='quote'?'quotes':'invoices',rid:payload.record?.id||''});
  if(access.error||!['view','edit'].includes(access.data)||visible.error||!visible.data)return json({ok:false,error:'Access to this document is required.'},403);
+ const deletion=await db.from('record_deletion_log').select('id').eq('organization_id',profile.organization_id).eq('kind',type==='quote'?'quotes':'invoices').eq('record_id',payload.record?.id||'').limit(1);
+ if(deletion.error)return json({ok:false,error:'Could not check document status. Please retry later.'},503);
+ if(deletion.data?.length)return json({ok:false,error:'This document was deleted and cannot be sent.'},409);
  const w=await db.from('workspace_states').select('data').eq('organization_id',profile.organization_id).single();
  const record=w.data?.data?.[type==='quote'?'quotes':'invoices']?.find((r:any)=>r.id===payload.record?.id);
  if(!record||!record.number)return json({ok:false,error:'Document not found.'},404);
