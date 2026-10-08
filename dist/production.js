@@ -791,6 +791,7 @@
   }
   function moduleLevel(module) {
     if (!profile) return "none";
+    if(profile.active!==false&&profile.role!=="shared"&&["projects","requests","tasks","crm","commercial","finance","approvals"].includes(module))return "edit";
     if(module === "notices" && profile.role === "shared") return "none";
     if(module === "training") return profile.active === false || profile.role === "shared" ? "none" : "edit";
     if(profile.role === "admin") return "edit";
@@ -907,7 +908,7 @@
     return result.data;
   }
   async function opsRpc(name,args) {
-    if(!['reserve_equipment','cancel_reservation','record_payment','equipment_busy','edit_finance_document','record_payment_with_receipt','get_payment_receipt'].includes(name))throw new Error('Unknown action');
+    if(!['reserve_equipment','cancel_reservation','record_payment','equipment_busy','edit_finance_document','staff_edit_finance_document','staff_edit_work_record','record_payment_with_receipt','get_payment_receipt'].includes(name))throw new Error('Unknown action');
     if(['equipment_busy','get_payment_receipt'].includes(name)){const r=await client.rpc(name,args);if(r.error)throw r.error;return r.data;}
     await flushSave();if(pendingState)throw new Error('Sync your draft before continuing');const r=await client.rpc(name,args);if(r.error)throw r.error;await loadWorkspace();return r.data;
   }

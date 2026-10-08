@@ -1,0 +1,17 @@
+(function(){'use strict';
+const fields={projects:[['name','Project name'],['client','Client'],['deadline','Deadline','date'],['category','Category'],['outcome','Required outcome','textarea']],requests:[['title','Request title'],['organisation','Organisation'],['contact','Contact'],['contactDetail','Contact details'],['deadline','Deadline','date'],['summary','Summary','textarea'],['nextAction','Next action','textarea']]};
+const dialog=document.createElement('dialog');dialog.className='dialog';dialog.style.cssText='width:min(640px,94vw);max-height:90vh;overflow:auto;border:1px solid #aaa;border-radius:16px;padding:24px;background:var(--surface,#fff);color:inherit';document.body.append(dialog);
+let expected,kind,busy=false;
+function close(){if(!busy){dialog.close();dialog.replaceChildren();expected=null;}}
+for(const evt of ['cage:access-closed','cage:session-ready'])window.addEventListener(evt,()=>{busy=false;close();});
+dialog.addEventListener('cancel',e=>{e.preventDefault();close();});
+function open(k,id){if(busy)return;const record=CAGE_APP.getState()[k]?.find(r=>r.id===id);if(!record)return;
+ kind=k;expected=structuredClone(record);dialog.replaceChildren();const form=document.createElement('form');form.innerHTML='<h2>Edit details</h2>';dialog.append(form);
+ for(const [key,label,type] of fields[k]){const wrap=document.createElement('label');wrap.style.cssText='display:grid;gap:6px;margin:14px 0';wrap.textContent=label;const input=document.createElement(type==='textarea'?'textarea':'input');input.name=key;if(type!=='textarea')input.type=type||'text';else input.rows=3;input.value=record[key]||'';input.required=key===(k==='projects'?'name':'title');input.style.cssText='padding:10px;border:1px solid #aaa;border-radius:6px;font:inherit';wrap.append(input);form.append(wrap);}
+ const error=document.createElement('p');error.setAttribute('role','alert');form.append(error);const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancel';cancel.onclick=close;const save=document.createElement('button');save.type='submit';save.className='primary-button';save.textContent='Save changes';form.append(cancel,save);
+ form.onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;save.disabled=true;error.textContent='';try{const edits=Object.fromEntries([...new FormData(form)].map(([k,v])=>[k,String(v).trim()]));await CAGE_BACKEND.opsRpc('staff_edit_work_record',{kind,expected_record:expected,edits});busy=false;close();renderAll();if(kind==='projects'&&document.getElementById('project-dialog').open)renderProjectWorkspace();if(kind==='requests'&&document.getElementById('request-detail-dialog').open)renderRequestDetail(record.id);CAGE_APP.showToast('Changes saved.');}catch(err){error.textContent=err.message;}finally{busy=false;save.disabled=false;}};dialog.showModal();}
+ document.addEventListener('click',e=>{const b=e.target.closest('[data-staff-edit]');if(b){e.preventDefault();open(b.dataset.staffEdit,b.dataset.recordId);}});
+ // Keep historical database stage values; use plain staff-facing wording.
+ function labels(){document.querySelectorAll('option').forEach(o=>{if(o.value==='Approved to send'&&o.textContent==='Approved to send')o.textContent='Ready to send';if(o.value==='Internal review'&&o.textContent==='Internal review')o.textContent='Scope review';});}
+ let pending=false;new MutationObserver(()=>{if(!pending){pending=true;requestAnimationFrame(()=>{pending=false;labels();});}}).observe(document.body,{childList:true,subtree:true});labels();
+})();

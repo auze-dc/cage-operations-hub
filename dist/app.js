@@ -388,7 +388,7 @@ const REQUEST_TEMPLATES = {
     requestItem("access", "Site access, dates and permissions checked", "scope"),
     requestItem("method", "Flight, processing and QA method prepared", "scope"),
     requestItem("costing", "Crew, travel, processing and margin costed", "scope"),
-    requestItem("approval", "Scope and commercial position approved", "review"),
+    requestItem("approval", "Scope and commercial details checked", "review"),
     requestItem("submission", "Quote or proposal sent and logged", "submission"),
     requestItem("acceptance", "Signed contract, PO or accepted quote filed", "acceptance")
   ],
@@ -399,7 +399,7 @@ const REQUEST_TEMPLATES = {
     requestItem("access", "Access, shutdowns and permissions checked", "scope"),
     requestItem("method", "Sensor, mission and QA method prepared", "scope"),
     requestItem("costing", "Crew, equipment and reporting costed", "scope"),
-    requestItem("approval", "Scope and commercial position approved", "review"),
+    requestItem("approval", "Scope and commercial details checked", "review"),
     requestItem("submission", "Quote or proposal sent and logged", "submission"),
     requestItem("acceptance", "Signed contract, PO or accepted quote filed", "acceptance")
   ],
@@ -410,7 +410,7 @@ const REQUEST_TEMPLATES = {
     requestItem("access", "Field access, timing and permissions checked", "scope"),
     requestItem("method", "Mapping, analytics or spraying method prepared", "scope"),
     requestItem("costing", "Inputs, equipment, crew and travel costed", "scope"),
-    requestItem("approval", "Scope and commercial position approved", "review"),
+    requestItem("approval", "Scope and commercial details checked", "review"),
     requestItem("submission", "Quote or proposal sent and logged", "submission"),
     requestItem("acceptance", "Signed contract, PO or accepted quote filed", "acceptance")
   ],
@@ -421,7 +421,7 @@ const REQUEST_TEMPLATES = {
     requestItem("permissions", "Location, people and flight permissions checked", "scope"),
     requestItem("method", "Aircraft, crew and editing method prepared", "scope"),
     requestItem("costing", "Capture, travel, editing and licensing costed", "scope"),
-    requestItem("approval", "Scope and commercial position approved", "review"),
+    requestItem("approval", "Scope and commercial details checked", "review"),
     requestItem("submission", "Quote or proposal sent and logged", "submission"),
     requestItem("acceptance", "Signed contract, PO or accepted quote filed", "acceptance")
   ],
@@ -454,7 +454,7 @@ const REQUEST_TEMPLATES = {
     requestItem("security", "Transfer, storage and confidentiality checked", "scope"),
     requestItem("method", "Processing and QA method prepared", "scope"),
     requestItem("costing", "Processing time, software and margin costed", "scope"),
-    requestItem("approval", "Scope and commercial position approved", "review"),
+    requestItem("approval", "Scope and commercial details checked", "review"),
     requestItem("submission", "Quote or proposal sent and logged", "submission"),
     requestItem("acceptance", "Signed contract, PO or accepted quote filed", "acceptance")
   ],
@@ -867,12 +867,10 @@ function showToast(message) {
 }
 
 function currentUserCanSelfApprove() {
- const p=window.CAGE_BACKEND?.currentProfile?.();
- return p?.active!==false && p?.role==='admin' && ['alexander@cagemw.com','ndapile@cagemw.com'].includes(String(p?.email||'').toLowerCase());
+ const p=window.CAGE_BACKEND?.currentProfile?.();return !!p&&p.active!==false&&p.role!=='shared';
 }
 function currentUserCanApprove() {
-  if (!window.CAGE_BACKEND?.isProduction) return true;
-  return window.CAGE_BACKEND.canApprove?.() === true;
+ const p=window.CAGE_BACKEND?.currentProfile?.();return !!p&&p.active!==false&&p.role!=='shared';
 }
 
 function currentUserIsAdmin() {
@@ -1138,32 +1136,28 @@ function renderRequestDetail(requestId = activeRequestId) {
         <label class="request-next-action"><span>Next specific action</span><input data-request-next-action="${request.id}" value="${escapeHtml(request.nextAction)}" maxlength="160"></label>
       </section>
       <aside class="request-checklist-panel">
-        <div class="surface-heading"><div><p class="section-kicker">${escapeHtml(request.type)} template</p><h3>Stage gates</h3></div><strong>${stats.percent}%</strong></div>
+        <div class="surface-heading"><div><p class="section-kicker">${escapeHtml(request.type)} template</p><h3>Progress checklist</h3></div><strong>${stats.percent}%</strong></div>
         <div class="request-checklist">${requestTemplate(request).map(item => `<button class="request-check ${request.checklist?.[item.key] ? "complete" : ""}" data-request-check="${request.id}" data-check-key="${item.key}"><span>${request.checklist?.[item.key] ? "✓" : ""}</span><p><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.phase)}</small></p></button>`).join("")}</div>
       </aside>
     </div>
     ${linkedApproval ? `<div class="request-review-note ${linkedApproval.status.toLowerCase()}"><strong>Latest internal review: ${escapeHtml(linkedApproval.status)}</strong><span>${escapeHtml(linkedApproval.decisionNote || linkedApproval.summary)}</span></div>` : ""}
     ${request.stage === "Lost / Declined" ? `<div class="request-review-note returned"><strong>Closed ${formatDate(request.lostDate || TODAY, { year: true })}: ${escapeHtml(request.lostReason || "Lost or declined")}</strong><span>${escapeHtml(request.lostNote || "No outcome note recorded.")}${request.lostFollowUp ? ` Future follow-up: ${formatDate(request.lostFollowUp, { year: true })}.` : ""}</span></div>` : ""}
-    <div class="request-detail-actions"><button data-open-work-chat="request" data-work-chat-id="${request.id}">◌ Open work chat</button>${actionButtons}${request.deal ? `<button data-request-open-deal="${request.id}">Open CRM opportunity</button>` : ""}${linkedCommercial ? `<button data-request-open-commercial="${request.id}">Open ${escapeHtml(linkedCommercial.type.toLowerCase())}</button>` : ""}${request.project ? `<button class="primary" data-request-open-project="${request.id}">Open delivery project</button>` : ""}</div>
+    <div class="request-detail-actions"><button data-staff-edit="requests" data-record-id="${request.id}">Edit details</button><button data-open-work-chat="request" data-work-chat-id="${request.id}">◌ Open work chat</button>${actionButtons}${request.deal ? `<button data-request-open-deal="${request.id}">Open CRM opportunity</button>` : ""}${linkedCommercial ? `<button data-request-open-commercial="${request.id}">Open ${escapeHtml(linkedCommercial.type.toLowerCase())}</button>` : ""}${request.project ? `<button class="primary" data-request-open-project="${request.id}">Open delivery project</button>` : ""}</div>
   `;
   window.CAGE_TEAMWORK?.applyAccess();
 }
 
 function requestActionButtons(request) {
-  const buttons = [];
-  if (["New", "Needs information"].includes(request.stage)) buttons.push(`<button data-request-action="qualify" data-request-id="${request.id}" ${requestQualificationComplete(request) ? "" : "disabled"}>Confirm qualified</button>`);
-  if (request.stage === "Qualified") buttons.push(`<button data-request-action="scope" data-request-id="${request.id}">Start scoping</button>`);
-  if (request.stage === "Scoping") {
-    if (!["Tender / RFQ", "Grant"].includes(request.type)) buttons.push(`<button data-request-action="quote" data-request-id="${request.id}">Prepare quote</button>`);
-    buttons.push(`<button class="primary" data-request-action="review" data-request-id="${request.id}" ${requestPreReviewComplete(request) ? "" : "disabled"}>${currentUserCanSelfApprove() ? 'Approve for sending' : 'Request internal approval'}</button>`);
-  }
-  if (request.stage === "Internal review") buttons.push(`<button disabled>Awaiting approval</button>`);
-  if (request.stage === "Approved to send") buttons.push(`<button class="primary" data-request-action="submit" data-request-id="${request.id}">Record submission</button>`);
-  if (request.stage === "Submitted") buttons.push(`<button data-request-action="negotiate" data-request-id="${request.id}">Record negotiation</button>`, `<button class="primary" data-request-action="win" data-request-id="${request.id}">Record award / acceptance</button>`);
-  if (request.stage === "Negotiation") buttons.push(`<button class="primary" data-request-action="win" data-request-id="${request.id}">Record award / acceptance</button>`);
-  if (request.stage === "Won / Awarded") buttons.push(`<button class="primary" data-request-action="convert" data-request-id="${request.id}" ${requestAcceptanceComplete(request) ? "" : "disabled"}>Create contract & project</button>`);
-  if (!["Converted", "Lost / Declined"].includes(request.stage)) buttons.push(`<button data-request-action="schedule" data-request-id="${request.id}">Schedule follow-up</button>`, `<button class="danger" data-request-action="lose" data-request-id="${request.id}">Close as lost</button>`);
-  return buttons.join("");
+ const id=escapeHtml(request.id),b=[];
+ const action=(a,label)=>`<button data-request-action="${a}" data-request-id="${id}">${label}</button>`;
+ if(['New','Needs information'].includes(request.stage))b.push(action('qualify','Mark qualified'));
+ if(request.stage==='Qualified')b.push(action('scope','Start scoping'));
+ if(['Scoping','Internal review'].includes(request.stage)){b.push(action('quote','Prepare quote'));b.push(action('review','Ready to send'));}
+ if(request.stage==='Approved to send')b.push(action('submit','Record submission'));
+ if(['Submitted','Negotiation'].includes(request.stage))b.push(action('win','Record award / acceptance'));
+ if(request.stage==='Won / Awarded')b.push(action('convert','Create contract & project'));
+ if(!['Converted','Lost / Declined'].includes(request.stage))b.push(action('schedule','Schedule follow-up'),action('lose','Close as lost'));
+ return b.join('');
 }
 
 function openRequest(requestId) {
@@ -2779,33 +2773,9 @@ function syncRequestLinks(request) {
 }
 
 function toggleRequestCheck(requestId, key) {
-  const request = requestById(requestId);
-  const item = requestTemplate(request).find(entry => entry.key === key);
-  if (!request || !item) return;
-  if (key === "approval") {
-    showToast("Approval is completed only from the central decision inbox.");
-    return;
-  }
-  request.checklist ||= {};
-  request.checklist[key] = !request.checklist[key];
-  if (!request.checklist[key] && ["qualify", "scope"].includes(item.phase) && !["Converted", "Lost / Declined"].includes(request.stage)) {
-    request.checklist.approval = false;
-    request.stage = item.phase === "qualify" ? "Needs information" : "Scoping";
-    const pendingReview = state.approvals.find(approval => approval.linkedType === "request" && approval.linkedId === request.id && approval.status === "Pending");
-    if (pendingReview) {
-      pendingReview.status = "Returned";
-      pendingReview.decided = TODAY;
-      pendingReview.decisionNote = "The request scope changed after review was submitted; a new approval is required.";
-    }
-    syncRequestLinks(request);
-  }
-  if (key === "submission" && request.checklist[key] && requestHasApprovedReview(request) && request.stage === "Approved to send") request.stage = "Submitted";
-  if (key === "submission" && !request.checklist[key] && ["Submitted", "Negotiation", "Won / Awarded"].includes(request.stage)) request.stage = "Approved to send";
-  syncRequestLinks(request);
-  saveState();
-  renderAll();
-  renderRequestDetail(request.id);
-  showToast(`${item.label} ${request.checklist[key] ? "completed" : "reopened"}.`);
+ const request=requestById(requestId),item=request&&requestTemplate(request).find(x=>x.key===key);if(!item)return;
+ request.checklist ||= {};request.checklist[key]=!request.checklist[key];
+ saveState();renderAll();renderRequestDetail(request.id);showToast('Checklist updated.');
 }
 
 function rejectRequestStageChange(request, previous, control, message) {
@@ -2814,105 +2784,22 @@ function rejectRequestStageChange(request, previous, control, message) {
 }
 
 function changeRequestStage(requestId, stage, control) {
-  const request = requestById(requestId);
-  if (!request || !REQUEST_STAGE_OPTIONS.includes(stage) || request.stage === stage) return;
-  const previous = request.stage;
-  if (stage === "Lost / Declined" && !request.lostDate) {
-    if (control) control.value = previous;
-    openRequestCloseDialog(request.id);
-    return;
-  }
-  if (["Qualified", "Scoping"].includes(stage) && !requestQualificationComplete(request)) {
-    rejectRequestStageChange(request, previous, control, "Complete the qualification checks before advancing this request.");
-    return;
-  }
-  if (stage === "Internal review") {
-    if (!requestPreReviewComplete(request)) {
-      rejectRequestStageChange(request, previous, control, "Complete the qualification, scope and costing checks before requesting approval.");
-      return;
-    }
-    requestInternalReview(request.id);
-    return;
-  }
-  if (["Approved to send", "Submitted", "Negotiation", "Won / Awarded"].includes(stage) && !requestPreReviewComplete(request)) {
-    rejectRequestStageChange(request, previous, control, "Complete every qualification, scope and costing control before external progression.");
-    return;
-  }
-  if (["Approved to send", "Submitted", "Negotiation", "Won / Awarded"].includes(stage) && !requestHasApprovedReview(request)) {
-    rejectRequestStageChange(request, previous, control, "An approved internal review is required before external submission.");
-    return;
-  }
-  if (["Negotiation", "Won / Awarded"].includes(stage) && !request.checklist?.submission) {
-    rejectRequestStageChange(request, previous, control, "Record the external submission before the outcome or negotiation stage.");
-    return;
-  }
-  if (stage === "Converted") {
-    if (previous !== "Won / Awarded" || !requestAcceptanceComplete(request)) {
-      rejectRequestStageChange(request, previous, control, "File the signed contract, PO, award or accepted quote before creating delivery work.");
-      return;
-    }
-    convertRequest(request.id);
-    return;
-  }
-  request.stage = stage;
-  addSystemWorkMessage(request.id, `Workflow moved from ${previous} to ${stage}.`);
-  if (stage === "Qualified") {
-    ensureRequestCRM(request);
-    ensureRequestCommercial(request);
-  }
-  if (stage === "Submitted") request.checklist.submission = true;
-  syncRequestLinks(request);
-  saveState();
-  renderAll();
-  if (document.getElementById("request-detail-dialog").open) renderRequestDetail(request.id);
-  showToast(stage === "Qualified"
-    ? `${request.number} qualified and linked to a CRM opportunity.`
-    : `${request.number} moved to ${stage}.`);
+ const request=requestById(requestId);if(!request||!REQUEST_STAGE_OPTIONS.includes(stage)||request.stage===stage)return;
+ const previous=request.stage;
+ if(stage==='Lost / Declined'&&!request.lostDate){if(control)control.value=previous;openRequestCloseDialog(request.id);return;}
+ if(stage==='Converted'){convertRequest(request.id);return;}
+ request.stage=stage==='Internal review'?'Approved to send':stage;
+ request.checklist ||= {};
+ if(stage==='Submitted')request.checklist.submission=true;
+ addSystemWorkMessage(request.id,`Workflow moved from ${previous} to ${request.stage}.`);
+ if(stage==='Qualified'){ensureRequestCRM(request);ensureRequestCommercial(request);}
+ syncRequestLinks(request);saveState();renderAll();
+ if(document.getElementById('request-detail-dialog').open)renderRequestDetail(request.id);
+ showToast(`${request.number} moved to ${request.stage==='Approved to send'?'Ready to send':request.stage}.`);
 }
 
 function requestInternalReview(requestId) {
-  const request = requestById(requestId);
-  if (!request) return;
-  if (!requestPreReviewComplete(request)) {
-    showToast("Complete the scope, evidence and costing checks first.");
-    return;
-  }
-  if(currentUserCanSelfApprove()){
-    let approval=state.approvals.find(item=>item.linkedType==='request'&&item.linkedId===request.id&&item.status==='Pending');
-    if(!approval){approval={id:'ap-'+crypto.randomUUID(),type:request.type==='Grant'?'Grant':'Quote',title:'Release '+request.title,requester:window.CAGE_BACKEND.currentMemberId(),submitted:TODAY,due:request.deadline||dateAfter(1),amount:request.value,status:'Pending',summary:'Scope and costing reviewed by the approving administrator.',linkedType:'request',linkedId:request.id};state.approvals.push(approval);}
-    decideApproval(approval.id,'Approved');document.getElementById('request-detail-dialog').close();return;
-  }
-  const pending = state.approvals.some(item => item.linkedType === "request" && item.linkedId === request.id && item.status === "Pending");
-  if (pending) {
-    request.stage = "Internal review";
-    syncRequestLinks(request);
-    saveState();
-    renderAll();
-    showToast("This request is already awaiting an internal decision.");
-    return;
-  }
-  const approvalType = request.type === "Grant" ? "Grant" : request.type === "Tender / RFQ" ? "Submission" : "Quote";
-  state.approvals.push({
-    id: `ap-${Date.now()}`,
-    type: approvalType,
-    title: `Release ${request.title}`,
-    requester: request.owner,
-    submitted: TODAY,
-    due: request.deadline >= TODAY ? request.deadline : dateAfter(1),
-    amount: request.value,
-    status: "Pending",
-    summary: `Review the ${request.type.toLowerCase()} scope, evidence, costing, risks and external response before release.`,
-    linkedType: "request",
-    linkedId: request.id
-  });
-  request.stage = "Internal review";
-  addSystemWorkMessage(request.id, "Scope and costing submitted for internal approval.");
-  syncRequestLinks(request);
-  saveState();
-  document.getElementById("request-detail-dialog").close();
-  renderAll();
-  setView("approvals");
-  showToast("Internal review sent to the central approval inbox.");
+ changeRequestStage(requestId,'Approved to send');
 }
 
 function prepareRequestQuote(requestId) {
@@ -3022,10 +2909,7 @@ function requestTaskDueDate(request, index, total) {
 function convertRequest(requestId) {
   const request = requestById(requestId);
   if (!request) return;
-  if (request.stage !== "Won / Awarded" || !requestAcceptanceComplete(request)) {
-    showToast("Record the award and file acceptance evidence before creating delivery work.");
-    return;
-  }
+
   const deal = ensureRequestCRM(request);
   deal.stage = "Won";
   deal.probability = 100;
@@ -3726,7 +3610,7 @@ function renderProjectWorkspace() {
   const sourceRequest = state.requests.find(request => request.project === project.id || request.id === project.request);
   const primaryDeal = state.deals.find(deal => deal.project === project.id || deal.id === sourceRequest?.deal);
   const context = { owner, tasks, progress, revenue, costs, invoices, expenses, quotes: projectLinkedQuotes(project.id), events: state.events.filter(event => event.project === project.id), missions: state.missions.filter(mission => mission.project === project.id), members: project.team.map(teamMember), files: projectReferenceFiles(project), primaryDeal };
-  document.getElementById("project-dialog-content").innerHTML = `<header class="project-workspace-header"><div><p class="section-kicker">${escapeHtml(project.category)} · ${escapeHtml(project.client)}</p><h2>${escapeHtml(project.name)}</h2><p>Led by ${escapeHtml(owner.name)} · Due ${formatDate(project.deadline, { year: true })}</p></div><div><button class="project-header-chat" data-open-project-chat="${project.id}">◌ Project chat</button><span class="status-pill ${health}">${healthLabel(health)}</span><button class="icon-button" data-close-project-workspace aria-label="Close project">×</button></div></header><nav class="project-workspace-tabs" aria-label="Project sections">${PROJECT_WORKSPACE_TABS.map(([id,label]) => `<button class="${activeProjectTab === id ? "active" : ""}" data-project-tab="${id}">${label}</button>`).join("")}</nav><main class="project-workspace-body">${projectWorkspaceTab(project, context)}</main>`;
+  document.getElementById("project-dialog-content").innerHTML = `<header class="project-workspace-header"><div><p class="section-kicker">${escapeHtml(project.category)} · ${escapeHtml(project.client)}</p><h2>${escapeHtml(project.name)}</h2><p>Led by ${escapeHtml(owner.name)} · Due ${formatDate(project.deadline, { year: true })}</p></div><div><button data-staff-edit="projects" data-record-id="${project.id}">Edit details</button><button class="project-header-chat" data-open-project-chat="${project.id}">◌ Project chat</button><span class="status-pill ${health}">${healthLabel(health)}</span><button class="icon-button" data-close-project-workspace aria-label="Close project">×</button></div></header><nav class="project-workspace-tabs" aria-label="Project sections">${PROJECT_WORKSPACE_TABS.map(([id,label]) => `<button class="${activeProjectTab === id ? "active" : ""}" data-project-tab="${id}">${label}</button>`).join("")}</nav><main class="project-workspace-body">${projectWorkspaceTab(project, context)}</main>`;
   window.CAGE_TEAMWORK?.applyAccess();
 }
 

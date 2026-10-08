@@ -7,8 +7,9 @@ function addButtons(){
  document.querySelectorAll('[data-send-document][data-document-id]').forEach(send=>{
   const type=send.dataset.sendDocument,id=send.dataset.documentId;
   if(!['quote','invoice'].includes(type))return;
-  let button=[...send.parentElement.querySelectorAll('[data-edit-finance]')].find(b=>b.dataset.editFinance===type&&b.dataset.recordId===id);
-  if(!button){button=document.createElement('button');button.type='button';button.className='document-action';button.dataset.editFinance=type;button.dataset.recordId=id;button.textContent='Edit';send.parentElement.append(button);}
+  const host=send.closest('.qw-actions')?.parentElement||send.parentElement;
+  let button=[...host.querySelectorAll('[data-edit-finance]')].find(b=>b.dataset.editFinance===type&&b.dataset.recordId===id);
+  if(!button){button=document.createElement('button');button.type='button';button.className='document-action';button.dataset.editFinance=type;button.dataset.recordId=id;button.textContent='Edit';host.append(button);}
   button.hidden=!allowed();button.disabled=!allowed();
  });
 }
@@ -28,10 +29,10 @@ function open(type,id){
  form.elements.preparedBy.value=record.preparedBy||api().currentProfile()?.full_name||'CAGE';
  form.querySelector('.dialog-heading h2').textContent=`Edit ${record.number}`;
  const accepted=type==='quote'&&(record.status==='Accepted'||record.clientResponse?.decision==='Accepted');
- form.querySelector('.dialog-actions .primary-button').textContent=accepted?'Save as new quotation':'Save changes';
+ form.querySelector('.dialog-actions .primary-button').textContent='Save changes';
  for(const name of ['status','sendNow','deliveryCc','deliveryBcc','clientApprover']){const f=form.elements.namedItem(name);if(f){f.disabled=true;f.closest('label').hidden=true;}}
  let note=form.querySelector('[data-edit-notice]');if(!note){note=document.createElement('p');note.dataset.editNotice='';form.querySelector('.dialog-actions').before(note);}
- note.hidden=false;note.textContent=accepted?`The client accepted ${record.number}. Saving creates a new draft quotation with a new number; the accepted original and its response stay unchanged.`:'Save changes, review the PDF, then use Send to email the revised document. Earlier emails and delivery history remain unchanged. Recorded invoice payments are preserved.';
+ note.hidden=false;note.textContent=accepted?`Save creates an editable revised quotation automatically. No manager approval is needed. The original accepted version remains in the history.`:'Save changes, review the PDF, then use Send to email the revised document. Earlier emails and delivery history remain unchanged. Recorded invoice payments are preserved.';
  if(record.revisionOfNumber)note.textContent+=` Revision of ${record.revisionOfNumber}.`;
  form.elements.recipient.dispatchEvent(new Event('input',{bubbles:true}));
 }
@@ -56,7 +57,7 @@ for(const type of ['quote','invoice']){
   try{
    const edits=window.CAGE_DOCUMENTS.fields(form);delete edits.amount;
    for(const name of ['client','recipient','description','issued',type==='quote'?'validUntil':'due',type==='quote'?'deal':'project'])edits[name]=form.elements.namedItem(name).value.trim();
-   const result=await api().opsRpc('edit_finance_document',{doc_type:type,expected_record:sessions.get(type),edits});
+   const result=await api().opsRpc('staff_edit_finance_document',{doc_type:type,expected_record:sessions.get(type),edits});
    $(type+'-dialog').close();delete form.dataset.editDocumentId;sessions.delete(type);
    window.CAGE_APP.showToast(result.newRevision?`${result.record.number} saved as a new quotation. Review it, then send.`:`${result.record.number} updated. Review the PDF before sending again.`);
   }catch(e){error.textContent=e.message||'Unable to save. Your edits remain in this form.';}
