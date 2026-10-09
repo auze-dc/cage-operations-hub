@@ -4036,7 +4036,7 @@ function openInvoiceDialog(projectId = "") {
 }
 
 function nextInvoiceNumber() {
-  const max = Math.max(26000, ...state.invoices.map(invoice => Number(String(invoice.number).replace(/\D/g, "")) || 0));
+  const max = Math.max(26000, Number(window.CAGE_FINANCE_NUMBER_FLOOR?.invoices)||0, ...state.invoices.map(invoice => Number(String(invoice.number).replace(/\D/g, "")) || 0));
   return `INV-${max + 1}`;
 }
 
@@ -4137,7 +4137,7 @@ function openQuoteDialog(dealId = "", projectId = "") {
 }
 
 function nextQuoteNumber() {
-  const max = Math.max(26000, ...state.quotes.map(quote => Number(String(quote.number).replace(/\D/g, "")) || 0));
+  const max = Math.max(26000, Number(window.CAGE_FINANCE_NUMBER_FLOOR?.quotes)||0, ...state.quotes.map(quote => Number(String(quote.number).replace(/\D/g, "")) || 0));
   return `Q-${max + 1}`;
 }
 

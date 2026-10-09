@@ -266,6 +266,7 @@
     applyingRemote=true;try{app.replaceState(next||data.data);}finally{applyingRemote=false;}
   }
   function receiveWorkspace(data){
+    window.CAGE_FINANCE_NUMBER_FLOOR=data.financeNumberFloor||{};
     collaborationAccess=data.collaboration||{};
     if(!data?.data)throw new Error('Workspace data is unavailable.');
     if(pendingState&&resetEpoch(cloudBase)!==resetEpoch(data.data))quarantineResetDraft({base:cloudBase,next:pendingState});

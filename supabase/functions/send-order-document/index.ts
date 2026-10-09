@@ -16,6 +16,7 @@ Deno.serve(async req=>{
  if(!['acceptance','order'].includes(p.kind)||typeof p.qid!=='string'||!Number.isInteger(p.version)||typeof p.message!=='string'||!p.message.trim()||p.message.length>5000||recipient.length>254||!/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(recipient))return json({ok:false,error:'Check the document, email address and message.'},400);
  const level=await user.rpc('module_level',{m:'finance'});if(level.error||level.data!=='edit')return json({ok:false,error:'Finance edit access required.'},403);
  const read=await user.rpc('quote_order_read',{qid:p.qid});if(read.error)return json({ok:false,error:'Quotation access required.'},403);const data=read.data;
+ if(data.quoteDeleted||data.invoiceDeleted)return json({ok:false,error:'This document was deleted. The order is retained as history.'},409);
  if(data.quote.status!=='Accepted'||(data.order?.version||0)!==p.version)return json({ok:false,error:'Workflow changed. Reopen the current document before sending.'},409);
  if(p.kind==='order'&&!data.order?.mode)return json({ok:false,error:'Prepare the order document first.'},409);
  const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
