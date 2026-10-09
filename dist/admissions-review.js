@@ -7,7 +7,7 @@ const field=(name,label,value='',type='text',extra='')=>`<label class="field"><s
 const options=(name,label,values,value)=>`<label class="field"><span>${label}</span><select name="${name}">${values.map(v=>`<option ${v===value?'selected':''}>${esc(v)}</option>`).join('')}</select></label>`;
 const note=(name,label,value='')=>`<label class="field"><span>${label}</span><textarea name="${name}" maxlength="10000">${esc(value)}</textarea></label>`;
 const files=()=>records.files.filter(f=>f.application_id===application.id);
-const money=v=>`${esc(application.form_snapshot.currency)} ${Number(v).toLocaleString()}`;
+const money=v=>`${esc(application.form_snapshot.currency)} ${Number(v).toLocaleString('en-GB', {useGrouping:true, maximumFractionDigits:2})}`;
 function balance(){const fee=Number(application.form_snapshot.fee||0),paid=files().filter(f=>f.kind==='payment'&&f.review_status==='Verified').reduce((n,f)=>n+Number(f.amount||0),0);return {fee,paid,left:Math.max(0,fee-paid)};}
 const person=id=>training.staff.find(p=>p.id===id)?.full_name||id||'Unknown member';
 const stamp=(id,time)=>id?`Saved by ${esc(person(id))} · ${esc(time?new Date(time).toLocaleString():'')}`:'Not verified';
