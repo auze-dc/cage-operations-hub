@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const source=fs.readFileSync('supabase/functions/opportunity-scan/cron-auth.js','utf8');
+const {validCronToken}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+let calls=0;const token='a'.repeat(64);
+const db={rpc:async(name,args)=>{calls++;assert.equal(name,'verify_opportunity_cron_token');assert.equal(args.token,token);return {data:true,error:null};}};
+for(const bad of [null,'','YOUR_CRON_SECRET','a'.repeat(63),'g'.repeat(64)])assert.equal(await validCronToken(db,bad),false);
+assert.equal(calls,0);assert.equal(await validCronToken(db,token),true);
+assert.equal(await validCronToken({rpc:async()=>({data:false})},token),false);
+await assert.rejects(validCronToken({rpc:async()=>({error:{message:'private detail'}})},token),/authentication unavailable/);
+console.log('PASS: malformed/incorrect tokens rejected, valid token verified, database errors fail closed.');
