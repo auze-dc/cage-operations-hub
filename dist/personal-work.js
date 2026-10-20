@@ -51,7 +51,7 @@ function renderMine(){
  const mine=[];
  const add=(key,module,label,match,title)=>{if(backend().moduleLevel(module)==='none')return;(state[key]||[]).filter(match).forEach(r=>mine.push({id:r.id,module,title:title(r),label,due:r.due||r.deadline||r.nextService||''}));};
  add('requests','requests','Request',r=>(r.owner===me()||(r.team||[]).includes(me()))&&!['Converted','Lost / Declined'].includes(r.stage),r=>r.title);
- add('projects','projects','Project',r=>r.owner===me()||r.lead===me()||(r.team||r.members||[]).includes(me()),r=>r.name);
+ add('projects','projects','Project',r=>(r.owner===me()||r.lead===me()||(r.team||r.members||[]).includes(me()))&&projectHealth(r)!=='complete'&&!['Complete','Completed','Archived','Cancelled'].includes(r.status),r=>r.name);
  add('tasks','tasks','Task collaborator',r=>r.owner!==me()&&(r.team||[]).includes(me())&&r.status!=='Done',r=>r.title);
  add('assets','assets','Equipment',r=>r.custodian===me(),r=>r.name);
  add('deals','crm','Opportunity',r=>(r.owner===me()||(r.team||[]).includes(me()))&&!['Won','Lost'].includes(r.stage),r=>r.name);

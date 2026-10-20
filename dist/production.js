@@ -1062,6 +1062,11 @@
   async function hubEvent(id) {const r=await client.from('hub_events').select('*').eq('id',id).single();if(r.error)throw r.error;const g=await client.from('hub_event_guests').select('*').eq('event_id',id);if(g.error)throw g.error;return {...r.data,guests:g.data};}
   async function presenceHeartbeat(sid,availability) {const r=await client.rpc("hub_presence_heartbeat",{sid,availability}).abortSignal(AbortSignal.timeout(10000));if(r.error)throw r.error;return r.data;}
   window.CAGE_BACKEND = {
+    reserveRecordNumber: async(kind, record_id)=>{
+      const r=await client.rpc('reserve_workspace_number',{kind,record_id});
+      if(r.error)throw new Error('Could not allocate a unique reference. Your form is preserved. '+r.error.message);
+      return r.data;
+    },
     pushConfig: async()=>{const r=await client.functions.invoke('hub-push',{body:{action:'config'}});if(r.error)throw r.error;return r.data;},
     documentHistory: async(doc_type,doc_id)=>{const r=await client.rpc("document_history_v2",{doc_type,doc_id});if(r.error)throw r.error;return r.data||[];},
     canSendInvoice: ()=>!!profile?.active&&profile.role!=='shared'&&moduleLevel('finance')!=='none',

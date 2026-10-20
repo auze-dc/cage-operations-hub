@@ -18,7 +18,7 @@ const required = [
 const missing = required.filter(file => !fs.existsSync(path.join(root, file)));
 if (missing.length) throw new Error(`Missing required files: ${missing.join(", ")}`);
 
-for (const file of ["dist/teamwork.js","dist/emoji-picker.js", "dist/staff-presence.js", "dist/hub-collaboration.js", "dist/design-system.js", "dist/messenger.js", "dist/personal-work.js", "dist/app.js", "dist/production.js", "dist/hr.js", "dist/careers.js", "dist/admissions-review.js", "dist/admissions-admin.js", "dist/admissions-common.js", "dist/apply.js"]) {
+for (const file of ["dist/amount-input.js", "dist/documents-ui.js", "dist/opportunities.js", "dist/teamwork.js","dist/emoji-picker.js", "dist/staff-presence.js", "dist/hub-collaboration.js", "dist/design-system.js", "dist/messenger.js", "dist/personal-work.js", "dist/app.js", "dist/production.js", "dist/hr.js", "dist/careers.js", "dist/admissions-review.js", "dist/admissions-admin.js", "dist/admissions-common.js", "dist/apply.js"]) {
   new vm.Script(fs.readFileSync(path.join(root, file), "utf8"), { filename: file });
 }
 const html = fs.readFileSync(path.join(root, "dist/index.html"), "utf8");

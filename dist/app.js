@@ -1065,7 +1065,7 @@ function renderRequests() {
   renderMetricCards("request-metric-grid", [
     { label: "Open requests", value: String(active.length), unit: "requests", note: `${needsInformation.length} still need clarification`, icon: "↳", tone: "#008fc8", tint: "#e6f7fe" },
     { label: "Needs action", value: String(scopeRows.filter(requestNeedsAction).length), unit: "requests", note: "Owner, deadline or gate action", icon: "!", tone: "#d64e4b", tint: "#feeceb" },
-    { label: "Internal review", value: String(awaitingReview.length), unit: "requests", note: "Nothing is sent before approval", icon: "✓", tone: "#e99a24", tint: "#fff4df" },
+    { label: "Review progress", value: String(awaitingReview.length), unit: "requests", note: "Review progress; no manager approval required", icon: "✓", tone: "#e99a24", tint: "#fff4df" },
     { label: "Converted value", value: formatMoney(converted.reduce((sum, request) => sum + Number(request.value || 0), 0), true), unit: "", note: `${converted.length} requests became projects`, icon: "¤", tone: "#168a65", tint: "#e5f5ef" },
     { label: "Due within 7 days", value: String(deadlineActions.length), unit: "requests", note: "Including overdue responses", icon: "□", tone: "#7357c8", tint: "#f0edfb" }
   ]);
@@ -1269,10 +1269,10 @@ function renderProjectOptions() {
   const options = state.projects.map(project => `<option value="${project.id}">${escapeHtml(project.name)}</option>`).join("");
   document.getElementById("task-project-input").innerHTML = `<option value="">No project — standalone task</option>${options}`;
   document.getElementById("event-project-input").innerHTML = `<option value="">No linked project</option>${options}`;
-  document.getElementById("invoice-project-input").innerHTML = `<option value="">No project — standalone task</option>${options}`;
-  document.getElementById("expense-project-input").innerHTML = `<option value="">No project — standalone task</option>${options}`;
+  document.getElementById("invoice-project-input").innerHTML = `<option value="">Select a project</option>${options}`;
+  document.getElementById("expense-project-input").innerHTML = `<option value="">Select a project</option>${options}`;
   document.getElementById("knowledge-project-input").innerHTML = `<option value="">General CAGE reference</option>${options}`;
-  document.getElementById("mission-project-input").innerHTML = `<option value="">No project — standalone task</option>${options}`;
+  document.getElementById("mission-project-input").innerHTML = `<option value="">Select a project</option>${options}`;
   document.getElementById("asset-project-input").innerHTML = `<option value="">Not assigned to a project</option>${options}`;
   const boardFilter = document.getElementById("board-project-filter");
   boardFilter.innerHTML = `<option value="all">All projects</option>${options}`;
@@ -1887,14 +1887,18 @@ function renderOpportunityMonitor() {
     : `<div class="empty-state"><div>⌕</div><h3>No verified open matches</h3><p>Run a live scan or review the configured sources.</p></div>`;
 }
 
-function createRequestFromMatch(matchId, silent = false) {
+async function createRequestFromMatch(matchId, silent = false) {
   const match = opportunityRows().find(item => item.id === matchId);
   if (!match) return null;
   if (match.request) return requestById(match.request);
   if(!state.opportunityMatches.some(m=>m.id===match.id))state.opportunityMatches.push(match);
+  const recordId = `rq-match-${match.id}`;
+  let number;
+  try { number = await nextRequestNumber(recordId); } catch(error) { showToast(error.message); return null; }
+  if(match.request)return requestById(match.request);
   const request = {
-    id: `rq-${Date.now()}-${match.id}`,
-    number: nextRequestNumber(),
+    id: recordId,
+    number,
     title: match.title.replace(/^Sample:\s*/i, ""),
     organisation: match.organisation,
     contact: "Opportunity monitoring team",
@@ -1982,7 +1986,7 @@ async function runOpportunityScan() {
   await refreshOpportunityResults(true);
   let created = 0;
   if (state.opportunityMonitor.autoIntake) {
-    state.opportunityMatches.filter(match => !match.request && match.match >= 80).forEach(match => { createRequestFromMatch(match.id, true); created += 1; });
+    for (const match of state.opportunityMatches.filter(match => !match.request && match.match >= 80)) { if(await createRequestFromMatch(match.id, true))created += 1; }
   }
   saveState();
   renderAll();
@@ -2544,9 +2548,8 @@ function renderReports() {
   document.getElementById("quality-checks").innerHTML = checks.map(check => `<div class="quality-item"><span class="quality-icon ${check.warning ? "warning" : ""}">${check.warning ? "!" : "✓"}</span><span class="quality-copy"><strong>${check.title}</strong><span>${check.detail}</span></span></div>`).join("");
 }
 
-function nextRequestNumber() {
-  const max = Math.max(0, ...state.requests.map(request => Number(String(request.number).replace(/\D/g, "")) || 0));
-  return `REQ-${new Date(`${TODAY}T00:00:00Z`).getUTCFullYear()}-${String(max + 1).slice(-4).padStart(4, "0")}`;
+async function nextRequestNumber(recordId) {
+  return window.CAGE_BACKEND.reserveRecordNumber('requests', recordId);
 }
 
 function renderRequestPurposeOptions(selected = "") {
@@ -2610,6 +2613,7 @@ function removeRequestPurpose(purpose) {
 }
 
 function openRequestDialog() {
+  delete document.getElementById("request-form").dataset.pendingRequestId;
   renderOwnerOptions();
   const form = document.getElementById("request-form");
   form.reset();
@@ -2622,7 +2626,7 @@ function openRequestDialog() {
   document.getElementById("request-dialog").showModal();
 }
 
-function createRequest(event) {
+async function createRequest(event) {
   event.preventDefault();
   if (event.submitter?.value === "cancel") {
     document.getElementById("request-dialog").close();
@@ -2631,8 +2635,8 @@ function createRequest(event) {
   const data = new FormData(event.currentTarget);
   const type = String(data.get("type") || "General enquiry");
   const request = {
-    id: `rq-${Date.now()}`,
-    number: nextRequestNumber(),
+    id: event.currentTarget.dataset.pendingRequestId ||= `rq-${crypto.randomUUID()}`,
+    number: "",
     title: String(data.get("title") || "").trim(),
     organisation: String(data.get("organisation") || "").trim(),
     contact: String(data.get("contact") || "").trim(),
@@ -2660,6 +2664,12 @@ function createRequest(event) {
     document.getElementById("request-form-error").textContent = "The expected delivery date cannot be in the past.";
     return;
   }
+  const requestForm = document.getElementById('request-form');
+  if(requestForm.dataset.submitting)return;
+  requestForm.dataset.submitting='true';
+  try { request.number = await nextRequestNumber(request.id); }
+  catch(error) { document.getElementById('request-form-error').textContent=error.message; return; }
+  finally { delete requestForm.dataset.submitting; }
   Object.assign(request,window.CAGE_TEAMWORK?.memberValues(data,request));
   state.requests.push(request);
   addSystemWorkMessage(request.id, `${request.number} created. Review the requirements and agree the next action.`);
@@ -4035,9 +4045,8 @@ function openInvoiceDialog(projectId = "") {
   document.getElementById("invoice-dialog").showModal();
 }
 
-function nextInvoiceNumber() {
-  const max = Math.max(26000, Number(window.CAGE_FINANCE_NUMBER_FLOOR?.invoices)||0, ...state.invoices.map(invoice => Number(String(invoice.number).replace(/\D/g, "")) || 0));
-  return `INV-${max + 1}`;
+async function nextInvoiceNumber(recordId) {
+  return window.CAGE_BACKEND.reserveRecordNumber('invoices', recordId);
 }
 
 async function createInvoice(event) {
@@ -4055,8 +4064,8 @@ async function createInvoice(event) {
   const data = new FormData(event.currentTarget);
   const invoice = {
     createdBy:window.CAGE_BACKEND.currentMemberId(),
-    id: submittingForm.dataset.pendingInvoiceId ||= `inv-${Date.now()}`,
-    number: submittingForm.dataset.pendingInvoiceNumber ||= nextInvoiceNumber(),
+    id: submittingForm.dataset.pendingInvoiceId ||= `inv-${crypto.randomUUID()}`,
+    number: submittingForm.dataset.pendingInvoiceNumber || "",
     client: String(data.get("client") || "").trim(),
     project: String(data.get("project") || ""),
     issued: String(data.get("issued") || ""),
@@ -4075,6 +4084,8 @@ async function createInvoice(event) {
     document.getElementById("invoice-form-error").textContent = "The due date cannot be before the issue date.";
     return;
   }
+  try { invoice.number = submittingForm.dataset.pendingInvoiceNumber ||= await nextInvoiceNumber(invoice.id); }
+  catch(error) { document.getElementById("invoice-form-error").textContent = error.message; return; }
   if (invoice.status === "Paid") invoice.paid = invoice.issued;
   if (data.get("sendNow") && invoice.status !== "Paid") {
     try {
@@ -4118,6 +4129,7 @@ function openQuoteDialog(dealId = "", projectId = "") {
   renderProjectOptions();
   const form = document.getElementById("quote-form");
   form.reset();
+  delete form.dataset.pendingQuoteId; delete form.dataset.pendingQuoteNumber;
   form.dataset.requestId = "";
   form.dataset.projectId = projectId;
   const validUntil = asDate(TODAY);
@@ -4136,9 +4148,8 @@ function openQuoteDialog(dealId = "", projectId = "") {
   document.getElementById("quote-dialog").showModal();
 }
 
-function nextQuoteNumber() {
-  const max = Math.max(26000, Number(window.CAGE_FINANCE_NUMBER_FLOOR?.quotes)||0, ...state.quotes.map(quote => Number(String(quote.number).replace(/\D/g, "")) || 0));
-  return `Q-${max + 1}`;
+async function nextQuoteNumber(recordId) {
+  return window.CAGE_BACKEND.reserveRecordNumber('quotes', recordId);
 }
 
 async function createQuote(event) {
@@ -4158,8 +4169,8 @@ async function createQuote(event) {
   const requestId = event.currentTarget.dataset.requestId || "";
   const quote = {
     createdBy:window.CAGE_BACKEND.currentMemberId(),
-    id: `q-${Date.now()}`,
-    number: nextQuoteNumber(),
+    id: submittingForm.dataset.pendingQuoteId ||= `q-${crypto.randomUUID()}`,
+    number: submittingForm.dataset.pendingQuoteNumber || "",
     project: event.currentTarget.dataset.projectId || dealById(String(data.get("deal")||""))?.project || "",
     client: String(data.get("client") || "").trim(),
     deal: String(data.get("deal") || ""),
@@ -4180,6 +4191,8 @@ async function createQuote(event) {
     document.getElementById("quote-form-error").textContent = "The validity date cannot be before the issue date.";
     return;
   }
+  try { quote.number = submittingForm.dataset.pendingQuoteNumber ||= await nextQuoteNumber(quote.id); }
+  catch(error) { document.getElementById("quote-form-error").textContent = error.message; return; }
   if (data.get("sendNow")) {
     try {
       await window.CAGE_BACKEND.sendDocument({
