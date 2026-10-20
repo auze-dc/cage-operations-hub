@@ -23,12 +23,12 @@ export function deadline(text){
  if(!m)return {date:null,label:/\b(rolling applications|rolling deadline|applications accepted on a rolling basis)\b/i.test(text)?'Rolling':'Not stated',timezone:'Not stated',evidence:''};
  const d=new Date(m[1]);const date=Number.isFinite(d.getTime())?d.toISOString().slice(0,10):null;return {date,label:date||'Not stated',timezone:m[2]?.match(/\b(?:UTC|GMT|CAT|EAT|CET|CEST)(?:\s*[+-]\s*\d{1,2}(?::\d{2})?)?\b/i)?.[0]||'Not stated',evidence:m[0].trim()};
 }
-export function assess(item,page='',source){const text=item.title+' '+(item.excerpt||'')+' '+page;const caps=CAPABILITIES.filter(([,r])=>r.test(text)).map(([n])=>n);if(!caps.length||!opportunity.test(text))return null;
+export function assess(item,page='',source){if(genericTitle(item.title)||!item.title)return null;const text=item.title+' '+(item.excerpt||'')+' '+page;const caps=CAPABILITIES.filter(([,r])=>r.test(text)).map(([n])=>n);if(!caps.length||!opportunity.test(text))return null;
  const geography=/\bmalawi\b/i.test(text)?'Malawi':/\b(southern africa|sadc)\b/i.test(text)?'Southern Africa':/\b(africa|african|sub-saharan)\b/i.test(text)?'Africa':/\b(global|worldwide|international bidders|developing countries)\b/i.test(text)?'International':'Not stated';
  const d=deadline((item.excerpt||'')+' '+page);const restriction=/\b(ngos? only|nonprofits? only|students? only|individuals? only|universities only|nationals only)\b/i.test(text);const partner=/\b(consortium|subcontractor|implementing partner|delivery partner)\b/i.test(text);
- const type=/\b(partnership|consortium|subcontractor)\b/i.test(item.title)?'Partnership':/\b(contract award|contract opportunity)\b/i.test(item.title)?'Contract':/\b(tender|rfp|rfq|procurement|bid|expression of interest)\b/i.test(text)?'Tender / RFQ':'Grant';
+ const type=/\b(partnership|consortium|subcontractor)\b/i.test(item.title)?'Partnership':/\b(contract award|contract opportunity)\b/i.test(item.title)?'Contract':/\b(tender|rfp|rfq|procurement|bid|expression of interest)\b/i.test(item.title+' '+(item.excerpt||'').slice(0,500))?'Tender / RFQ':'Grant';
  const score=Math.min(95,35+caps.length*9+({Malawi:25,'Southern Africa':18,Africa:12,International:8}[geography]||0));
- const titleYear=Number(item.title.match(/\b(20\d{2})\b/)?.[1]||0);const historical=!d.date&&titleYear>0&&titleYear<new Date().getUTCFullYear()-1;
+ const titleYear=Number(item.title.match(/\b(20\d{2})\b/)?.[1]||0);const historical=titleYear>0&&titleYear<new Date().getUTCFullYear()-1;
  return {historical,type,geography,score,deadline:d.date,deadlineLabel:d.label,timezone:d.timezone,deadlineEvidence:d.evidence,capabilities:caps,
  eligibility:'Needs review',routeHint:restriction?'Restrictions detected — check eligibility':partner?'Potential partner route — verify conditions':'Check applicant eligibility',
  reason:`Matches ${caps.join(', ')}. ${geography==='Not stated'?'Geography needs confirmation.':geography+' is mentioned in the notice.'} This is a relevance ranking, not confirmation that CAGE qualifies.`,
@@ -55,4 +55,18 @@ export function candidates(items,oldRows,saved,limit=40,rotation=Math.floor(Date
  });
  const top=ranked.slice(0,Math.ceil((limit-saved.length)/2));const remaining=ranked.slice(top.length);const offset=remaining.length?rotation%remaining.length:0;
  return [...saved,...top,...remaining.slice(offset),...remaining.slice(0,offset)].filter(i=>{if(!i.url||seen.has(i.url))return false;seen.add(i.url);return true;}).slice(0,limit);
+}
+
+// A navigation label is not a notice. Keep these out of discovery and fetch the title from the notice itself.
+export function genericTitle(value='') {
+ return /^(?:funding call:\s*|tender:\s*)?(?:view (?:call )?details|call details|read more|learn more|apply now|click here|view notice|details)$/i.test(plain(value).trim());
+}
+export function noticeTitle(html,fallback='') {
+ const headings=[...html.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/gi)].map(m=>plain(m[1]));
+ const title=plain(html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1]||'');
+ return [...headings,title,fallback].find(t=>t.length>=12&&!genericTitle(t))||'';
+}
+export function noticeText(html) {
+ const main=html.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i)?.[1]||html;
+ return plain(main.replace(/<aside\b[^>]*>[\s\S]*?<\/aside>/gi,' '));
 }

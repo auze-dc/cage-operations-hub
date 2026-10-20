@@ -1,0 +1,67 @@
+// Run: CAGE_TEST_MODULES=/tmp/cage-audit-tests/node_modules node validation/audit-reliability.mjs
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url);
+const {PGlite}=await import(`${process.env.CAGE_TEST_MODULES}/@electric-sql/pglite/dist/index.js`);
+const db=new PGlite();
+await db.exec(`CREATE ROLE anon; CREATE ROLE authenticated; CREATE SCHEMA auth;
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT '00000000-0000-0000-0000-000000000001'::uuid $$;
+CREATE TABLE organizations(id uuid PRIMARY KEY); INSERT INTO organizations VALUES('00000000-0000-0000-0000-000000000002');
+CREATE TABLE profiles(id uuid,active boolean,role text); INSERT INTO profiles VALUES(auth.uid(),true,'staff');
+CREATE FUNCTION current_organization_id() RETURNS uuid LANGUAGE sql AS $$SELECT '00000000-0000-0000-0000-000000000002'::uuid$$;
+CREATE FUNCTION module_level(text) RETURNS text LANGUAGE sql AS $$SELECT 'edit'::text$$;
+CREATE TABLE workspace_states(organization_id uuid PRIMARY KEY,data jsonb);
+INSERT INTO workspace_states VALUES(current_organization_id(),'{"quotes":[{"id":"old1","number":"Q-26002"},{"id":"old2","number":"Q-26002"}],"invoices":[],"requests":[]}');
+CREATE FUNCTION staff_edit_finance_document(text,jsonb,jsonb) RETURNS bigint LANGUAGE plpgsql AS $$declare w workspace_states;new_number bigint;begin
+select * into w from workspace_states limit 1;
+select greatest(26000,coalesce(max(substring(x->>'number' from '^Q-([0-9]+)$')::bigint),0))+1 into new_number from jsonb_array_elements(coalesce(w.data->'quotes','[]')) x;
+return new_number;end$$;
+CREATE FUNCTION quote_order_action(text,text,jsonb,jsonb,integer) RETURNS bigint LANGUAGE plpgsql AS $$declare w workspace_states;n bigint;begin
+select * into w from workspace_states limit 1;
+select greatest(26000,coalesce(max(substring(x->>'number' from '^INV-([0-9]+)$')::bigint),0))+1 into n from jsonb_array_elements(coalesce(w.data->'invoices','[]')) x;
+return n;end$$;`);
+const migration=fs.readFileSync('supabase/migrations/20261020190000_audit_numbering.sql','utf8');
+await db.exec(migration);await db.exec(migration);
+const reserve=async(k,id)=>(await db.query('select reserve_workspace_number($1,$2) as n',[k,id])).rows[0].n;
+assert.equal(await reserve('quotes','new1'),'Q-26003');
+assert.equal(await reserve('quotes','new1'),'Q-26003');
+const numbers=await Promise.all(Array.from({length:10},(_,i)=>reserve('quotes','parallel'+i)));
+assert.equal(new Set(numbers).size,10);
+assert.equal((await db.query("select staff_edit_finance_document('',null,null) n")).rows[0].n,26014);
+await db.exec(`UPDATE workspace_states SET data=jsonb_set(data,'{quotes,0,client}','"Edited"');`);
+await assert.rejects(db.exec(`UPDATE workspace_states SET data=jsonb_set(data,'{quotes}',data->'quotes'||'{"id":"dup","number":"Q-26002"}'::jsonb)`),/already in use/);
+await assert.rejects(db.exec(`UPDATE workspace_states SET data=jsonb_set(data,'{quotes}',data->'quotes'||'{"id":"steal","number":"Q-26003"}'::jsonb)`),/reserved/);
+await db.exec(`UPDATE workspace_states SET data=jsonb_set(data,'{quotes}',data->'quotes'||'{"id":"new1","number":"Q-26003"}'::jsonb)`);
+await assert.rejects(db.exec(`UPDATE workspace_states SET data=jsonb_set(data,'{quotes,0,number}','"Q-1"')`),/cannot be changed/);
+await db.exec(`INSERT INTO workspace_number_counters VALUES(current_organization_id(),'requests:'||to_char(now() AT TIME ZONE 'Africa/Blantyre','YYYY'),9999);`);
+assert.match(await reserve('requests','r1'),/^REQ-\d{4}-10000$/);
+await db.exec('UPDATE profiles SET active=false');
+await assert.rejects(reserve('invoices','noaccess'),/Active staff required/);
+await db.close();
+const money=require('../dist/amount-input.js');
+assert.equal(money.parse('1,100,000'),1100000);assert.equal(money.parse('1200000.50'),1200000.5);
+for(const x of ['1,10,000','1.100.000','-20','1e6','','12,00'])assert.ok(Number.isNaN(money.parse(x)),x);
+assert.equal(money.format(1100000),'1,100,000');
+const source=fs.readFileSync('supabase/functions/opportunity-scan/core.js','utf8');
+const core=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+assert.ok(core.genericTitle('Funding call: view call details'));
+assert.equal(core.noticeTitle('<h1>Drone innovation funding for Africa</h1><title>UNICEF</title>'),'Drone innovation funding for Africa');
+assert.equal(core.assess({title:'Funding call: view call details'},'',{}),null);
+const old=core.assess({title:'First Drone Cohort 2019',excerpt:'Funding applications for drone technology in Africa'},'',{});
+assert.ok(old?.historical);
+assert.ok(!core.noticeText('<main>Open drone grant<aside>Old tenders</aside></main>').includes('Old tenders'));
+console.log('PASS: migration applies twice; reservations unique/idempotent; server allocator shared; historical records editable; duplicates and stale-client collisions blocked; amount grouping; notice title and historical checks.');
+const {JSDOM}=require(`${process.env.CAGE_TEST_MODULES}/jsdom`);
+const dom=new JSDOM(['quote','invoice'].map(t=>`<form id="${t}-form"><div class="form-grid"><input name="amount"></div><div class="dialog-actions"></div></form>`).join('')+'<div id="send-document-preview"></div>',{runScripts:'outside-only'});
+const win=dom.window;win.escapeHtml=s=>String(s).replaceAll('&','&amp;').replaceAll('"','&quot;');
+win.eval(fs.readFileSync('dist/amount-input.js','utf8'));win.eval(fs.readFileSync('dist/documents-ui.js','utf8'));
+for(const type of ['quote','invoice']){
+ const f=win.document.getElementById(type+'-form');
+ win.CAGE_DOCUMENTS.fillItems(f,[{description:'Survey',quantity:2,unitPrice:1100000}]);
+ const price=f.querySelector('[data-item-price]');price.value='1,100,000';price.dispatchEvent(new win.Event('input',{bubbles:true}));
+ assert.equal(Number(f.elements.amount.value),2200000);assert.equal(win.CAGE_DOCUMENTS.fields(f).items[0].unitPrice,1100000);
+ price.value='1,10,000';price.dispatchEvent(new win.Event('input',{bubbles:true}));assert.ok(price.validationMessage);assert.throws(()=>win.CAGE_DOCUMENTS.fields(f));
+ price.value='1200000.50';price.dispatchEvent(new win.Event('input',{bubbles:true}));price.dispatchEvent(new win.Event('focusout',{bubbles:true}));assert.equal(price.value,'1,200,000.5');assert.equal(price.validationMessage,'');
+}
+dom.window.close();console.log('PASS: quote and invoice forms calculate grouped prices, reject malformed values and format on blur.');
