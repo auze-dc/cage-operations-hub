@@ -1,3 +1,4 @@
+import {validCronToken} from './cron-auth.js';
 import {createClient} from 'jsr:@supabase/supabase-js@2';
 import {SOURCES,canonical,parseFeed,parsePPDA,parseListing,feedURL,assess,safeText,plain,hash,feedURLs,directFeeds,candidates,genericTitle,noticeTitle,noticeText} from './core.js';
 const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization,x-client-info,apikey,content-type,x-cron-secret'};
@@ -6,7 +7,7 @@ Deno.serve(async req=>{
  if(req.method==='OPTIONS')return new Response('ok',{headers:cors});if(req.method!=='POST')return reply({ok:false,error:'POST required'},405);
  const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);let run:string|null=null;
  try{
- const body=await req.json().catch(()=>({}));const secret=Deno.env.get('CRON_SECRET');const cron=!!secret&&req.headers.get('x-cron-secret')===secret;let org;
+ const body=await req.json().catch(()=>({}));const cron=await validCronToken(db,req.headers.get('x-cron-secret'));let org;
  if(cron){org=body.organizationId;if(!org)return reply({ok:false,error:'organizationId required'},400);}else{
  const auth=await db.auth.getUser((req.headers.get('Authorization')||'').replace(/^Bearer\s+/i,''));if(auth.error||!auth.data.user)return reply({ok:false,error:'Sign in again'},401);
  const user=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_ANON_KEY')!,{global:{headers:{Authorization:req.headers.get('Authorization')!}}});
