@@ -52,14 +52,14 @@ export function assess(item,page='',source){if(genericTitle(item.title)||!item.t
  if(!caps.length&&grantLead)caps.push('Innovation, enterprise or environmental funding');
  if(!caps.length&&developmentLead)caps.push('Staff learning, leadership or enterprise development');
  if(!caps.length||(!opportunity.test(text)&&!grantLead&&!developmentLead))return null;
+ const closed=/\bapplications? (?:for [^.!?]{0,100} )?(?:are |is )?(?:now )?closed\b|\bapplication (?:period|window|cycle) (?:has )?(?:closed|ended)\b/i.test(page);
  const country=malawiEligibility(page||item.excerpt||'',!!page&&!!source?.official,developmentLead);
- const discoveryExcluded=country.status==='excluded';
+ const discoveryExcluded=country.status==='excluded'||closed;
  const geography=/\bmalawi\b/i.test(text)?'Malawi':/\b(southern africa|sadc)\b/i.test(text)?'Southern Africa':/\b(africa|african|sub-saharan)\b/i.test(text)?'Africa':/\b(global|worldwide|international bidders|developing countries)\b/i.test(text)?'International':'Not stated';
  const d=deadline((item.excerpt||'')+' '+page);const restriction=/\b(ngos? only|nonprofits? only|students? only|individuals? only|universities only|nationals only)\b/i.test(text);const partner=/\b(consortium|subcontractor|implementing partner|delivery partner)\b/i.test(text);
  const type=developmentLead?(/\b(award|competition|prize)\b/i.test(item.title)?'Award / Competition':'Fellowship / Training'):/\b(partnership|consortium|subcontractor)\b/i.test(item.title)?'Partnership':/\b(contract award|contract opportunity)\b/i.test(item.title)?'Contract':/\b(tender|rfp|rfq|procurement|bid|expression of interest)\b/i.test(item.title+' '+(item.excerpt||'').slice(0,500))?'Tender / RFQ':'Grant';
  const score=Math.min(95,35+caps.length*9+({Malawi:25,'Southern Africa':18,Africa:12,International:8}[geography]||0));
  const titleYear=Number(item.title.match(/\b(20\d{2})\b/)?.[1]||0);const historical=titleYear>0&&titleYear<new Date().getUTCFullYear()-1;
- const closed=/\bapplications? (?:for [^.!?]{0,100} )?(?:are |is )?(?:now )?closed\b|\bapplication (?:period|window|cycle) (?:has )?(?:closed|ended)\b/i.test(page);
  return {closed,applicantRoute:developmentLead?'Individual / staff — verify conditions':'Organisation / partner — verify conditions',fitLevel,matchPolicy:MATCH_POLICY,discoveryExcluded,countryEligibility:country.status,countryEvidence:country.evidence,eligibilityReason:country.reason,historical,type,geography,score,deadline:d.date,deadlineLabel:d.label,timezone:d.timezone,deadlineEvidence:d.evidence,capabilities:caps,
  eligibility:'Needs review',routeHint:restriction?'Restrictions detected — check eligibility':partner?'Potential partner route — verify conditions':'Check applicant eligibility',
  reason:`${developmentLead?'Potential staff development opportunity; individual eligibility must be checked.':fitLevel==='Potential grant fit'?'Potential funding fit — review whether a CAGE project meets the fund objectives.':'Matches '+caps.join(', ')+'.'} ${geography==='Not stated'?'Geography needs confirmation.':geography+' is mentioned in the notice.'} This is a relevance ranking, not confirmation that CAGE qualifies.`,
