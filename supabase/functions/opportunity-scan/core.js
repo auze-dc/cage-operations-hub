@@ -6,9 +6,31 @@ export const SOURCES=[
  {id:'bilateral',name:'Development partners',domains:['giz.de','developpp.de'],url:'https://www.developpp.de/en/',official:true},
  {id:'innovation',name:'Innovation & technology',domains:['unicefventurefund.org','gsma.com','gcgh.grandchallenges.org'],url:'https://www.unicefventurefund.org/apply-funding',official:true},
  {id:'climate',name:'Climate & conservation',domains:['iucn.org','greenclimate.fund','thegef.org'],url:'https://iucn.org/procurement/currently-running-tenders',official:true},
+ {id:'linkedin',name:'LinkedIn public leads',domains:['linkedin.com'],url:'https://www.linkedin.com/',official:false},
  {id:'discovery',name:'Secondary discovery',domains:['opportunitydesk.org','fundsforngos.org','opportunitiesforafricans.com'],url:'https://opportunitydesk.org/',official:false}
 ];
-const CAPABILITIES=[['Technical consulting & innovation',/\b(consultanc\w*|capacity building|entrepreneur\w*|startup\w*|start-up|innovation|renewable energy|water resources|climate|conservation|biodiversity|digital transformation)\b/i],['Drone operations',/\b(drone|uav|uas|rpas|lidar|photogrammetry)\b/i],['Geospatial services',/\b(gis|geospatial|mapping|remote sensing|earth observation|topographic|surveying)\b/i],['Agriculture',/\b(agricultur\w*|precision farming)\b/i],['Infrastructure & environment',/\b(inspection|environmental monitoring|disaster risk|climate adaptation|climate resilience|digital twin)\b/i],['Training & STEM',/\b(drone training|pilot training|stem education|technology education|digital skills|robotics|technology innovation|science education)\b/i]];
+const CAPABILITIES=[
+ ['Drone operations',/\b(drones?|uavs?|uas|rpas|lidar|photogrammetry|unmanned aerial|remotely piloted)\b/i],
+ ['Geospatial services',/\b(gis|geospatial|remote sensing|earth observation|topographic(?:al)?|land surveying|aerial surveying|satellite imagery|geographic information|spatial data)\b/i],
+ ['Precision agriculture',/\b(precision (?:farming|agriculture)|crop mapping|agricultural drones?|crop remote sensing)\b/i],
+ ['Training & STEM',/\b(drone training|remote pilot licen[cs]e|stem education|stem training|robotics education|robotics training|geospatial training)\b/i]
+];
+export const MATCH_POLICY='cage-malawi-v1';
+export function linkedinPost(url){try{const u=new URL(url);return /(^|\.)linkedin\.com$/.test(u.hostname)&&/^\/(?:posts\/|pulse\/|feed\/update\/urn:li:activity:)/.test(u.pathname);}catch{return false;}}
+// Country evidence must refer to applicants, not the project location or publisher's address.
+export function malawiEligibility(text='',trusted=false){
+ const clauses=plain(text).split(/(?<=[.!?;])\s+|[\r\n]+/).filter(x=>x.length<1400);
+ const evidence=clauses.filter(x=>/\b(eligib\w*|applicants?|applications? (?:are )?(?:open|invited)|open to|registered in|based in|established in|bidders?|nationals?|residents?|countries? (?:include|are|only))\b/i.test(x));
+ const explicitExcluded=evidence.find(x=>/\b(?:excluding|except|not (?:open|eligible)|ineligible)\b[^.;]{0,80}\bmalawi\b|\bmalawi\b[^.;]{0,60}\b(?:not eligible|ineligible|excluded)\b/i.test(x));
+ const entityExcluded=evidence.find(x=>/\b(?:only (?:registered )?(?:nonprofits?|non-profits?|ngos?|universities|students|individuals)|(?:nonprofits?|non-profits?|ngos?|universities|students|individuals) only)\b/i.test(x));
+ // An explicit restricted country list overrides broad Africa/global language.
+ const restricted=evidence.find(x=>/\b(?:eligible countries\s*(?:are\b|:)|(?:limited|restricted) to|only (?:applicants|companies|organisations|organizations|bidders)|(?:applicants|companies|organisations|organizations|bidders) (?:must be|must be legally) (?:registered|based|established) in)\b/i.test(x));
+ const allows=x=>/\bmalawi\b/i.test(x)||/\b(?:all|any) (?:african|sadc|sub-saharan african) (?:countries|country)|\b(?:worldwide|all countries|any country)\b/i.test(x)||/\b(?:open to|applicants (?:from|across)|companies (?:from|across))\s+(?:(?:all|any)\s+)?(?:africa|southern africa|sadc|sub-saharan africa)\b/i.test(x);
+ const positive=evidence.find(x=>allows(x)&&!/\b(?:not|except|excluding|limited|restricted)\b/i.test(x));
+ if(explicitExcluded||entityExcluded||(restricted&&!allows(restricted)))return {status:trusted?'excluded':'unknown',evidence:explicitExcluded||entityExcluded||restricted,reason:trusted?'Published applicant restrictions do not establish a direct route for CAGE in Malawi.':'Restrictions appear in a search excerpt; verify the official notice.'};
+ if(positive&&trusted)return {status:'supported',evidence:positive,reason:'Published country wording includes Malawi; other application conditions still need review.'};
+ return {status:'unknown',evidence:positive||'',reason:positive?'Country wording found in a search excerpt; official confirmation needed.':'No explicit Malawi applicant eligibility found. A project location is not applicant eligibility.'};
+}
 const opportunity=/\b(tender|rfp|rfq|procurement|bid|grant|funding|call for proposals|expression of interest|contract|partnership|consortium|accelerator|challenge|call for applications|applications open|apply now)\b/i;
 export function canonical(value){try{const u=new URL(decode(value));if(u.protocol!=='https:'||u.username||u.password||u.port)return '';u.hash='';for(const k of [...u.searchParams.keys()])if(/^(utm_|fbclid|gclid|msclkid)/i.test(k))u.searchParams.delete(k);u.searchParams.sort();return u.href.replace(/\/$/,'');}catch{return '';}}
 export function allowed(value){const u=canonical(value);if(!u)return false;const h=new URL(u).hostname;return SOURCES.some(s=>s.domains.some(d=>h===d||h.endsWith('.'+d)))||h==='www.bing.com';}
@@ -24,12 +46,14 @@ export function deadline(text){
  const d=new Date(m[1]);const date=Number.isFinite(d.getTime())?d.toISOString().slice(0,10):null;return {date,label:date||'Not stated',timezone:m[2]?.match(/\b(?:UTC|GMT|CAT|EAT|CET|CEST)(?:\s*[+-]\s*\d{1,2}(?::\d{2})?)?\b/i)?.[0]||'Not stated',evidence:m[0].trim()};
 }
 export function assess(item,page='',source){if(genericTitle(item.title)||!item.title)return null;const text=item.title+' '+(item.excerpt||'')+' '+page;const caps=CAPABILITIES.filter(([,r])=>r.test(text)).map(([n])=>n);if(!caps.length||!opportunity.test(text))return null;
+ const country=malawiEligibility(page||item.excerpt||'',!!page&&!!source?.official);
+ const discoveryExcluded=country.status==='excluded';
  const geography=/\bmalawi\b/i.test(text)?'Malawi':/\b(southern africa|sadc)\b/i.test(text)?'Southern Africa':/\b(africa|african|sub-saharan)\b/i.test(text)?'Africa':/\b(global|worldwide|international bidders|developing countries)\b/i.test(text)?'International':'Not stated';
  const d=deadline((item.excerpt||'')+' '+page);const restriction=/\b(ngos? only|nonprofits? only|students? only|individuals? only|universities only|nationals only)\b/i.test(text);const partner=/\b(consortium|subcontractor|implementing partner|delivery partner)\b/i.test(text);
  const type=/\b(partnership|consortium|subcontractor)\b/i.test(item.title)?'Partnership':/\b(contract award|contract opportunity)\b/i.test(item.title)?'Contract':/\b(tender|rfp|rfq|procurement|bid|expression of interest)\b/i.test(item.title+' '+(item.excerpt||'').slice(0,500))?'Tender / RFQ':'Grant';
  const score=Math.min(95,35+caps.length*9+({Malawi:25,'Southern Africa':18,Africa:12,International:8}[geography]||0));
  const titleYear=Number(item.title.match(/\b(20\d{2})\b/)?.[1]||0);const historical=titleYear>0&&titleYear<new Date().getUTCFullYear()-1;
- return {historical,type,geography,score,deadline:d.date,deadlineLabel:d.label,timezone:d.timezone,deadlineEvidence:d.evidence,capabilities:caps,
+ return {matchPolicy:MATCH_POLICY,discoveryExcluded,countryEligibility:country.status,countryEvidence:country.evidence,eligibilityReason:country.reason,historical,type,geography,score,deadline:d.date,deadlineLabel:d.label,timezone:d.timezone,deadlineEvidence:d.evidence,capabilities:caps,
  eligibility:'Needs review',routeHint:restriction?'Restrictions detected — check eligibility':partner?'Potential partner route — verify conditions':'Check applicant eligibility',
  reason:`Matches ${caps.join(', ')}. ${geography==='Not stated'?'Geography needs confirmation.':geography+' is mentioned in the notice.'} This is a relevance ranking, not confirmation that CAGE qualifies.`,
  organisation:item.organisation||'Not stated',estimatedValue:'Not stated',sourceKind:source?.official?'Official domain':'Secondary source',verification:page?'Page retrieved — staff verification required':'Search excerpt only',summary:plain(page||item.excerpt||'').slice(0,1200),requirements:[],checkedAt:new Date().toISOString()};}
@@ -41,13 +65,13 @@ export function parseListing(html,source){if(source.id==='malawi')return parsePP
 // Multiple independent discovery routes; search snippets are never treated as verified notices.
 export function feedURLs(source){
  const slot=Math.floor(Date.now()/43200000);
- const terms=['(drone OR geospatial OR mapping OR surveying)','(agriculture OR climate OR innovation OR digital skills)'];
- return terms.map((term,i)=>'https://www.bing.com/search?format=rss&q='+encodeURIComponent(`(Malawi OR Africa OR global) (tender OR grant OR funding OR proposals) ${term} site:${source.domains[(slot+i)%source.domains.length]}`));
+ const terms=['(drone OR geospatial OR remote sensing OR lidar)','(precision agriculture OR earth observation OR STEM education OR land surveying)'];
+ return terms.map((term,i)=>'https://www.bing.com/search?format=rss&q='+encodeURIComponent(`(Malawi OR Africa OR global) (tender OR grant OR funding OR proposals) ${term} site:${source.id==='linkedin'?'linkedin.com/posts':source.domains[(slot+i)%source.domains.length]}`));
 }
 export function directFeeds(source){return source.id==='discovery'?['https://opportunitydesk.org/feed/','https://www.opportunitiesforafricans.com/feed/']:[];}
 export function candidates(items,oldRows,saved,limit=40,rotation=Math.floor(Date.now()/60000)){
  const seen=new Set();const last=new Map(oldRows.map(x=>[canonical(x.source_url),x.raw_data?.checkedAt||'']));
- const ranked=items.filter(i=>allowed(i.url)).sort((a,b)=>{
+ const ranked=items.filter(i=>allowed(i.url)&&(!i.url.includes('linkedin.com')||linkedinPost(i.url))).sort((a,b)=>{
   const aOld=last.get(a.url),bOld=last.get(b.url);
   if(!!aOld!==!!bOld)return aOld?1:-1;
   if(aOld&&bOld)return aOld.localeCompare(bOld);
