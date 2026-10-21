@@ -53,7 +53,7 @@ assert.equal(core.assess({title:'Research fellowship in international affairs'},
 
 const secondary={official:false};
 const rock=core.assess({title:'Rockefeller Foundation Big Bets Fellowship 2027',excerpt:'Leadership and climate innovation programme for individuals.'},'Applications are open to individuals across Africa. Applications are now closed.',official);
-assert.equal(rock.type,'Fellowship / Training');assert.equal(rock.fitLevel,'Staff development');assert.equal(rock.closed,true);assert.equal(rock.discoveryExcluded,false);assert.match(rock.applicantRoute,/Individual/);
+assert.equal(rock.type,'Fellowship / Training');assert.equal(rock.fitLevel,'Staff development');assert.equal(rock.closed,true);assert.equal(rock.discoveryExcluded,true);assert.match(rock.applicantRoute,/Individual/);
 assert.equal(core.assess({title:'Climate leadership fellowship 2027'},'Applicants must be based in Kenya.',official).countryEligibility,'excluded');
 assert.equal(core.assess({title:'Climate leadership fellowship 2027',excerpt:'Open to Malawi applicants'},'',secondary).countryEligibility,'unknown');
 assert.equal(core.assess({title:'Climate innovation prize competition 2027'},'',official).type,'Award / Competition');
