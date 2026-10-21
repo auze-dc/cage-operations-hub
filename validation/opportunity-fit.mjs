@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const core=await import('data:text/javascript;base64,'+Buffer.from(readFileSync('supabase/functions/opportunity-scan/core.js','utf8')).toString('base64'));
 const official={official:true};
-for(const title of ['Tender: Road construction consultancy and solar streetlights','Tender: Provision of consultancy services for marketing agency','Tender: Office complex design and construction supervision','Grant: climate adaptation and agriculture innovation'])assert.equal(core.assess({title,excerpt:'Malawi procurement notice'},'',official),null,title);
+for(const title of ['Tender: Road construction consultancy and solar streetlights','Tender: Provision of consultancy services for marketing agency','Tender: Office complex design and construction supervision'])assert.equal(core.assess({title,excerpt:'Malawi procurement notice'},'',official),null,title);
 const title='Tender: drone mapping and geospatial survey';
 let fit=core.assess({title},'Applications are open to companies based in Malawi. Closing date: 2026-12-01.',official);
 assert.equal(fit.countryEligibility,'supported');assert.equal(fit.deadline,'2026-12-01');
@@ -29,7 +29,11 @@ const records=[['eligible','supported',false],['uncertain','unknown',false],['ex
 win.CAGE_BACKEND={isProduction:()=>true,opportunityDashboard:async()=>({matches:records,staff:[],runs:[],settings:{frequency:'twice_daily'}})};
 win.eval(readFileSync('dist/opportunities.js','utf8'));await new Promise(r=>setTimeout(r,10));
 const titles=()=>[...win.document.querySelectorAll('.opp-row h3')].map(x=>x.textContent);
-assert.deepEqual(titles(),['eligible']);
+assert.deepEqual(titles(),['eligible','uncertain']);
 win.document.querySelector('[data-opp-tab="Needs verification"]').click();assert.deepEqual(titles(),['uncertain']);
 win.document.querySelector('[data-opp-tab="All"]').click();assert.equal(titles().length,4);
 dom.window.close();console.log('Discovery, verification and retained history views passed.');
+
+assert.equal(core.assess({title:'Youth Ecopreneur Programme funding 2026'},'',official).fitLevel,'Potential grant fit');
+assert.equal(core.assess({title:'Grant: climate adaptation and agriculture innovation'},'',official).fitLevel,'Potential grant fit');
+assert.equal(core.assess({title:'Research fellowship in international affairs'},'',official),null);

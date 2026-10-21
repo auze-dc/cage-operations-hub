@@ -27,7 +27,7 @@ Deno.serve(async req=>{
  // Reclassify legacy results once without touching staff tracking, notes or saved applications.
  for(const row of oldRows.filter(x=>x.raw_data?.matchPolicy!==MATCH_POLICY)){
   const old=row.raw_data||{};const fit=assess({title:row.title,excerpt:old.summary||''},'',null);
-  const classification=fit?{matchPolicy:MATCH_POLICY,discoveryExcluded:fit.discoveryExcluded,countryEligibility:fit.countryEligibility,countryEvidence:fit.countryEvidence,eligibilityReason:fit.eligibilityReason,capabilities:fit.capabilities}:{matchPolicy:MATCH_POLICY,discoveryExcluded:true,countryEligibility:'unknown',eligibilityReason:'No specific CAGE service scope found in stored notice evidence.'};
+  const classification=fit?{fitLevel:fit.fitLevel,matchPolicy:MATCH_POLICY,discoveryExcluded:fit.discoveryExcluded,countryEligibility:fit.countryEligibility,countryEvidence:fit.countryEvidence,eligibilityReason:fit.eligibilityReason,capabilities:fit.capabilities}:{matchPolicy:MATCH_POLICY,discoveryExcluded:true,countryEligibility:'unknown',eligibilityReason:'No specific CAGE service scope found in stored notice evidence.'};
   const raw={...old,...classification};
   const changed=await db.from('opportunity_matches').update({raw_data:raw}).eq('id',row.id).eq('organization_id',org).eq('updated_at',row.updated_at).select('id');
   if(changed.error)throw Error('Could not reclassify stored opportunity');if(changed.data?.length)row.raw_data=raw;
