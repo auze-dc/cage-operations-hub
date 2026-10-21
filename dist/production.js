@@ -433,12 +433,26 @@
     catch(error){if(refreshGeneration===sessionGeneration)sessionCheckFailure(error,true,profile?.id,refreshGeneration);}finally{accessRefreshRunning=false;}
   }
   retryLogin.addEventListener('click',async()=>{retryLogin.disabled=true;try{const r=await limited(client.auth.getSession(),'Session check');if(r.error)throw r.error;if(!r.data.session){showLogin('Please sign in again.');retryLogin.hidden=true;}else await establishSession(r.data.session);}catch(error){loginFailure(error);}finally{retryLogin.disabled=false;}});
+  // Bound auth HTTP requests as well as the UI wait. A timed-out Promise.race alone
+  // leaves the SDK's refresh request holding the session lock in the background.
+  async function authFetch(input,options={}){
+    const url=typeof input==='string'?input:input.url;
+    if(!url?.startsWith(config.supabaseUrl+'/auth/v1/'))return window.fetch(input,options);
+    const controller=new AbortController(),parent=options.signal||input?.signal;
+    const abort=()=>controller.abort(parent.reason);
+    if(parent?.aborted)abort();else parent?.addEventListener('abort',abort,{once:true});
+    const timeout=setTimeout(()=>controller.abort(new DOMException('Sign-in connection timed out','TimeoutError')),10000);
+    try{return await window.fetch(input,{...options,signal:controller.signal});}
+    finally{clearTimeout(timeout);parent?.removeEventListener('abort',abort);}
+  }
   async function boot(appApi){
-    app=appApi;document.body.classList.add('auth-pending');
+    app=appApi;
+    document.body.classList.remove('auth-pending');
+    document.body.classList.add('session-checking');
     if(!configured()){showLogin('Deployment setup is incomplete. Ask your administrator to verify the runtime configuration.');return;}
     if(!window.supabase?.createClient){showLogin('The database client could not load. Refresh the page or check your connection.');return;}
     try{
-      client=window.supabase.createClient(config.supabaseUrl,config.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+      client=window.supabase.createClient(config.supabaseUrl,config.supabaseAnonKey,{global:{fetch:authFetch},auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,lockAcquireTimeout:10000}});
       client.auth.onAuthStateChange((event,session)=>{
         if(!['SIGNED_IN','SIGNED_OUT','PASSWORD_RECOVERY'].includes(event))return;
         const eventVersion=++authEventVersion;
