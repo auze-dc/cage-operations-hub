@@ -559,7 +559,7 @@
   async function admissionReminder(id,due,note,requestKey){const r=await client.rpc('queue_academy_payment_reminder',{app:id,due_on:due,note,request_key:requestKey});if(r.error)throw r.error;return r.data;}
   async function scanOpportunities() {
     if (!client || !profile) throw new Error("Sign in before running an opportunity scan.");
-    if (!['admin', 'manager'].includes(profile.role)) throw new Error("Only an Administrator or Manager can run a live scan.");
+    if (!profile.active || profile.role === 'shared') throw new Error("An active staff account is required to run a live scan.");
     const { data, error } = await client.functions.invoke("opportunity-scan", { body: { organizationId: config.organizationId, manual: true } });
     if (error) {let detail;try{detail=await error.context?.json();}catch{}throw new Error(detail?.error||error.message||"Live opportunity search failed.");}
     if (!data?.ok) throw new Error(data?.error || "Live opportunity search failed.");
