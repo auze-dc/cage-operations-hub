@@ -5,15 +5,16 @@ const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'au
 const reply=(x:unknown,status=200)=>new Response(JSON.stringify(x),{status,headers:{...cors,'Content-Type':'application/json'}});
 Deno.serve(async req=>{
  if(req.method==='OPTIONS')return new Response('ok',{headers:cors});if(req.method!=='POST')return reply({ok:false,error:'POST required'},405);
- const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);let run:string|null=null;
+ const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);let run:string|null=null;let actor:string|null=null;
  try{
  const body=await req.json().catch(()=>({}));const cron=await validCronToken(db,req.headers.get('x-cron-secret'));let org;
  if(cron){org=body.organizationId;if(!org)return reply({ok:false,error:'organizationId required'},400);}else{
  const auth=await db.auth.getUser((req.headers.get('Authorization')||'').replace(/^Bearer\s+/i,''));if(auth.error||!auth.data.user)return reply({ok:false,error:'Sign in again'},401);
  const user=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_ANON_KEY')!,{global:{headers:{Authorization:req.headers.get('Authorization')!}}});
- const access=await user.rpc('opportunity_access',{editing:true});const p=await db.from('profiles').select('organization_id,role,active').eq('id',auth.data.user.id).single();if(access.error||!access.data||!p.data?.active||!['admin','manager'].includes(p.data.role))return reply({ok:false,error:'Commercial edit access and Manager or Administrator role required'},403);org=p.data.organization_id;
+ const access=await user.rpc('opportunity_access',{editing:false});const p=await db.from('profiles').select('organization_id,role,active').eq('id',auth.data.user.id).single();if(access.error||!access.data||!p.data?.active||p.data.role==='shared')return reply({ok:false,error:'Active staff opportunity access required'},403);org=p.data.organization_id;actor=auth.data.user.id;
  }
  const begin=await db.rpc('opportunity_scan_begin',{org,manual:!cron||body.runNow===true});if(begin.error)throw Error(begin.error.message);run=begin.data;if(!run)return reply({ok:true,skipped:true,message:'A scan is already running, ran recently, or is not scheduled yet.'});
+ if(actor){const who=await db.from('opportunity_scan_runs').update({requested_by:actor}).eq('id',run);if(who.error)throw Error('Could not record scan requester');}
  const settings=await db.from('opportunity_scan_settings').select('*').eq('organization_id',org).maybeSingle();if(settings.error)throw Error(settings.error.message);
  const sources=SOURCES.filter(s=>!settings.data?.disabled_sources?.includes(s.id));
  // Search groups are discovery queries, never claimed to be complete portal coverage.
@@ -21,13 +22,14 @@ Deno.serve(async req=>{
  let direct:any[]=[],search:any[]=[],notes:string[]=[],directOK=false,searchOK=false;
  if(['malawi','banks','innovation','climate','un'].includes(s.id)){try{direct=parseListing(await safeText(s.url),s);directOK=true;}catch(e){notes.push('Direct listing: '+(e as Error).message);}}
  await Promise.all([...directFeeds(s),...feedURLs(s)].map(async url=>{try{search.push(...parseFeed(await safeText(url)));searchOK=true;}catch(e){notes.push('Discovery feed: '+(e as Error).message);}}));
+ if(s.id==='foundations')direct.push({title:'Rockefeller Foundation Big Bets Fellowships',url:s.url,excerpt:'Leadership development fellowship. Check the official page for application status and next cycle.'});
  const unique=new Map([...direct,...search].map(i=>[i.url,i]));const items=[...unique.values()].filter(i=>s.id!=='linkedin'||linkedinPost(i.url));const status=!directOK&&!searchOK?'failed':notes.length?'partial':'ok';reports.push({id:s.id,name:s.name,url:s.url,status,count:items.length,method:s.id==='linkedin'?'Public indexed posts only; official eligibility needs verification':directOK?'Direct listing'+(searchOK?' + search RSS':''):'Multiple search / RSS feeds',error:notes.join(' · '),at:new Date().toISOString()});return items.map(i=>({...i,source:s}));
  }))).flat();
  const oldRows:any[]=[];for(let start=0;;start+=1000){const r=await db.from('opportunity_matches').select('*').eq('organization_id',org).order('id').range(start,start+999);if(r.error)throw Error(r.error.message);oldRows.push(...r.data);if(r.data.length<1000)break;}
  // Reclassify legacy results once without touching staff tracking, notes or saved applications.
  for(const row of oldRows.filter(x=>x.raw_data?.matchPolicy!==MATCH_POLICY)){
   const old=row.raw_data||{};const fit=assess({title:row.title,excerpt:old.summary||''},'',null);
-  const classification=fit?{fitLevel:fit.fitLevel,matchPolicy:MATCH_POLICY,discoveryExcluded:fit.discoveryExcluded,countryEligibility:fit.countryEligibility,countryEvidence:fit.countryEvidence,eligibilityReason:fit.eligibilityReason,capabilities:fit.capabilities}:{matchPolicy:MATCH_POLICY,discoveryExcluded:true,countryEligibility:'unknown',eligibilityReason:'No specific CAGE service scope found in stored notice evidence.'};
+  const classification=fit?{fitLevel:fit.fitLevel,matchPolicy:MATCH_POLICY,discoveryExcluded:fit.discoveryExcluded,countryEligibility:fit.countryEligibility,countryEvidence:fit.countryEvidence,eligibilityReason:fit.eligibilityReason,applicantRoute:fit.applicantRoute,closed:fit.closed,capabilities:fit.capabilities}:{matchPolicy:MATCH_POLICY,discoveryExcluded:true,countryEligibility:'unknown',eligibilityReason:'No specific CAGE service scope found in stored notice evidence.'};
   const raw={...old,...classification};
   const changed=await db.from('opportunity_matches').update({raw_data:raw}).eq('id',row.id).eq('organization_id',org).eq('updated_at',row.updated_at).select('id');
   if(changed.error)throw Error('Could not reclassify stored opportunity');if(changed.data?.length)row.raw_data=raw;
@@ -46,7 +48,7 @@ Deno.serve(async req=>{
  const old=previous?.raw_data||{};const changed=!!previous&&!unchanged&&!!page;
  const changes=changed?[{at:new Date().toISOString(),note:data.deadline!==previous.deadline?'Detected deadline text changed; verify against the notice.':'Source text changed; review requirements, cancellation or outcome notices.'},...(old.changes||[])].slice(0,12):(old.changes||[]);
  // A failed recheck never erases previously collected evidence or dates.
- if(previous&&!page)data={...old,...data,pageError};
+ if(previous&&!page)data={...old,...data,pageError,closed:old.closed??data.closed};
  const row={organization_id:org,external_key:previous?.external_key||await hash(item.url),title:item.title,organization:data.organisation&&data.organisation!=='Not stated'?data.organisation:previous?.organization||'Not stated',opportunity_type:data.type||previous?.opportunity_type||'Grant',source_name:new URL(item.url).hostname,source_url:item.url,deadline:previous&&!page?previous.deadline:data.deadline||null,status:previous?.status||'New',match_score:data.score||previous?.match_score||50,match_reason:data.reason||previous?.match_reason||'Review required',updated_at:new Date().toISOString(),raw_data:{...data,fingerprint:previous&&!page?old.fingerprint:fingerprint,checkedAt:new Date().toISOString(),pageError,changes,sourceGroup:item.source?.name||'Saved source',sourceLinks:[...new Set([...(old.sourceLinks||[]),item.url])],summaryMethod:'Source excerpt + rule-based relevance; no AI eligibility decision'}};
  const save=await db.from('opportunity_matches').upsert(row,{onConflict:'organization_id,external_key'});if(save.error){errors++;return;}if(previous){if(changed)updated++;}else added++;
  }));}
