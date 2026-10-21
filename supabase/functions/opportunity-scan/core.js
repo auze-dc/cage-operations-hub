@@ -15,7 +15,7 @@ const CAPABILITIES=[
  ['Precision agriculture',/\b(precision (?:farming|agriculture)|crop mapping|agricultural drones?|crop remote sensing)\b/i],
  ['Training & STEM',/\b(drone training|remote pilot licen[cs]e|stem education|stem training|robotics education|robotics training|geospatial training)\b/i]
 ];
-export const MATCH_POLICY='cage-malawi-v1';
+export const MATCH_POLICY='cage-malawi-v2';
 export function linkedinPost(url){try{const u=new URL(url);return /(^|\.)linkedin\.com$/.test(u.hostname)&&/^\/(?:posts\/|pulse\/|feed\/update\/urn:li:activity:)/.test(u.pathname);}catch{return false;}}
 // Country evidence must refer to applicants, not the project location or publisher's address.
 export function malawiEligibility(text='',trusted=false){
@@ -45,7 +45,10 @@ export function deadline(text){
  if(!m)return {date:null,label:/\b(rolling applications|rolling deadline|applications accepted on a rolling basis)\b/i.test(text)?'Rolling':'Not stated',timezone:'Not stated',evidence:''};
  const d=new Date(m[1]);const date=Number.isFinite(d.getTime())?d.toISOString().slice(0,10):null;return {date,label:date||'Not stated',timezone:m[2]?.match(/\b(?:UTC|GMT|CAT|EAT|CET|CEST)(?:\s*[+-]\s*\d{1,2}(?::\d{2})?)?\b/i)?.[0]||'Not stated',evidence:m[0].trim()};
 }
-export function assess(item,page='',source){if(genericTitle(item.title)||!item.title)return null;const text=item.title+' '+(item.excerpt||'')+' '+page;const caps=CAPABILITIES.filter(([,r])=>r.test(text)).map(([n])=>n);if(!caps.length||!opportunity.test(text))return null;
+export function assess(item,page='',source){if(genericTitle(item.title)||!item.title)return null;const text=item.title+' '+(item.excerpt||'')+' '+page;const caps=CAPABILITIES.filter(([,r])=>r.test(text)).map(([n])=>n);const grantLead=/\b(grants?|funding|fund|accelerator|incubation|call for proposals|ecopreneur|entrepreneur)\b/i.test(item.title)&&!/\b(fellowship|scholarship|visiting scholar|research fellow)\b/i.test(item.title)&&/\b(innovation|technology|tech|artificial intelligence|AI|data|digital|climate|conservation|ecopreneur|entrepreneur|agripreneur|startup|start-up)\b/i.test(item.title+' '+(item.excerpt||'').slice(0,1200));
+ const fitLevel=caps.length?'Direct service match':'Potential grant fit';
+ if(!caps.length&&grantLead)caps.push('Innovation, enterprise or environmental funding');
+ if(!caps.length||(!opportunity.test(text)&&!grantLead))return null;
  const country=malawiEligibility(page||item.excerpt||'',!!page&&!!source?.official);
  const discoveryExcluded=country.status==='excluded';
  const geography=/\bmalawi\b/i.test(text)?'Malawi':/\b(southern africa|sadc)\b/i.test(text)?'Southern Africa':/\b(africa|african|sub-saharan)\b/i.test(text)?'Africa':/\b(global|worldwide|international bidders|developing countries)\b/i.test(text)?'International':'Not stated';
@@ -53,9 +56,9 @@ export function assess(item,page='',source){if(genericTitle(item.title)||!item.t
  const type=/\b(partnership|consortium|subcontractor)\b/i.test(item.title)?'Partnership':/\b(contract award|contract opportunity)\b/i.test(item.title)?'Contract':/\b(tender|rfp|rfq|procurement|bid|expression of interest)\b/i.test(item.title+' '+(item.excerpt||'').slice(0,500))?'Tender / RFQ':'Grant';
  const score=Math.min(95,35+caps.length*9+({Malawi:25,'Southern Africa':18,Africa:12,International:8}[geography]||0));
  const titleYear=Number(item.title.match(/\b(20\d{2})\b/)?.[1]||0);const historical=titleYear>0&&titleYear<new Date().getUTCFullYear()-1;
- return {matchPolicy:MATCH_POLICY,discoveryExcluded,countryEligibility:country.status,countryEvidence:country.evidence,eligibilityReason:country.reason,historical,type,geography,score,deadline:d.date,deadlineLabel:d.label,timezone:d.timezone,deadlineEvidence:d.evidence,capabilities:caps,
+ return {fitLevel,matchPolicy:MATCH_POLICY,discoveryExcluded,countryEligibility:country.status,countryEvidence:country.evidence,eligibilityReason:country.reason,historical,type,geography,score,deadline:d.date,deadlineLabel:d.label,timezone:d.timezone,deadlineEvidence:d.evidence,capabilities:caps,
  eligibility:'Needs review',routeHint:restriction?'Restrictions detected — check eligibility':partner?'Potential partner route — verify conditions':'Check applicant eligibility',
- reason:`Matches ${caps.join(', ')}. ${geography==='Not stated'?'Geography needs confirmation.':geography+' is mentioned in the notice.'} This is a relevance ranking, not confirmation that CAGE qualifies.`,
+ reason:`${fitLevel==='Potential grant fit'?'Potential funding fit — review whether a CAGE project meets the fund objectives.':'Matches '+caps.join(', ')+'.'} ${geography==='Not stated'?'Geography needs confirmation.':geography+' is mentioned in the notice.'} This is a relevance ranking, not confirmation that CAGE qualifies.`,
  organisation:item.organisation||'Not stated',estimatedValue:'Not stated',sourceKind:source?.official?'Official domain':'Secondary source',verification:page?'Page retrieved — staff verification required':'Search excerpt only',summary:plain(page||item.excerpt||'').slice(0,1200),requirements:[],checkedAt:new Date().toISOString()};}
 export async function safeText(url,fetcher=fetch){if(!allowed(url))throw Error('Source domain requires manual review');let current=url;for(let n=0;n<4;n++){const r=await fetcher(current,{redirect:'manual',headers:{'User-Agent':'CAGE-Opportunity-Monitor/4.0'},signal:AbortSignal.timeout(6500)});if(r.status>=300&&r.status<400){current=new URL(r.headers.get('location')||'',current).href;if(!allowed(current))throw Error('Redirect requires manual review');continue;}if(!r.ok)throw Error('Source returned HTTP '+r.status);if(!/text|xml|json/i.test(r.headers.get('content-type')||''))throw Error('PDF or unsupported content — open the source manually');const reader=r.body?.getReader();if(!reader)throw Error('Empty source response');let size=0,parts=[];try{for(;;){const x=await reader.read();if(x.done)break;size+=x.value.length;if(size>1500000)throw Error('Source exceeds scan size limit');parts.push(x.value);}}finally{await reader.cancel().catch(()=>{});}const bytes=new Uint8Array(size);let off=0;for(const b of parts){bytes.set(b,off);off+=b.length;}return new TextDecoder().decode(bytes);}throw Error('Too many redirects');}
 export const hash=async value=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)))).map(x=>x.toString(16).padStart(2,'0')).join('');
@@ -65,7 +68,7 @@ export function parseListing(html,source){if(source.id==='malawi')return parsePP
 // Multiple independent discovery routes; search snippets are never treated as verified notices.
 export function feedURLs(source){
  const slot=Math.floor(Date.now()/43200000);
- const terms=['(drone OR geospatial OR remote sensing OR lidar)','(precision agriculture OR earth observation OR STEM education OR land surveying)'];
+ const terms=['(drone OR geospatial OR remote sensing OR lidar)','(innovation funding OR climate technology OR entrepreneurship grant OR STEM education)'];
  return terms.map((term,i)=>'https://www.bing.com/search?format=rss&q='+encodeURIComponent(`(Malawi OR Africa OR global) (tender OR grant OR funding OR proposals) ${term} site:${source.id==='linkedin'?'linkedin.com/posts':source.domains[(slot+i)%source.domains.length]}`));
 }
 export function directFeeds(source){return source.id==='discovery'?['https://opportunitydesk.org/feed/','https://www.opportunitiesforafricans.com/feed/']:[];}
