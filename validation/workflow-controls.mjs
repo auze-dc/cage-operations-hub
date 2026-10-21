@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const teamwork=read('dist/teamwork.js');
+const controls=[{disabled:false,title:'Original',isConnected:true,matches:()=>false},{disabled:true,title:'Busy',isConnected:true,matches:()=>false},{disabled:false,title:'Close',isConnected:true,matches:()=>true}];
+const ctx=vm.createContext({controls,container:{querySelectorAll:()=>controls}});
+vm.runInContext(teamwork.slice(teamwork.indexOf('const accessDisabled='),teamwork.indexOf('function applyAccess()')),ctx);
+vm.runInContext("readOnly(container,'close')",ctx);
+assert.equal(controls[0].disabled,true);
+vm.runInContext('restoreAccessControls()',ctx);
+assert.equal(controls[0].disabled,false);
+assert.equal(controls[0].title,'Original');
+assert.equal(controls[1].disabled,true,'Do not enable controls disabled by other code');
+assert.equal(controls[2].disabled,false);
+vm.runInContext("readOnly(container,'close')",ctx);
+assert.equal(controls[0].disabled,true,'Access revocation still disables controls');
+const source=read('dist/quote-order.js');
+const submit=source.slice(source.indexOf('async function submit('),source.indexOf('async function open('));
+for(const attached of [false,true]){
+ const file={name:'evidence.pdf',size:12,lastModified:1};
+ const form={dataset:{qwForm:'accept'},elements:{confirmed:{checked:true},evidence:{files:attached?[file]:[]}},querySelectorAll:()=>[]};
+ let payload,uploads=0;
+ const context=vm.createContext({busy:false,epoch:1,data:{quote:{id:'q-test'},order:null},FormData:class{*[Symbol.iterator](){yield ['contact','Test'];yield ['evidence',attached?file:{}];}},$:()=>({textContent:''}),api:()=>({uploadFile:async()=>{uploads++;return {path:'verified/path'};},quoteOrder:async(id,action,q,values)=>{payload=values;return {};}}),render:()=>{}});
+ vm.runInContext(submit,context);
+ await context.submit({preventDefault(){},currentTarget:form});
+ assert.equal(payload.confirmed,true);
+ assert.equal(payload.contact,'Test');
+ assert.equal(payload.evidence,attached?'verified/path':undefined);
+ assert.equal(uploads,attached?1:0);
+}
+const html=read('dist/index.html');
+const step=Number(html.match(/name="value" type="number" min="0" step="([^"]+)" placeholder="Optional"/)[1]);
+for(const amount of [100,1250,1250.50])assert.ok(Math.abs(amount/step-Math.round(amount/step))<1e-7);
+assert.match(read('dist/production.js'),/showWorkspace\(data,patches\);\s+applyPermissions\(\);/);
+console.log('Workflow controls: access refresh, optional/uploaded evidence, and amount precision passed.');

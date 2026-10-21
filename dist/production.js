@@ -272,6 +272,7 @@
     if(pendingState&&resetEpoch(cloudBase)!==resetEpoch(data.data))quarantineResetDraft({base:cloudBase,next:pendingState});
     const patches=pendingState?writableChanges(cloudBase,pendingState):[];
     showWorkspace(data,patches);
+    applyPermissions();
   }
   async function retryBlockedDraft(id){
     const item=blockedDrafts().find(x=>x.id===id);if(!item)throw new Error('This recovery draft is no longer listed.');
