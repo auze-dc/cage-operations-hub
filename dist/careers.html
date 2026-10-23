@@ -1,50 +1,32 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#071724">
-  <meta name="description" content="Apply for open roles at CAGE Malawi.">
-  <title>Careers at CAGE</title>
-  
-  <link rel="stylesheet" href="./careers.css">
-<link rel="icon" type="image/png" href="./cage-favicon.png?v=20260930-2">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#00ADEF"><meta name="description" content="Find your next opportunity at CAGE Malawi. Explore open roles and apply online.">
+<title>Careers at CAGE · Make your next move</title>
+<link rel="stylesheet" href="./careers.css?v=20261023-1"><link rel="icon" type="image/png" href="./cage-favicon.png?v=20260930-2">
 </head>
 <body>
-  <header class="career-header"><img src="./cage-logo.svg" alt="CAGE"><a href="https://www.cagemw.com">cagemw.com</a></header>
-  <main>
-    <section class="career-intro">
-      <p class="eyebrow">Careers at CAGE</p>
-      <h1>Build practical technology for Malawi and beyond.</h1>
-      <p>Explore current opportunities in drones, geospatial data, engineering, training and company operations.</p>
-    </section>
-    <section class="jobs" aria-labelledby="jobs-title">
-      <div class="section-heading"><div><p class="eyebrow">Open opportunities</p><h2 id="jobs-title">Available roles</h2></div><span id="job-count"></span></div>
-      <div id="jobs-list" class="jobs-list"><div class="loading">Loading vacancies…</div></div>
-    </section>
-  </main>
-
-  <dialog id="application-dialog">
-    <form id="application-form">
-      <div class="dialog-head"><div><p class="eyebrow">Job application</p><h2 id="application-title">Apply</h2></div><button type="button" id="close-application" aria-label="Close">×</button></div>
-      <input type="hidden" name="jobId" id="application-job-id">
-      <label class="form-honeypot" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
-      <div class="form-grid">
-        <label><span>Full name *</span><input name="fullName" required autocomplete="name"></label>
-        <label><span>Email *</span><input name="email" type="email" required autocomplete="email"></label>
-        <label><span>Telephone *</span><input name="phone" required autocomplete="tel"></label>
-        <label><span>Current location</span><input name="location" autocomplete="address-level2"></label>
-        <label class="wide"><span>Short cover note</span><textarea name="coverNote" rows="5" maxlength="2500" placeholder="Why are you interested, and what relevant experience would you bring?"></textarea></label>
-        <label class="wide"><span>CV *</span><input name="cv" type="file" required accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"><small>PDF, DOC or DOCX; maximum 10 MB.</small></label>
-        <label class="consent wide"><input name="consent" type="checkbox" required><span>I consent to CAGE using this information to assess my application and communicate about this vacancy.</span></label>
-      </div>
-      <p id="application-message" role="alert"></p>
-      <button class="submit" type="submit">Submit application</button>
-    </form>
-  </dialog>
-
-  <footer>© CAGE · Malawi · Applications are reviewed only for legitimate recruitment purposes.</footer>
-  <script src="./runtime-config.js" defer></script>
-  <script src="./careers.js" defer></script>
-</body>
-</html>
+<a class="skip-link" href="#jobs-title">Skip to open roles</a>
+<header class="career-header"><a href="./careers.html" aria-label="CAGE careers home"><img src="./cage-logo-new.png" alt="CAGE — It can be done" width="162" height="58"></a><div class="header-links"><span>Careers</span><a href="https://www.cagemw.com">Explore CAGE <span aria-hidden="true">↗</span></a></div></header>
+<main>
+<section class="career-intro"><div><p class="eyebrow">Your next chapter at CAGE</p><h1>Bring your skills.<br><span>Build what’s next.</span></h1><p class="intro-copy">Join a Malawi-based team working across drones, geospatial technology and practical learning. Find a role where your skills can make a difference.</p><a class="button primary" href="#jobs-title">Explore open roles <span aria-hidden="true">↓</span></a></div><aside class="intro-note"><span class="orbit" aria-hidden="true">↗</span><p class="eyebrow">Technology. People. Possibility.</p><h2>Practical work.<br>Meaningful progress.</h2><p>Explore the role. Tell us what you bring. Take the next step with CAGE.</p><div class="intro-tags"><span>Malawi</span><span>Built on curiosity</span></div></aside></section>
+<section class="jobs" aria-labelledby="jobs-title"><div class="section-heading"><div><p class="eyebrow">Find your place</p><h2 id="jobs-title" tabindex="-1">Open opportunities</h2></div><span id="job-count" aria-live="polite"></span></div><div id="jobs-list" class="jobs-list" aria-busy="true"><div class="empty" role="status">Loading open opportunities…</div></div></section>
+<section class="process" aria-labelledby="process-title"><div><p class="eyebrow">A straightforward start</p><h2 id="process-title">Your application, in three steps.</h2></div><ol><li><strong>01 <span>Explore the role</span></strong><p>Read the responsibilities, requirements and application guidance.</p></li><li><strong>02 <span>Tell us about yourself</span></strong><p>Add your details, relevant experience and CV.</p></li><li><strong>03 <span>Review and send</span></strong><p>Check your information before submitting to CAGE.</p></li></ol></section>
+</main>
+<dialog id="application-dialog" aria-labelledby="application-title">
+<div class="dialog-head"><div><p class="eyebrow">Your next step</p><h2 id="application-title">Apply to CAGE</h2><p id="application-context"></p></div><button type="button" id="close-application" class="icon-button" aria-label="Close application">×</button></div>
+<form id="application-form" novalidate>
+<input type="hidden" name="jobId" id="application-job-id"><label class="form-honeypot" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
+<ol class="stepper" aria-label="Application progress"><li data-step-label="0">1 <span>Your details</span></li><li data-step-label="1">2 <span>Experience & CV</span></li><li data-step-label="2">3 <span>Review</span></li></ol>
+<p class="form-hint">Fields marked * are required. No account needed.</p>
+<section data-step="0" aria-labelledby="details-title"><h3 id="details-title" tabindex="-1">Let’s start with your details</h3><div class="form-grid"><label>Full name *<input name="fullName" required maxlength="160" autocomplete="name" placeholder="Your full name"></label><label>Email address *<input name="email" type="email" required maxlength="254" autocomplete="email" placeholder="you@example.com"></label><label>Phone number *<input name="phone" type="tel" required maxlength="50" autocomplete="tel" placeholder="Include your country code"></label><label>Current location<input name="location" maxlength="160" autocomplete="address-level2" placeholder="City or town, country"></label></div></section>
+<section data-step="1" hidden aria-labelledby="experience-title"><h3 id="experience-title" tabindex="-1">Show us what you bring</h3><label>Cover note <span class="optional">(optional)</span><textarea name="coverNote" rows="6" maxlength="2500" placeholder="Tell us about your relevant experience and interest in this role. Include project or portfolio links where relevant." aria-describedby="note-help"></textarea></label><div class="field-help"><small id="note-help">Follow the role’s application guidance. You can include links to code, photographs or videos here.</small><small id="note-count">0 / 2,500</small></div><label class="upload-field">Your CV *<span class="upload-intro">Choose a file from your device</span><input name="cv" type="file" required accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" aria-describedby="cv-help cv-status"><small id="cv-help">PDF, DOC or DOCX · Up to 10 MB</small><span id="cv-status" role="status"></span></label></section>
+<section data-step="2" hidden aria-labelledby="review-title"><h3 id="review-title" tabindex="-1">Ready to make your next move?</h3><p class="muted">Check your details below. Use Back to make any changes.</p><dl id="application-review" class="review-list"></dl><label class="consent"><input name="consent" type="checkbox" required><span>I consent to CAGE using this information to assess my application and communicate about this vacancy. *</span></label></section>
+<p id="application-message" role="alert" tabindex="-1"></p><div class="form-actions"><button type="button" id="application-back" class="button secondary" hidden>Back</button><span id="step-position">Step 1 of 3</span><button class="button primary" type="submit" id="application-next">Continue <span aria-hidden="true">→</span></button></div>
+</form>
+<section id="application-success" class="success-panel" hidden tabindex="-1"><span class="success-icon" aria-hidden="true">✓</span><p class="eyebrow">Thank you for your interest</p><h3>Application received.</h3><p>Your application has been submitted to CAGE. We will contact you if your application progresses.</p><p id="application-reference"></p><button type="button" id="application-done" class="button primary">Back to opportunities</button></section>
+</dialog>
+<footer><a href="https://www.cagemw.com">CAGE <span>It can be done.</span></a><p>Malawi · Careers & opportunities</p><small>Applications are used for recruitment purposes.</small></footer>
+<script src="./runtime-config.js" defer></script><script src="./careers.js?v=20261023-1" defer></script>
+</body></html>
