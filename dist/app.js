@@ -1795,6 +1795,7 @@ function renderCompliance() {
   }).join("");
   const alerts = records.filter(record => complianceDisplayStatus(record) !== "Active" || daysUntil(record.renewal) <= 45);
   document.getElementById("compliance-alert-list").innerHTML = alerts.length ? alerts.map(record => { const display = complianceDisplayStatus(record); const days = daysUntil(record.renewal); return `<div class="compliance-alert"><span class="alert-icon ${statusClass(display)}">${display === "Expired" ? "×" : "!"}</span><div><strong>${escapeHtml(record.title)}</strong><span>${days < 0 ? `${Math.abs(days)} days overdue` : days === 0 ? "Due today" : `${days} days remaining`} · ${escapeHtml(teamMember(record.owner).name)}</span></div>${record.status !== "Renewal submitted" ? `<button data-submit-renewal="${record.id}">Mark submitted</button>` : ""}</div>`; }).join("") : `<div class="empty-state"><p>No renewals require action.</p></div>`;
+  window.CAGE_COMPANY_DOCUMENTS?.decorateRequirements();
 }
 
 function renderApprovals() {

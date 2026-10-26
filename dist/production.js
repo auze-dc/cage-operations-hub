@@ -136,7 +136,7 @@
     if (settingsNav) settingsNav.hidden = !isAdmin;
     document.querySelectorAll(".hr-privileged").forEach(element => { element.hidden = !["admin", "manager", "hr"].includes(profile?.role); });
     window.CAGE_PERSONAL?.applyAccess();
-    if (isViewer) document.querySelectorAll("button.primary-button, .mobile-add-button").forEach(button => { if (!button.closest(".auth-card, [data-view-panel=training], .academy-dialog") && !((button.matches('[data-send-document=invoice],[data-send-document=quote]')||(button.closest('#send-form')&&['invoice','quote'].includes(document.getElementById('send-form').elements.documentType.value)))&&profile?.active&&profile.role!=='shared'&&moduleLevel('finance')!=='none') ) button.disabled = true; });
+    if (isViewer) document.querySelectorAll("button.primary-button, .mobile-add-button").forEach(button => { if (!button.closest(".auth-card, [data-view-panel=training], .academy-dialog, [data-view-panel=compliance], #compliance-dialog, .company-dialog") && !((button.matches('[data-send-document=invoice],[data-send-document=quote]')||(button.closest('#send-form')&&['invoice','quote'].includes(document.getElementById('send-form').elements.documentType.value)))&&profile?.active&&profile.role!=='shared'&&moduleLevel('finance')!=='none') ) button.disabled = true; });
     window.CAGE_TEAMWORK?.applyAccess();
   }
 
@@ -629,6 +629,39 @@
     return { path, name: file.name };
   }
 
+  async function companyDocuments() {
+    if(!profile?.active||profile.role==='shared')throw new Error('Active staff access required.');
+    const read=async table=>{const rows=[];for(let offset=0;;offset+=500){let q=client.from(table).select('*');q=table==='company_document_links'?q.order('document_id').order('opportunity_id'):q.order('id');const r=await q.range(offset,offset+499);if(r.error)throw r.error;rows.push(...r.data);if(r.data.length<500)return rows;}};
+    const [documents,versions,links,people]=await Promise.all([
+      read('company_documents'),read('company_document_versions'),read('company_document_links'),
+      hubRows('profiles','id,full_name,active,role')]);
+    return {documents,versions,links,people:people.filter(p=>p.active&&p.role!=='shared')};
+  }
+  async function companyDocumentSave(id,revision,details,file) {
+    if(!profile?.active||profile.role==='shared')throw new Error('Active staff access required.');
+    const uid=profile.id,generation=sessionGeneration;
+    let upload=null;
+    if(file){
+      if(!file.size||file.size>20971520)throw new Error('Choose a file between 1 byte and 20 MB.');
+      const mimeByExtension={pdf:'application/pdf',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',doc:'application/msword',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',xls:'application/vnd.ms-excel',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',txt:'text/plain'};
+      const mime=mimeByExtension[file.name.split('.').pop().toLowerCase()];
+      if(!mime)throw new Error('Choose a PDF, image, Word, Excel or text file.');
+      const path=profile.organization_id+'/'+uid+'/'+id+'/'+crypto.randomUUID()+'/'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+      const r=await client.storage.from('company-documents').upload(path,file,{contentType:mime,upsert:false});if(r.error)throw r.error;
+      upload={path,name:file.name};
+    }
+    if(profile?.id!==uid||generation!==sessionGeneration)throw new Error('Your session changed. Sign in and reopen the library.');
+    const r=await client.rpc('company_document_save',{target:id,expected_revision:revision,details,upload});
+    if(r.error){
+      // Never delete after an ambiguous network response: the transaction may have committed.
+      throw new Error(r.error.message+' Your form is preserved. If the connection was interrupted, refresh the library before retrying.');
+    }
+    return r.data;
+  }
+  async function companyDocumentHistory(id){const r=await client.from('company_document_activity').select('*').eq('document_id',id).order('created_at',{ascending:false}).limit(100);if(r.error)throw r.error;return r.data;}
+  async function companyDocumentUrl(path){const r=await client.storage.from('company-documents').createSignedUrl(path,60,{download:true});if(r.error)throw r.error;return r.data.signedUrl;}
+  async function companyDocumentLink(id,opportunity,linked){const r=await client.rpc('company_document_link',{target:id,opportunity,linked});if(r.error)throw r.error;}
+
   async function managedRecords(kind){
     if(!profile)throw new Error('Sign in first.');
     const allowed=["hub_work_categories", "task_plans", "daily_priorities", "training_courses", "training_cohorts", "learners", "training_sessions", "learner_attendance", "training_assessments", "training_certificates", "training_practical_logs", "training_documents", "training_materials", "cohort_messages", "academy_intakes", "academy_applications", "academy_application_files", "stem_applications", "job_openings", "job_applications", "interviews", "employee_documents", "equipment_kits", "equipment_reservations", "invoice_payments", "personal_reminders", "hub_events", "hub_notices", "hub_notice_files", "attachments"];
@@ -807,6 +840,7 @@
   }
   function moduleLevel(module) {
     if (!profile) return "none";
+    if(module === "compliance") return profile.active && profile.role !== "shared" ? "edit" : "none";
     if(profile.active!==false&&profile.role!=="shared"&&["projects","requests","tasks","crm","commercial","finance","approvals"].includes(module))return "edit";
     if(module === "notices" && profile.role === "shared") return "none";
     if(module === "training") return profile.active === false || profile.role === "shared" ? "none" : "edit";
@@ -1091,6 +1125,7 @@
     locationList: async()=>{const r=await client.rpc('hub_location_list').abortSignal(AbortSignal.timeout(10000));if(r.error)throw r.error;return r.data;},
     categoryList: async(category_module)=>{const r=await client.rpc("hub_category_list",{category_module});if(r.error)throw r.error;return r.data;},
     categoryAdd: async(category_module,category_name)=>{const r=await client.rpc("hub_category_add",{category_module,category_name});if(r.error)throw r.error;return r.data;},
+    companyDocuments,companyDocumentSave,companyDocumentHistory,companyDocumentUrl,companyDocumentLink,
     presenceHeartbeat,
     presenceStatusSettings: async()=>{const r=await client.rpc("hub_status_settings");if(r.error)throw r.error;return r.data;},
     presenceStatusForget: async(emoji_value,message_value)=>{const r=await client.rpc("hub_status_forget",{emoji_value,message_value});if(r.error)throw r.error;},
