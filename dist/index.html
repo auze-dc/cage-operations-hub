@@ -338,9 +338,23 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
         <section class="view-panel" data-view-panel="compliance">
           <div class="page-intro">
             <div><p class="date-line">Safety & governance</p><h2>Compliance</h2><p>Keep licences, registrations, insurance, permits and safety reviews current.</p></div>
-            <button class="primary-button" id="new-compliance-button">+ Add record</button>
+            <div class="company-header-actions"><button class="secondary-button" id="new-compliance-button">+ Add requirement</button><button class="primary-button" id="company-add">+ Upload document</button></div>
           </div>
-          <div class="metric-grid" id="compliance-metric-grid"></div>
+          <div class="company-tabs" role="tablist" aria-label="Compliance sections">
+          <button role="tab" id="company-tab-overview" data-company-tab="overview" aria-selected="true" aria-controls="company-overview">Overview</button>
+          <button role="tab" id="company-tab-documents" data-company-tab="documents" aria-selected="false" aria-controls="company-documents" tabindex="-1">Company Documents</button>
+          <button role="tab" id="company-tab-requirements" data-company-tab="requirements" aria-selected="false" aria-controls="company-requirements" tabindex="-1">Requirements &amp; Renewals</button>
+        </div>
+        <div id="company-feedback" role="status" aria-live="polite"></div>
+        <div id="company-overview" role="tabpanel" aria-labelledby="company-tab-overview"><div id="company-summary"></div><div class="metric-grid" id="compliance-metric-grid"></div></div>
+        <div id="company-documents" role="tabpanel" aria-labelledby="company-tab-documents" hidden>
+          <div class="surface company-library">
+            <div class="surface-heading"><div><p class="section-kicker">Shared company library</p><h3>One place for your company documents</h3><p>Available to all active CAGE staff. Upload once and reuse across compliance and opportunities.</p></div><button class="secondary-button" id="company-refresh">Refresh</button></div>
+            <div class="company-filters"><label>Search documents<input id="company-search" type="search" placeholder="Title, reference or issuer"></label><label>Category<select id="company-category"><option value="">All categories</option></select></label><label>Status<select id="company-status"><option value="">Active documents</option><option>Current</option><option>Expiring soon</option><option>Expired</option><option>No expiry</option><option>Archived</option></select></label></div>
+            <div id="company-list"></div>
+          </div>
+        </div>
+        <div id="company-requirements" role="tabpanel" aria-labelledby="company-tab-requirements" hidden>
           <div class="automation-strip surface"><span class="automation-icon">↻</span><span><strong>Automatic renewal reminders</strong><small>Surface licence, permit, insurance and safety reviews before they expire.</small></span><label class="switch"><input id="compliance-reminders" type="checkbox" checked><span></span></label></div>
           <div class="compliance-layout">
             <article class="surface compliance-register">
@@ -349,7 +363,8 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
             </article>
             <aside class="surface compliance-alerts"><div class="surface-heading"><div><p class="section-kicker">Action queue</p><h3>Upcoming renewals</h3></div></div><div id="compliance-alert-list"></div></aside>
           </div>
-        </section>
+        </div>
+      </section>
 
         <section class="view-panel" data-view-panel="chat">
           <div class="page-intro">
@@ -959,8 +974,8 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
   <script src="./runtime-config.js?v=15.9.0" defer></script>
   <script src="./vendor/supabase.js?v=15.9.0" defer></script>
   <script src="./reliable-sync.js?v=15.9.0-sync1" defer></script>
-  <script src="./production.js?v=login-recovery-20261021" defer></script>
-  <script src="./app.js?v=audit-20261020" defer></script>
+  <script src="./production.js?v=company-documents-20261026" defer></script>
+  <script src="./app.js?v=company-documents-20261026" defer></script>
   <script src="./hr.js?v=15.9.0" defer></script>
   <script src="./training.js?v=21.0.0" defer></script>
 <script src="./vendor/pdf-lib.min.js?v=15.9.0" defer></script>
@@ -993,7 +1008,7 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
 <script src="./payment-receipts.js?v=receipts-20260925" defer></script>
 <script src="./order-document.js?v=20260927" defer></script>
 <script src="./quote-order.js?v=workflow-controls-20261021" defer></script>
-<script src="./opportunities.js?v=staff-scan-options-20261021" defer></script>
+<script src="./opportunities.js?v=company-documents-20261026" defer></script>
 <link rel="stylesheet" href="teamwork.css?v=20260930">
 <script src="teamwork.js?v=workflow-controls-20261021" defer></script>
 <link rel="stylesheet" href="./vendor/driver.css">
@@ -1003,5 +1018,7 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
 <script src="experience.js?v=20261002-1" defer></script>
 <script src="partner-intake.js?v=20261002-1" defer></script>
 <script src="staff-edit.js?v=20261008" defer></script>
+<link rel="stylesheet" href="company-documents.css?v=20261026">
+<script src="company-documents.js?v=20261026" defer></script>
 </body>
 </html>
