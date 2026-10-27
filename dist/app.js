@@ -360,6 +360,7 @@ const viewMeta = {
   team: ["Team", "CAGE / Capacity"],
   evidence: ["Evidence", "CAGE / Documents"],
   reports: ["Reports", "CAGE / Management"],
+  payroll: ["Salaries & payslips", "CAGE / Payroll"],
   hr: ["Recruitment & HR", "CAGE / People lifecycle"],
   admin: ["User administration", "CAGE / Access control"],
   settings: ["Settings", "CAGE / Workspace administration"]

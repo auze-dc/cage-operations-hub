@@ -8,7 +8,7 @@ const entryUrl=location.href;
 window.CAGE_REFRESH={hasCurrentPage(){try{const saved=JSON.parse(localStorage.getItem(key())||'null');return !!(uid()&&saved?.globals?.activeView&&saved.url===entryUrl);}catch{return false;}}};
 let restoring=false,ready=false,timer,lastAction=null;const origins=new WeakMap();
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
-const allowed=el=>el.matches('input,textarea,select,[contenteditable="true"]')&&!['password','submit','button','reset'].includes(el.type)&&!el.closest('#login-form,#invite-user-form')&&!/password|secret|token|api.?key/i.test(el.name||el.id||'');
+const allowed=el=>el.matches('input,textarea,select,[contenteditable="true"]')&&!['password','submit','button','reset'].includes(el.type)&&!el.closest('#login-form,#invite-user-form,[data-view-panel=payroll],.payroll-dialog')&&!/password|secret|token|api.?key/i.test(el.name||el.id||'');
 function controls(root){return [...root.querySelectorAll('input,textarea,select,[contenteditable="true"]')].filter(allowed);}
 function values(root){return controls(root).map((el,index)=>({index,id:el.id,name:el.name,tag:el.tagName,type:el.type,value:el.type==='file'?null:el.isContentEditable?el.textContent:el.value,checked:el.checked,selected:el.multiple?[...el.selectedOptions].map(o=>o.value):null}));}
 function fileDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open('cage-refresh-files',1);r.onupgradeneeded=()=>r.result.createObjectStore('files');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
@@ -21,7 +21,7 @@ function globals(){return {collaboration:window.CAGE_COLLAB?.capture(),opportuni
 function snapshot(){
  if(!ready||restoring||!uid())return;
  const panel=document.querySelector(`[data-view-panel="${CSS.escape(activeView)}"]`);
- const dialogs=[...document.querySelectorAll('dialog[open]')].filter(d=>d.id!=='pdf-preview-dialog'&&!d.id.includes('login')).map(d=>({id:d.id,hubRecord:d.dataset.hubRecord||'',origin:origins.get(d)||null,fields:values(d),forms:[...d.querySelectorAll('form')].map(f=>({id:f.id,data:Object.fromEntries(Object.entries(f.dataset).filter(([k])=>k!=='submitting'))})),items:d.querySelectorAll('.document-item').length,subtasks:d.querySelectorAll('[data-subtask]').length,scrollTop:d.scrollTop,details:[...d.querySelectorAll('details')].map(x=>x.open)}));
+ const dialogs=[...document.querySelectorAll('dialog[open]')].filter(d=>d.id!=='payroll-dialog'&&d.id!=='pdf-preview-dialog'&&!d.id.includes('login')).map(d=>({id:d.id,hubRecord:d.dataset.hubRecord||'',origin:origins.get(d)||null,fields:values(d),forms:[...d.querySelectorAll('form')].map(f=>({id:f.id,data:Object.fromEntries(Object.entries(f.dataset).filter(([k])=>k!=='submitting'))})),items:d.querySelectorAll('.document-item').length,subtasks:d.querySelectorAll('[data-subtask]').length,scrollTop:d.scrollTop,details:[...d.querySelectorAll('details')].map(x=>x.open)}));
  try{localStorage.setItem(key(),JSON.stringify({globals:globals(),panel:panel?values(panel):[],dialogs,scroll:{x:scrollX,y:scrollY},containers:[...document.querySelectorAll('[id]')].filter(x=>x.clientHeight>0&&x.scrollHeight>x.clientHeight).map(x=>({id:x.id,top:x.scrollTop,left:x.scrollLeft})),url:location.href,updated:Date.now()}));}catch{warn();}
 }
 function schedule(){if(restoring)return;clearTimeout(timer);timer=setTimeout(snapshot,120);}

@@ -35,6 +35,7 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
 <script src="experience-head.js?v=20261002-1"></script>
 <link rel="stylesheet" href="experience.css?v=20261002-1">
 <link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/cage-favicon.png">
+  <link rel="stylesheet" href="./payroll.css?v=20261027">
 </head>
 <body class="session-checking">
   <div class="session-loader" role="status" aria-live="polite"><span></span><strong>Opening CAGE Operations Hub…</strong></div>
@@ -99,6 +100,7 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
         <span class="nav-section-title">4 · People</span>
         <button class="nav-item" data-view="leave"><span class="nav-icon">☼</span><span>Leave</span><span class="nav-count warning" id="leave-nav-count">0</span></button>
         <button class="nav-item" data-view="team"><span class="nav-icon">◎</span><span>Team</span></button>
+        <button class="nav-item" data-view="payroll"><span class="nav-icon">▤</span><span>Salaries &amp; payslips</span></button>
         <button class="nav-item" data-view="hr"><span class="nav-icon">HR</span><span>Recruitment & HR</span><span class="nav-count" id="hr-nav-count">0</span></button>
         <button class="nav-item" data-view="admin" id="admin-nav-item"><span class="nav-icon">⚙</span><span>User administration</span></button>
         <button class="nav-item" data-view="settings" id="settings-nav-item"><span class="nav-icon">◫</span><span>Settings</span></button>
@@ -393,6 +395,11 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
           </div>
         </section>
 
+        <section class="view-panel" data-view-panel="payroll">
+          <div class="payroll-heading"><div><p class="section-kicker">People &amp; pay</p><h2>Salaries &amp; payslips</h2><p class="payroll-muted">Prepare, approve and record salaries. Keep every payslip in one private place.</p></div><button class="secondary-button" id="payroll-refresh">Refresh</button></div>
+          <p id="payroll-feedback" role="status" aria-live="polite"></p>
+          <div id="payroll-root"></div>
+        </section>
         <section class="view-panel" data-view-panel="finance">
           <div class="page-intro">
             <div><p class="date-line">Money</p><h2>Finance</h2><p>Issue invoices, record expenses and see project profitability without leaving operations.</p></div>
@@ -974,15 +981,16 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
   <script src="./runtime-config.js?v=15.9.0" defer></script>
   <script src="./vendor/supabase.js?v=15.9.0" defer></script>
   <script src="./reliable-sync.js?v=15.9.0-sync1" defer></script>
-  <script src="./production.js?v=company-documents-20261026" defer></script>
-  <script src="./app.js?v=company-documents-20261026" defer></script>
+  <script src="./production.js?v=payroll-20261027" defer></script>
+  <script src="./app.js?v=payroll-20261027" defer></script>
+  <script src="./payroll.js?v=20261027" defer></script>
   <script src="./hr.js?v=15.9.0" defer></script>
   <script src="./training.js?v=21.0.0" defer></script>
 <script src="./vendor/pdf-lib.min.js?v=15.9.0" defer></script>
 <script src="./document-pdf.js?v=tpin-20260930" defer></script>
 <script src="./amount-input.js?v=audit-20261020" defer></script>
 <script src="./documents-ui.js?v=audit-20261020" defer></script>
-<script src="./personal-work.js?v=audit-20261020" defer></script>
+<script src="./personal-work.js?v=payroll-20261027" defer></script>
   <script src="./mobile.js?v=15.9.0" defer></script>
 <script src="./daily-planner.js?v=15.9.0" defer></script>
 <script src="./staff-email.js?v=21.0.0" defer></script>
@@ -996,7 +1004,7 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
 <script src="./messenger.js?v=work-discovery-20260930" defer></script>
 <script src="./design-system.js?v=cage-design-20260922" defer></script>
 <script src="./hub-collaboration.js?v=work-discovery-20260930" defer></script>
-<script src="./refresh-recovery.js?v=21.0.0" defer></script>
+<script src="./refresh-recovery.js?v=payroll-20261027" defer></script>
 
 <script src="./emoji-picker.js?v=27.0.0" defer></script>
 <script src="./staff-presence.js?v=staff-launch-20260924" defer></script>
