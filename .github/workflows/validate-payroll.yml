@@ -1,0 +1,37 @@
+name: Validate payroll
+on:
+  pull_request:
+    paths:
+      - 'dist/payroll.*'
+      - 'validation/payroll*'
+      - '.github/workflows/validate-payroll.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  payroll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - name: Install isolated browser test dependency
+        run: |
+          npm install --prefix "$RUNNER_TEMP/cage-payroll-browser" --no-save --ignore-scripts playwright@1.51.1
+          echo "CAGE_PLAYWRIGHT_PATH=$RUNNER_TEMP/cage-payroll-browser/node_modules/playwright" >> "$GITHUB_ENV"
+          echo "CAGE_PAYROLL_QA_DIR=$RUNNER_TEMP/cage-payroll-qa" >> "$GITHUB_ENV"
+      - name: Install Chromium
+        run: node "$CAGE_PLAYWRIGHT_PATH/cli.js" install --with-deps chromium
+      - name: Verify payroll forms and payslips
+        run: node validation/payroll.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payroll-screen-checks
+          path: ${{ runner.temp }}/cage-payroll-qa
+          if-no-files-found: ignore
