@@ -136,7 +136,7 @@
     if (settingsNav) settingsNav.hidden = !isAdmin;
     document.querySelectorAll(".hr-privileged").forEach(element => { element.hidden = !["admin", "manager", "hr"].includes(profile?.role); });
     window.CAGE_PERSONAL?.applyAccess();
-    if (isViewer) document.querySelectorAll("button.primary-button, .mobile-add-button").forEach(button => { if (!button.closest(".auth-card, [data-view-panel=training], .academy-dialog, [data-view-panel=compliance], #compliance-dialog, .company-dialog") && !((button.matches('[data-send-document=invoice],[data-send-document=quote]')||(button.closest('#send-form')&&['invoice','quote'].includes(document.getElementById('send-form').elements.documentType.value)))&&profile?.active&&profile.role!=='shared'&&moduleLevel('finance')!=='none') ) button.disabled = true; });
+    if (isViewer) document.querySelectorAll("button.primary-button, .mobile-add-button").forEach(button => { if (!button.closest(".auth-card, [data-view-panel=training], .academy-dialog, [data-view-panel=compliance], #compliance-dialog, .company-dialog, [data-view-panel=payroll], .payroll-dialog") && !((button.matches('[data-send-document=invoice],[data-send-document=quote]')||(button.closest('#send-form')&&['invoice','quote'].includes(document.getElementById('send-form').elements.documentType.value)))&&profile?.active&&profile.role!=='shared'&&moduleLevel('finance')!=='none') ) button.disabled = true; });
     window.CAGE_TEAMWORK?.applyAccess();
   }
 
@@ -840,6 +840,7 @@
   }
   function moduleLevel(module) {
     if (!profile) return "none";
+    if(module === "payroll") return profile.active && profile.role !== "shared" ? (["admin","finance"].includes(profile.role) ? "edit" : "view") : "none";
     if(module === "compliance") return profile.active && profile.role !== "shared" ? "edit" : "none";
     if(profile.active!==false&&profile.role!=="shared"&&["projects","requests","tasks","crm","commercial","finance","approvals"].includes(module))return "edit";
     if(module === "notices" && profile.role === "shared") return "none";
@@ -1126,6 +1127,8 @@
     categoryList: async(category_module)=>{const r=await client.rpc("hub_category_list",{category_module});if(r.error)throw r.error;return r.data;},
     categoryAdd: async(category_module,category_name)=>{const r=await client.rpc("hub_category_add",{category_module,category_name});if(r.error)throw r.error;return r.data;},
     companyDocuments,companyDocumentSave,companyDocumentHistory,companyDocumentUrl,companyDocumentLink,
+    payrollData: async(target=null)=>{const r=await client.rpc("payroll_read",{target}).abortSignal(AbortSignal.timeout(20000));if(r.error)throw r.error;return r.data;},
+    payrollWrite: async(action,target,expected,payload)=>{const r=await client.rpc("payroll_write",{action,target,expected,payload}).abortSignal(AbortSignal.timeout(25000));if(r.error)throw r.error;return r.data;},
     presenceHeartbeat,
     presenceStatusSettings: async()=>{const r=await client.rpc("hub_status_settings");if(r.error)throw r.error;return r.data;},
     presenceStatusForget: async(emoji_value,message_value)=>{const r=await client.rpc("hub_status_forget",{emoji_value,message_value});if(r.error)throw r.error;},

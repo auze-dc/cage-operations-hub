@@ -1,0 +1,17 @@
+# Salaries & payslips
+
+Payroll is separate from the broadly shared Finance workspace. Only active users with the **admin** or **finance** role can prepare payroll or read salary settings, payroll totals, payment references and activity. Only administrators can approve payroll. Other active personal accounts can read only their own released payslips. Shared accounts have no payroll access. Module-access overrides do not grant payroll management rights.
+
+1. Open **Salaries & payslips → Salary settings** and configure each employee in MWK. Existing staff and HR details are reused. Enter reviewed monthly basic pay, allowances, overtime, bonus, PAYE, employee pension, salary-advance recovery and other deductions; employer pension is recorded separately and does not reduce take-home pay.
+2. Create the month's payroll. Enabled settings for active staff become independent snapshots. Later salary changes do not alter existing runs. One run per calendar month prevents duplicate monthly payroll.
+3. Review each employee's amounts. Add a note explaining adjustments. Submit for approval; an administrator can approve or return it for correction. Submission confirms that deductions have been reviewed. This version does **not** calculate statutory tax or pension rates.
+4. Record actual payments against an approved employee line, including date, method and reference. Partial payments are supported. This records payments; it does not move money. Overpayments, future payment dates and duplicate request IDs are rejected or handled idempotently. Recorded payments cannot be edited or deleted through the application; investigate a mistake before adding another payment.
+5. Release fully paid payslips individually or in a batch. Employees can view and print/save their own CAGE-branded payslips as PDF using the browser print dialog. No payroll emails are sent automatically. Approved amounts and released payslips are immutable.
+
+Gross = basic + allowances + overtime + bonus. Deductions = PAYE + employee pension + salary advance recovery + other deductions. Net = gross − deductions. Zero take-home pay is permitted; negative net pay is rejected. Amounts are rounded to two decimal places on the server. No attendance-based deductions or automatic loan balances are created.
+
+Salary settings can be disabled for future runs. Employee amounts can be adjusted in a draft run. Existing payment history remains private to payroll managers, and the employee's payslip shows only their own amounts, cumulative paid amount and payment completion date. Activity records capture actor, action and before/after details. Salary settings, payroll lines and bank/payment data are never written to the shared workspace or local draft recovery storage.
+
+Implementation: dedicated RLS-protected tables, read-only client grants, authenticated public SECURITY INVOKER RPC wrappers over checked functions in an unexposed `payroll_private` schema. Mutations lock the run and validate its revision; monetary totals and transition permissions are enforced in PostgreSQL. No service key is included in the browser.
+
+Validation: `npm run check`, `npm run build`, and the rollback-only SQL script `validation/payroll.sql` against the deployed schema. The SQL script creates temporary test staff inside a transaction and checks role isolation, workflow, arithmetic, stale writes, partial payments and publication. All test changes are rolled back.

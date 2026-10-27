@@ -22,7 +22,7 @@ function applyAccess(){
  if(!profile()) return;
  document.querySelectorAll('.nav-item[data-view]').forEach(el=>{el.hidden=(el.dataset.view==='access' ? profile().role!=='admin' : backend().moduleLevel(el.dataset.view)==='none');});
  document.querySelectorAll('[data-view-panel]').forEach(panel=>{
-   if(['mywork','notifications'].includes(panel.dataset.viewPanel))return;
+   if(['mywork','notifications','payroll'].includes(panel.dataset.viewPanel))return;
    const level=backend().moduleLevel(panel.dataset.viewPanel);
    panel.querySelectorAll('button,input,select,textarea').forEach(el=>{
     if(el.dataset.accessDisabled){el.disabled=false;delete el.dataset.accessDisabled;}
