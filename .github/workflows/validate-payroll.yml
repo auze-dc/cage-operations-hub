@@ -12,9 +12,6 @@ jobs:
   payroll:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      CAGE_PLAYWRIGHT_PATH: ${{ runner.temp }}/cage-payroll-browser/node_modules/playwright
-      CAGE_PAYROLL_QA_DIR: ${{ runner.temp }}/cage-payroll-qa
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,7 +21,10 @@ jobs:
       - run: npm ci
       - run: npm run check
       - name: Install isolated browser test dependency
-        run: npm install --prefix "$RUNNER_TEMP/cage-payroll-browser" --no-save --ignore-scripts playwright@1.51.1
+        run: |
+          npm install --prefix "$RUNNER_TEMP/cage-payroll-browser" --no-save --ignore-scripts playwright@1.51.1
+          echo "CAGE_PLAYWRIGHT_PATH=$RUNNER_TEMP/cage-payroll-browser/node_modules/playwright" >> "$GITHUB_ENV"
+          echo "CAGE_PAYROLL_QA_DIR=$RUNNER_TEMP/cage-payroll-qa" >> "$GITHUB_ENV"
       - name: Install Chromium
         run: node "$CAGE_PLAYWRIGHT_PATH/cli.js" install --with-deps chromium
       - name: Verify payroll forms and payslips
