@@ -34,8 +34,8 @@ function applyAccess(){
  if(backend().moduleLevel(activeView)==='none' || (activeView==='access' && profile().role!=='admin')) setView('mywork');
 }
 function updateBadge(){const count=personal.notifications.filter(n=>!n.read_at).length;$('notification-count').textContent=count;bell.setAttribute('aria-label',`Notifications: ${count} unread`);}
-let refreshSequence=0;
-async function refresh(){if(!profile())return;const request=++refreshSequence,owner=profile().id;try{const result=await backend().personalData();if(request!==refreshSequence||profile()?.id!==owner)return;personal=result;window.dispatchEvent(new CustomEvent("cage:personal-notifications",{detail:personal.notifications}));updateBadge();refreshView();window.dispatchEvent(new Event('cage:unread-updated'));$('personal-error').textContent='';}catch(e){$('personal-error').textContent=e.message||'Could not load personal reminders.';window.dispatchEvent(new Event('cage:personal-notifications-error'));}}
+let refreshSequence=0,refreshOwner=null,refreshQueued=false;
+async function refresh(){if(!profile())return;if(refreshOwner===profile().id){refreshQueued=true;return;}const request=++refreshSequence,owner=profile().id;refreshOwner=owner;try{const result=await backend().personalData();if(request!==refreshSequence||profile()?.id!==owner)return;personal=result;window.dispatchEvent(new CustomEvent("cage:personal-notifications",{detail:personal.notifications}));updateBadge();refreshView();window.dispatchEvent(new Event('cage:unread-updated'));$('personal-error').textContent='';}catch(e){if(request!==refreshSequence||profile()?.id!==owner)return;$('personal-error').textContent=e.message||'Could not load personal reminders.';window.dispatchEvent(new Event('cage:personal-notifications-error'));}finally{if(refreshOwner===owner){refreshOwner=null;if(refreshQueued){refreshQueued=false;refresh();}}}}
 function formatWhen(value){return new Date(value).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});}
 function refreshView(){
  if(activeView==='mywork')renderMine();
@@ -146,4 +146,5 @@ document.addEventListener('submit',e=>{
 },true);
 window.CAGE_PERSONAL={applyAccess,updateBadge,refreshView,refresh,chatUnread(thread){return personal.notifications.filter(n=>!n.read_at&&n.target_view==='chat'&&n.target_id===thread).length;},chatUnreadTotal(){return personal.notifications.filter(n=>!n.read_at&&n.target_view==='chat').length;},view(v){if(v!=='chat'&&recorder?.state==='recording')recorder.stop();if(v==='mywork'||v==='notifications'){refreshView();refresh();}if(v==='access')renderAccess();}};
 window.addEventListener('cage:session-ready',()=>{refresh();applyAccess();if(poll)clearInterval(poll);poll=setInterval(()=>{if(!document.hidden)refresh();},30000);setView('mywork');});
+window.addEventListener('cage:access-closed',()=>{refreshSequence++;refreshOwner=null;refreshQueued=false;personal={reminders:[],notifications:[]};if(poll)clearInterval(poll);updateBadge();});
 })();

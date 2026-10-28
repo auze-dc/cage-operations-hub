@@ -22,7 +22,7 @@ const dialog=document.createElement('dialog');dialog.id='payroll-dialog';dialog.
 const run=()=>data?.runs?.find(r=>r.id===selected);
 const person=id=>data?.people?.find(p=>p.id===id)?.name||'Staff member';
 function message(text,error=false){feedback.textContent=text;feedback.className=error?'payroll-error':'payroll-muted';}
-function errorText(e){return e.code==='23505'?'A payroll run already exists for this month. Refresh and open the existing run.':e.code==='40001'?e.message:e.message||'The payroll request failed. Refresh and retry.';}
+function errorText(e){return e.code==='23505'?'A payroll run already exists for this month. Refresh and open the existing run.':['PT409','40001'].includes(e.code)?e.message:e.message||'The payroll request failed. Refresh and retry.';}
 function shell(title,body){dialog.innerHTML=`<div class="dialog-heading payroll-toolbar"><h2 id="payroll-dialog-title">${esc(title)}</h2>${button('close','Close')}</div>${body}<p class="payroll-error" role="alert"></p>`;if(!dialog.open)dialog.showModal();}
 async function refresh(){
  if(loading||!api()?.currentProfile()?.active||api().currentProfile().role==='shared')return;

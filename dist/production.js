@@ -26,7 +26,7 @@
   let applyingRemote = false;
   let lastAccessRefresh = 0;
   let moduleAccess = {};
-  let workspacePoll = null;
+  let workspacePoll = null, workspacePollRunning=false;
   let greetingLanguage = "English";
 
   const GREETINGS = {
@@ -49,12 +49,14 @@
 
   function showBanner(message, tone = "") {
     if (tone !== "error" && /^(All changes saved|Saving changes|Workspace updated|Connected to)/.test(message)) return;
+    delete banner.dataset.connection;
     banner.textContent = message;
     banner.className = `sync-banner visible ${tone}`.trim();
   }
 
   function hideBanner(delay = 1200) {
-    window.setTimeout(() => { banner.className = "sync-banner"; }, delay);
+    const message=banner.textContent;
+    window.setTimeout(() => { if(banner.textContent===message)banner.className = "sync-banner"; }, delay);
   }
 
   function showLogin(message = "") {
@@ -160,21 +162,32 @@
     receiveWorkspace(data);
   }
 
+  // A slow connection must never start overlapping background workspace reads.
+  // Back off after failures, but keep saved drafts and explicit save retries intact.
   function subscribe() {
     if (workspacePoll) clearInterval(workspacePoll);
+    let failures=0, nextPoll=0, nextAccess=0;
     workspacePoll = setInterval(async () => {
-      if (!profile || document.hidden || savingNow) return;
+      if (!profile || document.hidden || savingNow || sessionLoad || workspacePollRunning || navigator.onLine===false || Date.now()<nextPoll) return;
+      workspacePollRunning=true;
       const pollUser=profile.id,pollGeneration=sessionGeneration;
       try {
-        await loadModuleAccess();
+        if(Date.now()>=nextAccess){await loadModuleAccess();nextAccess=Date.now()+60000;}
         const result = await client.rpc("get_my_workspace").abortSignal(AbortSignal.timeout(15000));
         if(pollUser!==profile?.id||pollGeneration!==sessionGeneration||savingNow)return;
         if (result.error) throw result.error;
-        if(result.data && (result.data.version!==workspaceVersion || !window.CAGE_SYNC.equal(result.data.data,remoteSnapshot)))receiveWorkspace(result.data);
+        if(!result.data?.data)throw new Error('Workspace data is unavailable. Ask an administrator to review it.');
+        if(result.data.version!==workspaceVersion || !window.CAGE_SYNC.equal(result.data.data,remoteSnapshot))receiveWorkspace(result.data);
+        failures=0;
+        if(banner.dataset.connection==='interrupted'){delete banner.dataset.connection;banner.className='sync-banner';}
         if(pendingState&&!savingNow)flushSave();
         applyPermissions();
-      } catch (error) { applyingRemote = false; showBanner(error.message || "Connection interrupted", "error"); }
-    }, 8000);
+      } catch (error) {
+        if(pollUser!==profile?.id||pollGeneration!==sessionGeneration)return;
+        failures++;
+        if(!pendingState&&!syncConflicts.length){showBanner('Cloud connection interrupted. Your workspace remains open. Retrying…', 'error');banner.dataset.connection='interrupted';}
+      } finally {workspacePollRunning=false;nextPoll=Date.now()+Math.min(60000,8000*2**Math.min(failures,3));}
+    }, 1000);
   }
 
   // Chat messages are append-only. Read state is stored in personal_notifications,
@@ -384,7 +397,7 @@
   function loginFailure(error){sessionReady=false;profile=null;clearInterval(workspacePoll);workspacePoll=null;showLogin(error?.message||'The workspace could not load. Retry without resetting your password.');retryLogin.hidden=false;banner.className='sync-banner';}
   let accessRetryTimer=null;
   function sessionCheckFailure(error,refresh,uid,generation){
-    const transient=![401,403].includes(Number(error?.status))&&error?.code!=='PGRST116'&&(/fetch|network|timeout|timed out|connection|502|503|504/i.test(error?.message||'')||[502,503,504].includes(Number(error?.status)));
+    const transient=![401,403].includes(Number(error?.status))&&error?.code!=='PGRST116'&&(/fetch|network|timeout|timed out|connection|502|503|504/i.test(error?.message||'')||[500,502,503,504].includes(Number(error?.status)));
     if(refresh&&transient&&sessionReady&&profile?.id===uid){
       showBanner('Connection interrupted while checking your access. Your workspace stays open; changes may wait for sync. Retrying…','error');
       clearTimeout(accessRetryTimer);
@@ -833,7 +846,7 @@
     if(!accessUser)return;
     const result = await client.from("module_access").select("module,access").eq("user_id",accessUser).abortSignal(AbortSignal.timeout(15000));
     if(accessUser!==profile?.id||accessGeneration!==sessionGeneration)return;
-    if(result.error) throw new Error("Install the Hub 14 database update before using this version. " + result.error.message);
+    if(result.error) throw Object.assign(new Error("Your access permissions could not load. Check your connection and retry."),{status:result.status,code:result.error.code});
     const previous = JSON.stringify(moduleAccess);
     moduleAccess = Object.fromEntries((result.data||[]).map(row=>[row.module,row.access]));
     if(previous !== JSON.stringify(moduleAccess)) workspaceVersion = -1;
@@ -878,9 +891,11 @@
     await loadWorkspace();
   }
   async function personalData() {
+    const userId=profile?.id;
+    if(!userId)throw new Error('Sign in to load your reminders and notifications.');
     const results=await Promise.all([
-      client.from("personal_reminders").select("*").order("due_at"),
-      client.from("personal_notifications").select("*").order("created_at",{ascending:false}).limit(150)
+      client.from("personal_reminders").select("*").eq("user_id",userId).order("due_at").abortSignal(AbortSignal.timeout(15000)),
+      client.from("personal_notifications").select("*").eq("user_id",userId).order("created_at",{ascending:false}).limit(150).abortSignal(AbortSignal.timeout(15000))
     ]);
     for(const r of results) if(r.error) throw r.error;
     return {reminders:results[0].data,notifications:results[1].data};

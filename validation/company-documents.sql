@@ -20,7 +20,7 @@ begin
  if exists(select 1 from public.company_documents where id=current_setting('test.foreign_document')::uuid) then raise exception 'Cross-organisation read leaked';end if;
  select * into doc from public.company_document_save(current_setting('test.document')::uuid,1,'{"title":"Updated test","category":"Registration","requirement_ids":[]}');
  if doc.revision<>2 or doc.title<>'Updated test' then raise exception 'Save failed';end if;
- begin perform public.company_document_save(doc.id,1,'{"title":"Stale overwrite","category":"Registration"}');exception when serialization_failure then denied:=true;end;
+ begin perform public.company_document_save(doc.id,1,'{"title":"Stale overwrite","category":"Registration"}');exception when sqlstate 'PT409' then denied:=true;end;
  if not denied then raise exception 'Stale overwrite was accepted';end if;
  denied:=false;
  begin perform public.company_document_save(current_setting('test.foreign_document')::uuid,1,'{"title":"Forbidden","category":"Registration"}');exception when insufficient_privilege then denied:=true;end;
