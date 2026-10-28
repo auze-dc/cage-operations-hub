@@ -23,7 +23,7 @@ do $$declare ids jsonb:=current_setting('test.payroll_ids')::jsonb;amounts jsonb
  perform pg_temp.payroll_actor('finance');
  perform public.payroll_write('salary',(ids->>'member')::uuid,0,jsonb_build_object('amounts',amounts));
  perform public.payroll_write('salary',(ids->>'viewer')::uuid,0,jsonb_build_object('amounts',amounts||'{"paye":999999,"pension":999999,"other_deductions":99750}'));
- begin perform public.payroll_write('salary',(ids->>'member')::uuid,0,jsonb_build_object('amounts',amounts));raise exception 'stale salary accepted';exception when serialization_failure then null;end;
+ begin perform public.payroll_write('salary',(ids->>'member')::uuid,0,jsonb_build_object('amounts',amounts));raise exception 'stale salary accepted';exception when sqlstate 'PT409' then null;end;
  begin perform public.payroll_write('salary',(ids->>'other')::uuid,0,jsonb_build_object('amounts',amounts));raise exception 'cross-org salary accepted';exception when raise_exception then if sqlerrm='cross-org salary accepted' then raise;end if;end;
  rid:=public.payroll_write('create',null,0,'{"period":"2099-01-01"}');
  perform set_config('test.payroll_run',rid::text,true);
@@ -57,7 +57,7 @@ do $$declare ids jsonb:=current_setting('test.payroll_ids')::jsonb;amounts jsonb
  perform public.payroll_write('payment',rid,6,payload); -- exact retry must be idempotent even with old revision
  perform pg_temp.payroll_assert((select paid=30000 from public.payroll_items where id=i.id),'partial payment and retry');
  begin perform public.payroll_write('payment',rid,7,payload||jsonb_build_object('payment_id',gen_random_uuid(),'amount',100000));raise exception 'overpayment accepted';exception when check_violation then null;end;
- begin perform public.payroll_write('payment',rid,6,payload||jsonb_build_object('payment_id',gen_random_uuid(),'amount',100));raise exception 'stale payment accepted';exception when serialization_failure then null;end;
+ begin perform public.payroll_write('payment',rid,6,payload||jsonb_build_object('payment_id',gen_random_uuid(),'amount',100));raise exception 'stale payment accepted';exception when sqlstate 'PT409' then null;end;
  begin perform public.payroll_write('payment',rid,7,payload||jsonb_build_object('payment_id',gen_random_uuid(),'amount',100,'paid_on','2999-01-01'));raise exception 'future payment accepted';exception when raise_exception then if sqlerrm='future payment accepted' then raise;end if;end;
  perform public.payroll_write('payment',rid,7,payload||jsonb_build_object('payment_id',gen_random_uuid(),'amount',69750));
  perform public.payroll_write('release',rid,8,jsonb_build_object('item_id',i.id));

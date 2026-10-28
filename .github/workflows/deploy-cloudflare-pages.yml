@@ -18,6 +18,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - run: node validation/background-reliability.mjs
+      - run: node validation/go-live-guards.mjs
       - run: npm run build
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

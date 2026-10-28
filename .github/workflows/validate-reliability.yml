@@ -1,0 +1,29 @@
+name: Validate reliability
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reliability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: node validation/background-reliability.mjs
+      - run: node validation/go-live-guards.mjs
+      - name: Install isolated DOM and SQL test dependencies
+        run: npm install --prefix "$RUNNER_TEMP/cage-reliability" --no-save --ignore-scripts jsdom@26.1.0 @electric-sql/pglite@0.3.14
+      - name: Verify sign-in recovery and financial document guards
+        env:
+          CAGE_TEST_MODULES: ${{ runner.temp }}/cage-reliability/node_modules
+        run: |
+          node validation/login-recovery.mjs
+          node validation/audit-reliability.mjs
+          node validation/background-job-access.mjs
