@@ -10,9 +10,17 @@ Canonical browser source is `dist/`. Existing root browser files are compatibili
 - Replaced third-party serve with a localhost-only, read-only development server. Dependencies are pinned; the lockfile is audited in CI.
 - Existing canonical frontend mirrored at root and guarded against future drift.
 
+## Operational checks
+
+The Live Hub health workflow checks the Hub, application and careers pages, secure sign-in asset, public careers/training APIs, authentication health and anonymous denial on the private bootstrap endpoint. It runs hourly and on relevant releases, retains status/timing evidence for 30 days and sends failures through normal GitHub Actions notification settings. It creates no applications, messages, payments or other business records. It is an availability smoke test, not a full staff workflow or an uptime guarantee.
+
+For incident response, record the affected module, exact error, timestamp/time zone, affected users and GitHub deployment SHA. Review Cloudflare and Supabase status/logs, distinguish authentication from permission and service errors, preserve unsynced drafts, and validate recovery before closing the incident. Avoid destructive resets or repeated retries of financial writes. Establish a named on-call owner and agreed targets before enterprise sign-off.
+
+The 09:00–12:25 UTC sample on 29 October contained 1,756 successful get_my_workspace reads and three presence heartbeat 401 responses, with no 500-class responses in that sample. Earlier outages remain relevant; one healthy sample does not establish sustained availability or prove their root cause is fixed.
+
 ## Required before an enterprise sign-off
 
-- Administrator MFA enrollment and server-side assurance enforcement, including Edge Functions and recovery.
+- Each administrator must complete authenticator enrollment on their own device, then verify repeat sign-in and lost-device recovery. The MFA interface, Data API guard, 103 restrictive database/storage policies and two service-privileged Edge guards were deployed on 29 October 2026. Isolated tests and rollback-only production role checks passed; these do not replace a real account-holder acceptance test.
 - Password breach checks if supported by the Supabase plan.
 - Trace residual auth, notification and background-job errors; validate resource/capacity changes using measurements.
 - Approve a historical reference reconciliation mapping; do not renumber sent documents automatically.
