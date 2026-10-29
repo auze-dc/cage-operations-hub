@@ -14,10 +14,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Resolve patched dependency metadata
-        run: npm view brace-expansion@2.1.7 version dist.integrity dist.tarball dependencies --json
       - run: npm ci
       - run: npm run check
+      - run: npm run build
       - run: node validation/background-reliability.mjs
       - run: node validation/go-live-guards.mjs
       - name: Install isolated DOM and SQL test dependencies
