@@ -25,5 +25,6 @@ jobs:
           CAGE_TEST_MODULES: ${{ runner.temp }}/cage-reliability/node_modules
         run: |
           node validation/login-recovery.mjs
+          node validation/sign-in-access.mjs
           node validation/audit-reliability.mjs
           node validation/background-job-access.mjs
