@@ -1,0 +1,37 @@
+name: Live Hub health
+on:
+  schedule:
+    - cron: '17 * * * *'
+  pull_request:
+    paths:
+      - validation/live-health.mjs
+      - .github/workflows/live-health.yml
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - validation/live-health.mjs
+      - .github/workflows/live-health.yml
+permissions:
+  contents: read
+concurrency:
+  group: live-hub-health
+  cancel-in-progress: false
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check public pages, authentication and public APIs
+        run: node validation/live-health.mjs
+      - name: Retain status and timing evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-health
+          path: live-health.json
+          retention-days: 30
