@@ -3,6 +3,8 @@ import path from "node:path";
 import { build } from "esbuild";
 import {validateBrowserConfig,readBrowserConfig} from "./runtime-config.mjs";
 
+import {syncSourceMirrors} from './source-mirrors.mjs';
+syncSourceMirrors(true);
 const root = path.resolve(import.meta.dirname, "..");
 const dist = path.join(root, "dist");
 fs.mkdirSync(path.join(dist, "vendor"), { recursive: true });

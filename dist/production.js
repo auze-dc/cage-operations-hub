@@ -554,11 +554,21 @@
     loginError.textContent = error ? error.message : "A password reset email has been sent.";
   });
 
-  document.getElementById("sign-out-button").addEventListener("click", async () => {
-    localStorage.removeItem("cage-operations-hub-production-cache-v1");
-    await window.CAGE_LOCATION?.stop?.();
-    await window.CAGE_PRESENCE?.stop?.();
-    if (client) await client.auth.signOut();
+  document.getElementById("sign-out-button").addEventListener("click", async event => {
+    const button=event.currentTarget;if(button.disabled)return;button.disabled=true;
+    try{
+      const uid=profile?.id;
+      const decision=await window.CAGE_DRAFT_PRIVACY?.choose(uid)||'cancel';
+      if(decision==='cancel')return;
+      clearTimeout(saveTimer);await saveChain;
+      await window.CAGE_LOCATION?.stop?.();
+      await window.CAGE_PRESENCE?.stop?.();
+      if(client){const r=await client.auth.signOut();if(r?.error)throw r.error;}
+      pendingState=null;syncConflicts=[];cloudBase={};remoteSnapshot=null;
+      if(decision==='clear')window.CAGE_DRAFT_PRIVACY?.clear(uid);
+      else localStorage.removeItem("cage-operations-hub-production-cache-v1");
+    }catch(error){showBanner(error.message||'Sign-out could not complete. Your drafts were kept.','error');}
+    finally{button.disabled=false;}
   });
 
   async function sendDocument(payload) {

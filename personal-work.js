@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 const $=id=>document.getElementById(id), esc=escapeHtml, backend=()=>window.CAGE_BACKEND;
-const modules=['requests','projects','tasks','crm','calendar','missions','assets','compliance','chat','finance','approvals','commercial','leave','knowledge','team','evidence','reports','hr','training'];
+const modules=['notices','requests','projects','tasks','crm','calendar','missions','assets','compliance','chat','finance','approvals','commercial','leave','knowledge','team','evidence','reports','hr','training'];
 let personal={reminders:[],notifications:[]}, users=[], rules=[], poll, recorder, stream, chunks=[], voiceBlob, voiceUrl, voiceThread, started, clock, discarded=false;
 const profile=()=>backend().currentProfile(), me=()=>backend().currentMemberId();
 function panel(id,content){const section=document.createElement('section');section.className='view-panel';section.dataset.viewPanel=id;section.innerHTML=content;document.querySelector('[data-view-panel="dashboard"]').parentElement.append(section);}
@@ -9,7 +9,7 @@ const nav=document.querySelector('.nav-item[data-view="dashboard"]');
 nav.insertAdjacentHTML('afterend','<button class="nav-item" data-view="mywork"><span class="nav-icon">✓</span><span>My work</span></button>');
 document.querySelector('#admin-nav-item')?.insertAdjacentHTML('afterend','<button class="nav-item" data-view="access" id="module-access-nav" hidden><span class="nav-icon">⚙</span><span>Module access</span></button>');
 const bell=document.querySelector('.notification-button');bell.dataset.view='notifications';bell.setAttribute('aria-label','Open my notifications');
-panel('mywork',`<div class="section-intro mywork-intro"><div><p class="date-line">Personal workspace</p><h2>My work</h2><p>Plan your assigned work and manage personal reminders.</p></div><button class="primary-button" id="add-personal-reminder">＋ Set reminder</button></div><p id="personal-error" role="status"></p><div class="mywork-layout"><main id="mywork-planner-slot"></main><aside class="mywork-sidebar"><article class="surface mywork-side-card"><div class="mywork-card-heading"><span class="mywork-card-icon">◷</span><div><h3>Reminders</h3><p>Personal prompts you control</p></div></div><div id="personal-reminders"></div></article><article class="surface mywork-side-card"><div class="mywork-card-heading"><span class="mywork-card-icon">◇</span><div><h3>Other responsibilities</h3><p>Work outside your task plan</p></div></div><div id="personal-responsibilities"></div></article></aside></div>`);
+panel('mywork',`<div class="section-intro mywork-intro"><div><p class="date-line">Personal workspace</p><h2>My work</h2><p>Plan your assigned work and manage personal reminders.</p></div><button class="primary-button" id="new-standalone-task">＋ Add task</button><button class="secondary-button" id="add-personal-reminder">＋ Set reminder</button></div><p id="personal-error" role="status"></p><div class="mywork-layout"><main><article class="surface mywork-side-card"><h3>My standalone tasks</h3><div id="my-standalone-tasks"></div></article><div id="mywork-planner-slot"></div></main><aside class="mywork-sidebar"><article class="surface mywork-side-card"><div class="mywork-card-heading"><span class="mywork-card-icon">◷</span><div><h3>Reminders</h3><p>Personal prompts you control</p></div></div><div id="personal-reminders"></div></article><article class="surface mywork-side-card"><div class="mywork-card-heading"><span class="mywork-card-icon">◇</span><div><h3>Other responsibilities</h3><p>Work outside your task plan</p></div></div><div id="personal-responsibilities"></div></article></aside></div>`);
 panel('notifications',`<div class="section-intro"><div><h2>Notifications for you</h2><p>Mentions, assignments and personal reminders. Open a notification to go to the relevant work.</p></div><button class="secondary-button" id="read-all-notifications">Mark all read</button></div><div id="personal-notifications" class="surface"></div>`);
 panel('access',`<div class="section-intro"><div><h2>Staff module access</h2><p>Choose which modules each staff account may open or edit. Administrators retain full access.</p></div></div><article class="surface"><label class="field"><span>Staff member</span><select id="access-user"></select></label><div id="module-access-grid" class="module-access-grid"></div><button class="primary-button" id="save-module-access">Save module access</button><p id="access-status" role="status"></p></article>`);
 document.body.insertAdjacentHTML('beforeend',`<dialog id="personal-reminder-dialog" class="app-dialog"><form id="personal-reminder-form"><div class="dialog-heading"><h2>Set a personal reminder</h2><button type="button" data-close-personal="personal-reminder-dialog" aria-label="Close">×</button></div><input type="hidden" name="id"><label class="field"><span>What do you want to work on?</span><input name="title" required maxlength="250"></label><label class="field"><span>When? (your device's time zone)</span><input type="datetime-local" name="due" required></label><label class="field"><span>Remind me before</span><select name="lead"><option value="0">At the planned time</option><option value="15" selected>15 minutes</option><option value="60">1 hour</option><option value="1440">1 day</option></select></label><p>Reminders appear in your notification centre, including when you return to the Hub. A gentle daily nudge continues until you complete or reschedule the plan.</p><p id="reminder-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary-button" data-close-personal="personal-reminder-dialog">Cancel</button><button class="primary-button">Save reminder</button></div></form></dialog>
@@ -22,33 +22,39 @@ function applyAccess(){
  if(!profile()) return;
  document.querySelectorAll('.nav-item[data-view]').forEach(el=>{el.hidden=(el.dataset.view==='access' ? profile().role!=='admin' : backend().moduleLevel(el.dataset.view)==='none');});
  document.querySelectorAll('[data-view-panel]').forEach(panel=>{
-   if(['mywork','notifications'].includes(panel.dataset.viewPanel))return;
+   if(['mywork','notifications','payroll'].includes(panel.dataset.viewPanel))return;
    const level=backend().moduleLevel(panel.dataset.viewPanel);
    panel.querySelectorAll('button,input,select,textarea').forEach(el=>{
     if(el.dataset.accessDisabled){el.disabled=false;delete el.dataset.accessDisabled;}
-    const isNavigation=el.matches('[data-view],[data-go-view],[data-chat-thread],[data-chat-filter],[data-open-project],[data-project-tab],[data-play-voice],[data-preview-chat-file],[data-open-receipt],[data-equipment-history],[data-view-document],[data-record-pdf],[data-receipt],[data-chat-info],[data-finance-section],[data-conversation-search],[data-chat-menu-toggle],[data-chat-favourite],#chat-theme-toggle,#message-find-prev,#message-find-next,#message-find-close') || el.type==='search';
-    if(level==='view' && !isNavigation && !el.closest('[data-personal-readonly]')) { el.disabled=true;el.dataset.accessDisabled='true'; }
+    const isNavigation=el.matches('[data-work-scope],#new-project-button,[data-project-filter],[data-request-filter],[data-opp-tab],[data-opp-open],[data-opp-sources],[data-opp-refresh],[data-opp-more],[data-filter],[data-open-request],[data-commercial-filter]') || el.matches('#cage-online-button,[data-presence-close],[data-presence-refresh],[data-hub-action=notice],[data-hub-action=event],[data-hub-action=close],[data-hub-action=download],[data-hub-action=ack],[data-hub-action=rsvp],[data-hub-action=today],[data-hub-action=previous],[data-hub-action=next],[data-hub-action=more],[data-hub-action=export],[data-hub-action=refresh],[data-hub-action=refresh-calendar],[data-hub-source],#hub-calendar-date,#hub-calendar-view,#hub-notice-filter') || el.matches('[data-delivery-history],[data-view],[data-go-view],[data-chat-thread],[data-chat-filter],[data-open-project],[data-project-tab],[data-play-voice],[data-preview-chat-file],[data-open-receipt],[data-equipment-history],[data-view-document],[data-record-pdf],[data-receipt],[data-chat-info],[data-finance-section],[data-conversation-search],[data-chat-menu-toggle],[data-chat-favourite],#chat-theme-toggle,#message-find-prev,#message-find-next,#message-find-close') || el.type==='search';
+    const invoiceSend=el.matches('[data-send-document=invoice],[data-send-document=quote]')&&backend().canSendInvoice?.();
+    if(level==='view' && !invoiceSend && !isNavigation && !el.closest('[data-personal-readonly]')) { el.disabled=true;el.dataset.accessDisabled='true'; }
    });
  });
  if(backend().moduleLevel(activeView)==='none' || (activeView==='access' && profile().role!=='admin')) setView('mywork');
 }
 function updateBadge(){const count=personal.notifications.filter(n=>!n.read_at).length;$('notification-count').textContent=count;bell.setAttribute('aria-label',`Notifications: ${count} unread`);}
-async function refresh(){if(!profile())return;try{personal=await backend().personalData();window.dispatchEvent(new CustomEvent("cage:personal-notifications",{detail:personal.notifications}));updateBadge();refreshView();$('personal-error').textContent='';}catch(e){$('personal-error').textContent=e.message||'Could not load personal reminders.';}}
+let refreshSequence=0,refreshOwner=null,refreshQueued=false;
+async function refresh(){if(!profile())return;if(refreshOwner===profile().id){refreshQueued=true;return;}const request=++refreshSequence,owner=profile().id;refreshOwner=owner;try{const result=await backend().personalData();if(request!==refreshSequence||profile()?.id!==owner)return;personal=result;window.dispatchEvent(new CustomEvent("cage:personal-notifications",{detail:personal.notifications}));updateBadge();refreshView();window.dispatchEvent(new Event('cage:unread-updated'));$('personal-error').textContent='';}catch(e){if(request!==refreshSequence||profile()?.id!==owner)return;$('personal-error').textContent=e.message||'Could not load personal reminders.';window.dispatchEvent(new Event('cage:personal-notifications-error'));}finally{if(refreshOwner===owner){refreshOwner=null;if(refreshQueued){refreshQueued=false;refresh();}}}}
 function formatWhen(value){return new Date(value).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});}
 function refreshView(){
  if(activeView==='mywork')renderMine();
  if(activeView==='notifications')renderNotifications();
  updateBadge();
 }
+$('new-standalone-task').onclick=()=>{openTaskDialog();$('task-form').elements.owner.value=me();};
 function renderMine(){
+ $('my-standalone-tasks').innerHTML=(state.tasks||[]).filter(t=>!t.project&&t.owner===me()&&t.status!=='Done').map(t=>`<div class="personal-row"><button class="personal-link" data-task-detail="${esc(t.id)}">${esc(t.title)}</button><small>${esc(t.status)} · ${esc(t.due)}</small></div>`).join('')||'<p>No open standalone tasks. Add a task without selecting a project.</p>';
+
  const list=personal.reminders.filter(r=>!r.completed_at);
  $('personal-reminders').innerHTML=list.map(r=>`<div class="personal-row" data-reminder-row="${r.id}"><div><strong>${esc(r.title)}</strong><small>${esc(formatWhen(r.due_at))}${new Date(r.due_at)<new Date()?' · Ready for your next step':''}</small></div><div class="personal-actions"><button data-edit-reminder="${r.id}">Reschedule</button><button data-complete-reminder="${r.id}">Done</button></div></div>`).join('')||'<p>No pending reminders. Set a plan for your next task.</p>';
  const mine=[];
  const add=(key,module,label,match,title)=>{if(backend().moduleLevel(module)==='none')return;(state[key]||[]).filter(match).forEach(r=>mine.push({id:r.id,module,title:title(r),label,due:r.due||r.deadline||r.nextService||''}));};
- add('requests','requests','Request',r=>r.owner===me()&&!['Converted','Lost / Declined'].includes(r.stage),r=>r.title);
- add('projects','projects','Project',r=>r.owner===me()||r.lead===me()||(r.team||r.members||[]).includes(me()),r=>r.name);
+ add('requests','requests','Request',r=>(r.owner===me()||(r.team||[]).includes(me()))&&!['Converted','Lost / Declined'].includes(r.stage),r=>r.title);
+ add('projects','projects','Project',r=>(r.owner===me()||r.lead===me()||(r.team||r.members||[]).includes(me()))&&projectHealth(r)!=='complete'&&!['Complete','Completed','Archived','Cancelled'].includes(r.status),r=>r.name);
+ add('tasks','tasks','Task collaborator',r=>r.owner!==me()&&(r.team||[]).includes(me())&&r.status!=='Done',r=>r.title);
  add('assets','assets','Equipment',r=>r.custodian===me(),r=>r.name);
- add('deals','crm','Opportunity',r=>r.owner===me()&&!['Won','Lost'].includes(r.stage),r=>r.name);
+ add('deals','crm','Opportunity',r=>(r.owner===me()||(r.team||[]).includes(me()))&&!['Won','Lost'].includes(r.stage),r=>r.name);
  $('personal-responsibilities').innerHTML=mine.map(r=>`<div class="personal-row responsibility-row"><div><span class="responsibility-kind">${r.label}</span><button class="personal-link" data-personal-view="${r.module}" data-personal-target="${esc(r.id)}">${esc(r.title)}</button><small>${r.due?'Due '+esc(r.due):'Open responsibility'}</small></div><button class="icon-reminder" data-plan-title="${esc(r.title)}" aria-label="Set reminder">◷</button></div>`).join('')||'<div class="mywork-empty"><span>✓</span><p>No other responsibilities need your attention.</p></div>';
 }
 function renderNotifications(){
@@ -63,6 +69,7 @@ function openReminder(id='',title=''){
 function navigate(view,id){
  if(backend().moduleLevel(view)==='none'){showToast('Your module access has changed. Ask an administrator if you need this record.');return;}
  setView(view);
+ if(['notices','calendar'].includes(view)&&id)window.CAGE_COLLAB?.open(view,id).catch(e=>showToast(e.message));
  if(view==='chat')selectChatThread(id);
  if(view==='requests' && requestById(id))openRequest(id);
  if(view==='assets'){const asset=assetById(id);if(asset){$('asset-search').value=asset.tag;assetFilter='all';renderAssets();}}
@@ -79,7 +86,7 @@ async function renderAccess(){
 }
 function renderAccessGrid(){
  const u=users.find(u=>u.id===$('access-user').value);const admin=u?.role==='admin';
- $('module-access-grid').innerHTML=modules.map(m=>{const explicit=rules.find(r=>r.user_id===u?.id&&r.module===m);const defaultLevel=u?.role==='viewer'?'view':m==='approvals'&&u?.role!=='manager'?'none':m==='hr'&&!['manager','hr'].includes(u?.role)?'view':'edit';const level=admin?'edit':u?.role==='viewer'?(explicit?.access==='none'?'none':'view'):explicit?.access||defaultLevel;return `<label class="field"><span>${esc(viewMeta[m]?.[0]||m)}</span><select data-module="${m}" ${admin?'disabled':''}>${['none','view','edit'].map(v=>`<option value="${v}" ${v==='edit'&&u?.role==='viewer'?'disabled':''} ${level===v?'selected':''}>${{none:'No access',view:'View only',edit:'View and edit'}[v]}</option>`).join('')}</select></label>`;}).join('');
+ $('module-access-grid').innerHTML=modules.map(m=>{if(m==='training')return `<label class="field"><span>Training Academy</span><select disabled><option>${u?.active===false||u?.role==='shared'?'No access':'Full Academy access'}</option></select><small>Active internal members have full access; changes are logged.</small></label>`;const explicit=rules.find(r=>r.user_id===u?.id&&r.module===m);const defaultLevel=u?.role==='viewer'?'view':m==='approvals'&&u?.role!=='manager'?'none':m==='hr'&&!['manager','hr'].includes(u?.role)?'view':'edit';const level=admin?'edit':u?.role==='viewer'?(explicit?.access==='none'?'none':'view'):explicit?.access||defaultLevel;return `<label class="field"><span>${esc(viewMeta[m]?.[0]||m)}</span><select data-module="${m}" ${admin?'disabled':''}>${['none','view','edit'].map(v=>`<option value="${v}" ${v==='edit'&&u?.role==='viewer'?'disabled':''} ${level===v?'selected':''}>${{none:'No access',view:'View only',edit:'View and edit'}[v]}</option>`).join('')}</select></label>`;}).join('');
  $('save-module-access').disabled=admin;$('access-status').textContent=admin?'Administrators always have full access.':'';
 }
 $('access-user').addEventListener('change',renderAccessGrid);
@@ -108,7 +115,7 @@ $('cancel-voice').onclick=()=>{discarded=true;if(recorder?.state==='recording')r
 $('send-voice').onclick=async()=>{
  if(!voiceBlob)return;if(activeChatThread!==voiceThread){showToast('Return to the chat where you started recording before sending.');return;}
  const button=$('send-voice');button.disabled=true;const caption=$('chat-input').value;const targetThread=voiceThread;
- try{const ext=voiceBlob.type.includes('mp4')?'m4a':voiceBlob.type.includes('ogg')?'ogg':'webm';const file=new File([voiceBlob],`voice-${Date.now()}.${ext}`,{type:voiceBlob.type});const uploaded=await backend().uploadFile(file,'chat',voiceThread);if(activeChatThread!==targetThread)selectChatThread(targetThread);sendChatMessage(caption,uploaded.name,uploaded.path,{audio:true,audioDuration:voiceBlob.duration});cleanupVoice();}catch(e){$('voice-status').textContent=e.message||'Upload failed. Your recording is ready to retry.';}finally{button.disabled=false;}
+ try{const ext=voiceBlob.type.includes('mp4')?'m4a':voiceBlob.type.includes('ogg')?'ogg':'webm';const file=new File([voiceBlob],`voice-${Date.now()}.${ext}`,{type:voiceBlob.type});const uploaded=await backend().uploadFile(file,'chat',voiceThread);if(activeChatThread!==targetThread)selectChatThread(targetThread);const queued=sendChatMessage(caption,uploaded.name,uploaded.path,{audio:true,audioDuration:voiceBlob.duration});if(queued)cleanupVoice();else $('voice-status').textContent='Message was not queued. Your recording is ready to retry.';}catch(e){$('voice-status').textContent=e.message||'Upload failed. Your recording is ready to retry.';}finally{button.disabled=false;}
 };
 window.addEventListener('pagehide',()=>{discarded=true;if(recorder?.state==='recording')recorder.stop();cleanupVoice();});
 document.addEventListener('click',async e=>{
@@ -133,8 +140,11 @@ $('equipment-action-form').onsubmit=e=>{e.preventDefault();if(backend().moduleLe
 document.addEventListener('submit',e=>{
  const formModules={'asset-form':'assets','equipment-action-form':'assets','expense-form':'finance','invoice-form':'finance','quote-form':'finance','send-form':'finance','task-form':'tasks','project-form':'projects','chat-form':'chat','training-program-form':'training','training-cohort-form':'training','learner-form':'training'};
  const module=formModules[e.target.id];
- if(module&&backend().moduleLevel(module)!=='edit'&&e.submitter?.value!=='cancel'){e.preventDefault();e.stopImmediatePropagation();showToast('You have view-only access to this module. Ask an administrator for edit access.');}
+ const invoiceSend=e.target.id==='send-form'&&['invoice','quote'].includes(e.target.elements.documentType.value)&&backend().canSendInvoice?.();
+ const standalone=e.target.id==='task-form'&&!e.target.elements.project.value&&profile()?.active&&profile()?.role!=='shared';
+ if(module&&!standalone&&e.target.id!=='project-form'&&!invoiceSend&&backend().moduleLevel(module)!=='edit'&&e.submitter?.value!=='cancel'){e.preventDefault();e.stopImmediatePropagation();showToast('You have view-only access to this module. Ask an administrator for edit access.');}
 },true);
 window.CAGE_PERSONAL={applyAccess,updateBadge,refreshView,refresh,chatUnread(thread){return personal.notifications.filter(n=>!n.read_at&&n.target_view==='chat'&&n.target_id===thread).length;},chatUnreadTotal(){return personal.notifications.filter(n=>!n.read_at&&n.target_view==='chat').length;},view(v){if(v!=='chat'&&recorder?.state==='recording')recorder.stop();if(v==='mywork'||v==='notifications'){refreshView();refresh();}if(v==='access')renderAccess();}};
 window.addEventListener('cage:session-ready',()=>{refresh();applyAccess();if(poll)clearInterval(poll);poll=setInterval(()=>{if(!document.hidden)refresh();},30000);setView('mywork');});
+window.addEventListener('cage:access-closed',()=>{refreshSequence++;refreshOwner=null;refreshQueued=false;personal={reminders:[],notifications:[]};if(poll)clearInterval(poll);updateBadge();});
 })();

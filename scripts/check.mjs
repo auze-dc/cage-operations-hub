@@ -1,3 +1,5 @@
+import {syncSourceMirrors} from './source-mirrors.mjs';
+syncSourceMirrors(false);
 import fs from "node:fs";
 import vm from "node:vm";
 import path from "node:path";
