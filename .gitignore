@@ -6,3 +6,9 @@ node_modules/
 .DS_Store
 .supabase/
 supabase/.temp/
+__pycache__/
+*.pyc
+.pgpass
+.pg_service.conf
+*.recovery-secrets.json
+recovery-backups/
