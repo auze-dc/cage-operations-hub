@@ -8,19 +8,17 @@ cleanup() {
   rm -rf "$task_root"
 }
 trap cleanup EXIT
-mkdir "$task_root/socket" "$task_root/bin"
-# The fixture server runs as its image's postgres user; only its socket directory
-# is shared. No real records, keys or backup credentials are used in this test.
+mkdir "$task_root/bin"
+# The fixture uses its container-internal Unix socket. No TCP listeners, real
+# records, keys or backup credentials are used in this test.
 chmod 755 "$task_root"
-chmod 777 "$task_root/socket"
 docker run -d --name "$task_container" --network none \
   --mount "type=bind,source=$task_root,target=$task_root" \
   --tmpfs /var/lib/postgresql/data \
   -e POSTGRES_PASSWORD=disposable-fixture-only \
-  postgres:17.6 -c "unix_socket_directories=$task_root/socket" \
-  -c "listen_addresses=" >/dev/null
+  postgres:17.6 -c "listen_addresses=" >/dev/null
 for attempt in $(seq 1 40); do
-  if docker exec "$task_container" pg_isready -h "$task_root/socket" -U postgres >/dev/null 2>&1; then
+  if docker exec "$task_container" pg_isready -h /var/run/postgresql -U postgres >/dev/null 2>&1; then
     break
   fi
   if [ "$attempt" = 40 ]; then
@@ -40,9 +38,9 @@ exec docker exec --user "$CAGE_TEST_UID:$CAGE_TEST_GID" \
 SH
   chmod 700 "$task_root/bin/$tool"
 done
-docker exec "$task_container" createdb -h "$task_root/socket" -U postgres cage_recovery_source
-docker exec "$task_container" createdb -h "$task_root/socket" -U postgres cage_recovery_restored
-docker exec -i "$task_container" psql -h "$task_root/socket" -U postgres -d cage_recovery_source -v ON_ERROR_STOP=1 <<'SQL'
+docker exec "$task_container" createdb -h /var/run/postgresql -U postgres cage_recovery_source
+docker exec "$task_container" createdb -h /var/run/postgresql -U postgres cage_recovery_restored
+docker exec -i "$task_container" psql -h /var/run/postgresql -U postgres -d cage_recovery_source -v ON_ERROR_STOP=1 <<'SQL'
 create role fixture_reader;
 create table public.invoices(id int primary key, reference text unique, amount numeric(12,2));
 create table public.notes(id int primary key, body text);
@@ -55,7 +53,7 @@ create function public.fixture_total() returns numeric language sql as $$select 
 SQL
 cat > "$task_root/service.conf" <<EOF
 [fixture]
-host=$task_root/socket
+host=/var/run/postgresql
 user=postgres
 dbname=cage_recovery_source
 sslmode=verify-full
@@ -65,9 +63,9 @@ chmod 600 "$task_root/service.conf" "$task_root/passwords"
 python3 scripts/recovery.py database --service fixture \
   --service-file "$task_root/service.conf" --password-file "$task_root/passwords" \
   --binary-dir "$task_root/bin" --output "$task_root/backup"
-docker exec "$task_container" pg_restore -h "$task_root/socket" -U postgres \
+docker exec "$task_container" pg_restore -h /var/run/postgresql -U postgres \
   --exit-on-error --dbname=cage_recovery_restored "$task_root/backup/database.dump"
-docker exec -i "$task_container" psql -h "$task_root/socket" -U postgres -d cage_recovery_restored -v ON_ERROR_STOP=1 <<'SQL'
+docker exec -i "$task_container" psql -h /var/run/postgresql -U postgres -d cage_recovery_restored -v ON_ERROR_STOP=1 <<'SQL'
 do $$
 begin
  if (select count(*) from public.invoices) <> 2 then raise exception 'Missing invoices';end if;
