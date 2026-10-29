@@ -65,6 +65,8 @@
     document.body.classList.add("auth-pending");
     gate.hidden = false;
     loginForm.hidden = false;
+    loginForm.removeAttribute("aria-busy");
+    loginForm.querySelector('[type=submit]').disabled=false;
     passwordSetupForm.hidden = true;
     forgotPasswordButton.hidden = false;
     document.getElementById("auth-title").textContent = "Sign in to Operations Hub";
@@ -406,9 +408,32 @@
     }
     clearTimeout(accessRetryTimer);loginFailure(error);
   }
-  async function verifiedProfile(uid){
-    const r=await limited(client.from('profiles').select('id, organization_id, email, full_name, initials, role, active, assignable').eq('id',uid).eq('organization_id',config.organizationId).single().abortSignal(AbortSignal.timeout(15000)),'Staff profile');
-    if(r.error)throw Object.assign(new Error('Your staff profile could not load. '+r.error.message),{status:r.status,code:r.error.code});
+  function temporaryAccessError(error){
+    const status=Number(error?.status);
+    if([400,401,403,404,406,422].includes(status)||['PGRST116','42501','SESSION_CHANGED'].includes(error?.code))return false;
+    return [408,429,500,502,503,504].includes(status)||['57014','PGRST003'].includes(error?.code)||/fetch|network|timeout|timed out|connection|failed to load/i.test(error?.message||'');
+  }
+  // Retry only idempotent access reads. Each attempt gets its own deadline and
+  // aborts before retrying, so a stalled request cannot accumulate in the background.
+  async function accessRead(request,label,uid,generation){
+    for(let attempt=0;attempt<2;attempt++){
+      if(generation!==sessionGeneration)throw Object.assign(new Error('Your session changed.'),{code:'SESSION_CHANGED'});
+      const controller=new AbortController();
+      try{
+        const result=await limited(request(controller.signal),label,15000);
+        if(generation!==sessionGeneration)throw Object.assign(new Error('Your session changed.'),{code:'SESSION_CHANGED'});
+        if(result.error)throw Object.assign(new Error(result.error.message),{status:result.status,code:result.error.code});
+        return result;
+      }catch(error){
+        if(!temporaryAccessError(error))throw error;
+        if(attempt===1)throw Object.assign(new Error(label+' could not load because the connection timed out or the service is unavailable. Retry opening the workspace; you do not need to reset your password.'),{status:error.status,code:error.code});
+        if(!sessionReady)loginError.textContent='The connection is slow. Retrying '+label.toLowerCase()+'…';
+      }finally{controller.abort();}
+      await new Promise(resolve=>setTimeout(resolve,1000));
+    }
+  }
+  async function verifiedProfile(uid,generation){
+    const r=await accessRead(signal=>client.from('profiles').select('id, organization_id, email, full_name, initials, role, active, assignable').eq('id',uid).eq('organization_id',config.organizationId).single().abortSignal(signal),'Your staff profile',uid,generation);
     if(!r.data?.active||r.data.id!==uid||r.data.organization_id!==config.organizationId)throw new Error('This account does not have an active staff profile in this organisation.');
     if(!['admin','manager','hr','finance','member','viewer','shared'].includes(r.data.role))throw new Error('Your staff role could not be verified. Contact your administrator.');
     return r.data;
@@ -419,14 +444,12 @@
     if(sessionLoad&&sessionLoadUser===uid)return sessionLoad;
     if(sessionReady&&profile?.id===uid&&!refresh)return;
     const generation=refresh&&sessionReady&&profile?.id===uid?sessionGeneration:++sessionGeneration;sessionLoadUser=uid;
-    if(!refresh){sessionReady=false;showLogin('Opening your verified workspace…');retryLogin.hidden=true;}
+    if(!refresh){sessionReady=false;showLogin('Opening your verified workspace…');retryLogin.hidden=true;loginForm.setAttribute('aria-busy','true');loginForm.querySelector('[type=submit]').disabled=true;}
     sessionLoad=(async()=>{
       try{
-        const nextProfile=await verifiedProfile(uid);
-        const access=await limited(client.from('module_access').select('module,access').eq('user_id',uid).abortSignal(AbortSignal.timeout(15000)),'Module permissions');
-        if(access.error)throw Object.assign(new Error('Module permissions could not load. '+access.error.message),{status:access.status,code:access.error.code});
-        const workspace=await limited(client.rpc('get_my_workspace').abortSignal(AbortSignal.timeout(15000)),'Workspace loading');
-        if(workspace.error)throw Object.assign(new Error('Workspace data could not load. '+workspace.error.message),{status:workspace.status,code:workspace.error.code});
+        const nextProfile=await verifiedProfile(uid,generation);
+        const access=await accessRead(signal=>client.from('module_access').select('module,access').eq('user_id',uid).abortSignal(signal),'Module permissions',uid,generation);
+        const workspace=await accessRead(signal=>client.rpc('get_my_workspace').abortSignal(signal),'Workspace data',uid,generation);
         if(!workspace.data?.data||typeof workspace.data.data!=='object')throw new Error('Workspace data is unavailable. Please contact your administrator.');
         if(generation!==sessionGeneration)return;
         if(lastLoadedUser&&lastLoadedUser!==uid){pendingState=null;syncConflicts=[];cloudBase={};remoteSnapshot=null;clearTimeout(saveTimer);}
@@ -435,7 +458,7 @@
         try{chooseGreetingLanguage();}catch{greetingLanguage="English";}setCurrentUser();applyPermissions();subscribe();sessionReady=true;retryLogin.hidden=true;hideLogin();hideBanner();
         if(!refresh)window.dispatchEvent(new CustomEvent('cage:session-ready',{detail:{profile}}));
       }catch(error){if(generation===sessionGeneration)sessionCheckFailure(error,refresh,uid,generation);}
-      finally{if(generation===sessionGeneration){sessionLoad=null;sessionLoadUser=null;}}
+      finally{if(generation===sessionGeneration){sessionLoad=null;sessionLoadUser=null;loginForm.removeAttribute('aria-busy');loginForm.querySelector('[type=submit]').disabled=false;}}
     })();
     return sessionLoad;
   }
