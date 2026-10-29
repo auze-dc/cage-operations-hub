@@ -456,7 +456,8 @@
         const workspace=await accessRead(signal=>client.rpc('get_my_workspace').abortSignal(signal),'Workspace data',uid,generation);
         if(!workspace.data?.data||typeof workspace.data.data!=='object')throw new Error('Workspace data is unavailable. Please contact your administrator.');
         if(generation!==sessionGeneration)return;
-        if(lastLoadedUser&&lastLoadedUser!==uid){pendingState=null;syncConflicts=[];cloudBase={};remoteSnapshot=null;clearTimeout(saveTimer);}
+        if(lastLoadedUser&&lastLoadedUser!==uid){window.dispatchEvent(new CustomEvent("cage:session-ended"));
+      pendingState=null;syncConflicts=[];cloudBase={};remoteSnapshot=null;clearTimeout(saveTimer);}
         profile=nextProfile;moduleAccess=Object.fromEntries((access.data||[]).map(row=>[row.module,row.access]));lastLoadedUser=uid;
         if(!savingNow)receiveWorkspace(workspace.data);
         try{chooseGreetingLanguage();}catch{greetingLanguage="English";}setCurrentUser();applyPermissions();subscribe();sessionReady=true;retryLogin.hidden=true;hideLogin();hideBanner();
@@ -496,7 +497,7 @@
       client.auth.onAuthStateChange((event,session)=>{
         if(!['SIGNED_IN','SIGNED_OUT','PASSWORD_RECOVERY'].includes(event))return;
         const eventVersion=++authEventVersion;
-        if(event==='SIGNED_OUT'){lastAuthSession=null;sessionGeneration++;sessionReady=false;profile=null;sessionLoad=null;sessionLoadUser=null;clearInterval(workspacePoll);}
+        if(event==='SIGNED_OUT'){window.dispatchEvent(new CustomEvent('cage:session-ended'));lastAuthSession=null;sessionGeneration++;sessionReady=false;profile=null;sessionLoad=null;sessionLoadUser=null;clearInterval(workspacePoll);}
         setTimeout(()=>{
           if(eventVersion!==authEventVersion)return;
           if(event==='PASSWORD_RECOVERY'){passwordSetupPending=true;showPasswordSetup();return;}
@@ -568,6 +569,7 @@
       await window.CAGE_LOCATION?.stop?.();
       await window.CAGE_PRESENCE?.stop?.();
       if(client){const r=await client.auth.signOut();if(r?.error)throw r.error;}
+      window.dispatchEvent(new CustomEvent("cage:session-ended"));
       pendingState=null;syncConflicts=[];cloudBase={};remoteSnapshot=null;
       if(decision==='clear')window.CAGE_DRAFT_PRIVACY?.clear(uid);
       else localStorage.removeItem("cage-operations-hub-production-cache-v1");
@@ -754,20 +756,22 @@
   }
 
   async function createJob(payload) {
-    const result = await client.from("job_openings").insert({
-      organization_id: config.organizationId,
-      title: payload.title,
-      department: payload.department,
-      location: payload.location,
-      employment_type: payload.employmentType,
-      description: payload.description,
-      requirements: payload.requirements,
-      closing_date: payload.closingDate,
-      status: payload.status,
-      hiring_manager: profile.id,
-      created_by: profile.id
-    }).select().single();
+    if (!profile || !["admin", "manager", "hr"].includes(profile.role)) throw new Error("Recruitment access is required.");
+    const record = {
+      organization_id: config.organizationId, title: payload.title.trim(), department: payload.department.trim(),
+      location: payload.location.trim(), employment_type: payload.employmentType, description: payload.description.trim(),
+      requirements: payload.requirements.trim(), closing_date: payload.closingDate, status: payload.status,
+      responsibilities: payload.responsibilities, desirable_skills: payload.desirableSkills, benefits: payload.benefits,
+      work_arrangement: payload.workArrangement, positions: Number(payload.positions), duration: payload.duration,
+      compensation: payload.compensation, cover_note_required: payload.coverNoteRequired,
+      screening_questions: payload.screeningQuestions
+    };
+    let query;
+    if (payload.id) query = client.from("job_openings").update({ ...record, updated_at: new Date().toISOString() }).eq("id", payload.id).eq("organization_id", config.organizationId).eq("updated_at", payload.updatedAt);
+    else query = client.from("job_openings").insert({ ...record, hiring_manager: profile.id, created_by: profile.id });
+    const result = await query.select().maybeSingle();
     if (result.error) throw new Error(result.error.message);
+    if (!result.data) throw new Error("This vacancy changed since you opened it. Close the editor and refresh vacancies before trying again. Your changes remain in this tab.");
     return result.data;
   }
 

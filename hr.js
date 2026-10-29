@@ -11,7 +11,7 @@
   const isAdmin = () => profile()?.role === "admin";
 
   function metrics() {
-    const openJobs = hrData.jobs.filter(job => job.status === "Open").length;
+    const openJobs = hrData.jobs.filter(job => job.status === "Open" && job.closing_date >= window.CAGE_JOB_ADVERT.today()).length;
     const activeCandidates = hrData.applications.filter(item => !["Hired", "Rejected", "Withdrawn"].includes(item.stage)).length;
     const interviews = hrData.interviews.filter(item => item.status === "Scheduled" && new Date(item.scheduled_start) >= new Date()).length;
     document.getElementById("hr-nav-count").textContent = String(activeCandidates);
@@ -33,7 +33,7 @@
   function renderJobs() {
     const target = document.getElementById("job-opening-list");
     if (!canHR()) { target.innerHTML = ""; return; }
-    target.innerHTML = hrData.jobs.length ? hrData.jobs.map(job => `<div class="hr-list-row"><div><strong>${esc(job.title)}</strong><span>${esc(job.department)} · ${esc(job.employment_type)} · closes ${esc(job.closing_date)}</span></div><div class="hr-row-actions"><span class="status-pill ${job.status === "Open" ? "done" : "attention"}">${esc(job.status)}</span></div></div>`).join("") : '<div class="empty-state"><p>No vacancies have been created.</p></div>';
+    target.innerHTML = hrData.jobs.length ? hrData.jobs.map(job => `<div class="hr-list-row"><div><strong>${esc(job.title)}</strong><span>${esc(job.department)} · ${esc(job.employment_type)} · closes ${esc(job.closing_date)}</span></div><div class="hr-row-actions"><span class="status-pill ${job.status === "Open" ? "done" : "attention"}">${esc(job.status === "Open" && job.closing_date < window.CAGE_JOB_ADVERT.today() ? "Closed" : job.status)}</span><button data-edit-vacancy="${job.id}">Edit</button><button data-duplicate-vacancy="${job.id}">Duplicate</button></div></div>`).join("") : '<div class="empty-state"><p>No vacancies have been created.</p></div>';
   }
 
   function renderInterviews() {
@@ -57,7 +57,7 @@
     ];
     target.innerHTML = columns.map(([title, stages]) => `<section class="candidate-column"><h4>${title} · ${candidates.filter(item => stages.includes(item.stage)).length}</h4>${candidates.filter(item => stages.includes(item.stage)).map(item => {
       const job = hrData.jobs.find(job => job.id === item.job_opening_id);
-      return `<article class="candidate-card"><strong>${esc(item.full_name)}</strong><small>${esc(job?.title || "Vacancy")}<br>${esc(item.email)} · ${esc(item.phone)}</small><div class="hr-row-actions"><button data-candidate-cv="${esc(item.cv_storage_path)}">CV</button><button data-interview-candidate="${item.id}">Interview</button></div><select data-candidate-stage="${item.id}" aria-label="Stage for ${esc(item.full_name)}">${STAGES.map(stage => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select></article>`;
+      return `<article class="candidate-card"><strong>${esc(item.full_name)}</strong><small>${esc(job?.title || "Vacancy")}<br>${esc(item.email)} · ${esc(item.phone)}</small><p class="candidate-salary">${item.salary_expectation != null ? `${esc(item.salary_currency)} ${Number(item.salary_expectation).toLocaleString()} / ${esc(item.salary_period)} gross` : "Salary expectation not supplied (earlier application)"}</p>${(item.screening_answers || []).map(answer => `<details><summary>${esc(answer.question)}</summary><p>${esc(answer.answer)}</p></details>`).join("")}<div class="hr-row-actions"><button data-candidate-cv="${esc(item.cv_storage_path)}">CV</button><button data-interview-candidate="${item.id}">Interview</button></div><select data-candidate-stage="${item.id}" aria-label="Stage for ${esc(item.full_name)}">${STAGES.map(stage => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select></article>`;
     }).join("")}</section>`).join("");
   }
 
@@ -87,7 +87,7 @@
     finally { loading = false; }
   }
 
-  document.getElementById("new-job-button").addEventListener("click", () => { const form = document.getElementById("job-form"); form.reset(); form.elements.location.value = "Malawi"; document.getElementById("job-dialog").showModal(); });
+  document.getElementById("new-job-button").addEventListener("click", () => window.CAGE_VACANCY_EDITOR.open());
   document.getElementById("schedule-interview-button").addEventListener("click", () => openInterview());
   document.getElementById("upload-cv-button").addEventListener("click", () => { document.getElementById("employee-document-form").reset(); document.getElementById("employee-document-dialog").showModal(); });
   document.getElementById("invite-user-button").addEventListener("click", () => { document.getElementById("invite-user-form").reset(); document.getElementById("invite-user-dialog").showModal(); });
@@ -100,12 +100,6 @@
     document.getElementById("interview-dialog").showModal();
   }
 
-  document.getElementById("job-form").addEventListener("submit", async event => {
-    event.preventDefault(); if (event.submitter?.value === "cancel") return document.getElementById("job-dialog").close();
-    const form = event.currentTarget; const data = new FormData(form); const error = document.getElementById("job-form-error"); error.textContent = "";
-    try { await window.CAGE_BACKEND.createJob(Object.fromEntries(data)); document.getElementById("job-dialog").close(); showToast("Vacancy created."); await load(); }
-    catch (e) { error.textContent = e.message || "Vacancy could not be created."; }
-  });
   document.getElementById("interview-form").addEventListener("submit", async event => {
     event.preventDefault(); if (event.submitter?.value === "cancel") return document.getElementById("interview-dialog").close();
     const data = new FormData(event.currentTarget); const payload = Object.fromEntries(data); const error = document.getElementById("interview-form-error"); error.textContent = "";
@@ -141,6 +135,8 @@
     }
   });
   document.addEventListener("click", event => {
+    const vacancy = event.target.closest("[data-edit-vacancy],[data-duplicate-vacancy]");
+    if (vacancy) window.CAGE_VACANCY_EDITOR.open(hrData.jobs.find(job => job.id === (vacancy.dataset.editVacancy || vacancy.dataset.duplicateVacancy)), Boolean(vacancy.dataset.duplicateVacancy));
     const saveAccess = event.target.closest("[data-save-user-access]");
     if (saveAccess) {
       const row = saveAccess.closest(".admin-user-row");

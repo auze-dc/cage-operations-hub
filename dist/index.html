@@ -933,11 +933,17 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
     </form>
   </dialog>
 
-  <dialog id="job-dialog" class="app-dialog">
-    <form method="dialog" id="job-form">
-      <div class="dialog-heading"><div><p class="section-kicker">Recruitment</p><h2>Create vacancy</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
-      <div class="form-grid"><label class="field"><span>Job title *</span><input name="title" required></label><label class="field"><span>Department *</span><input name="department" required></label><label class="field"><span>Location *</span><input name="location" required value="Malawi"></label><label class="field"><span>Employment type *</span><select name="employmentType"><option>Permanent</option><option>Fixed-term</option><option>Part-time</option><option>Intern</option><option>Consultant</option></select></label><label class="field"><span>Closing date *</span><input name="closingDate" type="date" required></label><label class="field"><span>Status *</span><select name="status"><option>Draft</option><option>Open</option></select></label><label class="field field-wide"><span>Role description *</span><textarea name="description" rows="4" required></textarea></label><label class="field field-wide"><span>Minimum requirements *</span><textarea name="requirements" rows="4" required></textarea></label></div>
-      <p class="form-error" id="job-form-error"></p><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Create vacancy</button></div>
+  <dialog id="job-dialog" class="app-dialog vacancy-editor" aria-labelledby="vacancy-editor-title">
+    <form id="job-form" novalidate>
+      <header class="vacancy-top"><div><p class="section-kicker">Recruitment workspace</p><h2 id="vacancy-editor-title">Create vacancy</h2><p id="vacancy-save-state" role="status">Your work is saved automatically in this tab.</p></div><button type="button" class="icon-button" id="vacancy-close" aria-label="Close vacancy editor">×</button></header>
+      <nav class="vacancy-steps" aria-label="Vacancy creation steps"><button type="button" data-vacancy-step="0">01 <span>Role details</span></button><button type="button" data-vacancy-step="1">02 <span>Write the advert</span></button><button type="button" data-vacancy-step="2">03 <span>Application & review</span></button></nav>
+      <div class="vacancy-layout"><div class="vacancy-fields">
+      <section data-vacancy-panel="0"><h3>Start with the essentials</h3><p>Give applicants a clear picture of the opportunity.</p><label class="field"><span>Start from a template</span><select id="vacancy-template"><option value="">Blank vacancy</option><option>Internship</option><option>Drone operations</option><option>GIS & data</option><option>Administration</option></select></label><div class="form-grid"><label class="field"><span>Job title *</span><input name="title" type="text" maxlength="200" placeholder="e.g. Sales & Marketing Intern"></label><label class="field"><span>Department *</span><input name="department" type="text" maxlength="200" placeholder="e.g. Sales"></label><label class="field"><span>Location *</span><input name="location" type="text" maxlength="200" placeholder="e.g. Lilongwe, Malawi"></label><label class="field"><span>Employment type</span><select name="employmentType"><option>Permanent</option><option>Fixed-term</option><option>Part-time</option><option>Intern</option><option>Consultant</option></select></label><label class="field"><span>Work arrangement</span><select name="workArrangement"><option>On-site</option><option>Hybrid</option><option>Remote</option></select></label><label class="field"><span>Number of positions</span><input name="positions" type="number" maxlength="200" min="1" max="1000" step="1" value="1" placeholder="1"></label><label class="field"><span>Contract / internship duration</span><input name="duration" type="text" maxlength="200" placeholder="e.g. 6 months"></label><label class="field"><span>Closing date *</span><input name="closingDate" type="date" maxlength="200" placeholder=""></label><label class="field"><span>Salary / stipend offered (optional)</span><input name="compensation" type="text" maxlength="200" placeholder="e.g. MWK 300,000 gross per month"></label></div></section>
+      <section data-vacancy-panel="1" hidden><h3>Make the role easy to understand</h3><p>Use a short summary and one item per line for lists.</p><label class="field"><span>Role summary *</span><textarea name="description" rows="4" maxlength="12000" placeholder="Explain the purpose of this role and its impact."></textarea></label><label class="field"><span>Key responsibilities *</span><textarea name="responsibilities" rows="5" maxlength="12000" placeholder="One responsibility per line"></textarea></label><label class="field"><span>Essential requirements *</span><textarea name="requirements" rows="5" maxlength="12000" placeholder="One requirement per line"></textarea></label><label class="field"><span>Desirable skills</span><textarea name="desirableSkills" rows="3" maxlength="12000" placeholder="Useful skills that are not essential"></textarea></label><label class="field"><span>What CAGE offers</span><textarea name="benefits" rows="3" maxlength="12000" placeholder="Learning opportunities, benefits and working environment"></textarea></label></section>
+      <section data-vacancy-panel="2" hidden><h3>A clear application process</h3><p>All applicants provide contact details, a CV and salary expectations.</p><div class="vacancy-required"><strong>Salary expectation · Required</strong><p>Applicants enter their expected gross pay, currency and pay period. This is private to your recruitment team.</p></div><div class="vacancy-required"><strong>CV · Required</strong><p>PDF, DOC or DOCX, up to 10 MB.</p></div><label class="check-field"><input type="checkbox" name="coverNoteRequired"><span>Require a cover note</span></label><label class="field"><span>Screening questions (optional)</span><textarea name="screeningQuestions" rows="4" maxlength="1500" placeholder="One question per line. Up to 5 questions, 250 characters each."></textarea><small>Each question you add requires an answer.</small></label><label class="field"><span>Vacancy status</span><select name="status"><option>Draft</option><option value="Open">Open — accepting applications</option><option>Paused</option><option>Closed</option></select></label><p class="vacancy-guidance">Publishing makes this vacancy visible on CAGE Careers. Applications close at the end of the closing date, Malawi time.</p></section>
+      <p class="form-error" id="job-form-error" role="alert" tabindex="-1"></p>
+      </div><aside class="vacancy-preview" aria-label="Applicant advert preview"><div class="vacancy-preview-label">APPLICANT PREVIEW</div><article id="vacancy-preview-content"></article><div class="vacancy-preview-apply">Application includes CV & salary expectation</div></aside></div>
+      <footer class="vacancy-footer"><button type="button" class="secondary-button" id="vacancy-back">Back</button><button type="button" class="secondary-button" id="vacancy-discard">Discard recovered changes</button><span></span><button type="submit" class="secondary-button" value="draft">Save draft</button><button type="button" class="primary-button" id="vacancy-next">Continue →</button><button type="submit" class="primary-button" value="publish" id="vacancy-publish" hidden>Publish vacancy</button></footer>
     </form>
   </dialog>
 
@@ -984,10 +990,13 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
   <script src="./draft-privacy.js?v=enterprise-20261029" defer></script>
   <link rel="stylesheet" href="./security.css?v=mfa-20261029">
   <script src="./security.js?v=mfa-20261029" defer></script>
-  <script src="./production.js?v=mfa-20261029" defer></script>
+  <script src="./production.js?v=vacancy-20261029" defer></script>
   <script src="./app.js?v=enterprise-20261029" defer></script>
   <script src="./payroll.js?v=20261027-pension3" defer></script>
-  <script src="./hr.js?v=15.9.0" defer></script>
+  <script src="./job-advert.js?v=20261029" defer></script>
+<script src="./hr.js?v=vacancy-20261029" defer></script>
+<script src="./vacancy-editor.js?v=20261029" defer></script>
+<link rel="stylesheet" href="./vacancy-editor.css?v=20261029">
   <script src="./training.js?v=21.0.0" defer></script>
 <script src="./vendor/pdf-lib.min.js?v=15.9.0" defer></script>
 <script src="./document-pdf.js?v=tpin-20260930" defer></script>
@@ -1007,7 +1016,7 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
 <script src="./messenger.js?v=work-discovery-20260930" defer></script>
 <script src="./design-system.js?v=cage-design-20260922" defer></script>
 <script src="./hub-collaboration.js?v=work-discovery-20260930" defer></script>
-<script src="./refresh-recovery.js?v=payroll-20261027" defer></script>
+<script src="./refresh-recovery.js?v=vacancy-20261029" defer></script>
 
 <script src="./emoji-picker.js?v=27.0.0" defer></script>
 <script src="./staff-presence.js?v=staff-launch-20260924" defer></script>
