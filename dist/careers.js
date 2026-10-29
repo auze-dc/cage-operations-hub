@@ -29,10 +29,37 @@
       const response=await fetch(endpoint),result=await response.json();
       if(!response.ok||!result.ok||!Array.isArray(result.jobs))throw new Error('Unavailable');
       jobs=result.jobs;document.getElementById('job-count').textContent=`${jobs.length} open role${jobs.length===1?'':'s'}`;
-      list.innerHTML=jobs.length?jobs.map(job=>`<article class="job-card" id="role-${esc(job.id)}"><header class="job-head"><span class="job-label">${esc(job.department||'CAGE')} · Now recruiting</span><h3>${esc(job.title)}</h3><div class="job-meta">${[job.location,job.employment_type,job.work_arrangement,job.duration].filter(Boolean).map(x=>`<span>${esc(x)}</span>`).join('')}<span>Closes ${esc(date(job.closing_date))}</span></div></header><div class="job-body"><div class="job-copy"><h4>About the opportunity</h4>${window.CAGE_JOB_ADVERT.body(job,formatted)}</div><aside class="job-sidebar" aria-label="Application details"><dl><dt>Applications close</dt><dd>${esc(date(job.closing_date))}</dd><dt>Location</dt><dd>${esc(job.location||'See role description')}</dd><dt>Employment type</dt><dd>${esc(job.employment_type||'See role description')}</dd>${job.compensation?`<dt>Salary / stipend offered</dt><dd>${esc(job.compensation)}</dd>`:""}${job.positions?`<dt>Positions</dt><dd>${esc(job.positions)}</dd>`:""}</dl><button class="button primary" data-apply="${esc(job.id)}">Apply for this role <span aria-hidden="true">↗</span></button><small>Have your CV ready. Review the role’s application guidance before you begin.</small></aside></div></article>`).join(''):'<div class="empty"><h3>No open roles just now.</h3><p>Please check back for future opportunities at CAGE.</p></div>';
+      document.getElementById('job-department').innerHTML='<option value="">All departments</option>'+[...new Set(jobs.map(job=>job.department).filter(Boolean))].sort().map(value=>`<option value="${esc(value)}">${esc(value)}</option>`).join('');
+      renderDirectory();
+      openLinkedRole();
     }catch{list.innerHTML='<div class="empty"><h3>We couldn’t load the opportunities.</h3><p>Please check your connection and try again.</p><button class="button secondary" data-retry>Try again</button></div>';}
     finally{list.setAttribute('aria-busy','false');}
   }
+  const roleDialog=document.getElementById('role-dialog'),search=document.getElementById('job-search'),department=document.getElementById('job-department');
+  let roleOpener=null;
+  function renderDirectory(){
+    const query=search.value.trim().toLowerCase();
+    const matches=jobs.filter(job=>(!department.value||job.department===department.value)&&(!query||[job.title,job.department,job.location,job.description,job.requirements,job.responsibilities,job.desirable_skills].join(' ').toLowerCase().includes(query)));
+    document.getElementById('job-results').textContent=jobs.length ? `${matches.length === jobs.length ? 'Showing all' : 'Showing '+matches.length+' of'} ${jobs.length} opportunit${jobs.length===1?'y':'ies'} · Select a role to view details and apply.` : '';
+    list.innerHTML=matches.length?matches.map(job=>`<article class="opportunity-card" id="role-${esc(job.id)}"><div class="opportunity-card-top"><span class="job-label">${esc(job.department||'CAGE')}</span><span class="open-badge">Now recruiting</span></div><h3><button class="role-title-button" data-view-role="${esc(job.id)}">${esc(job.title)}</button></h3><div class="job-meta">${[job.employment_type,job.work_arrangement,job.location].filter(Boolean).map(x=>`<span>${esc(x)}</span>`).join('')}</div><p class="role-excerpt">${esc(clean(job.description).replace(/\s+/g,' ').slice(0,220))}</p><div class="opportunity-card-bottom"><div><span class="closing-label">Applications close</span><strong>${esc(date(job.closing_date))}</strong></div><button class="button primary" data-view-role="${esc(job.id)}" aria-label="View ${esc(job.title)}">View opportunity <span aria-hidden="true">↗</span></button></div></article>`).join(''):jobs.length?'<div class="empty"><h3>No matching opportunities</h3><p>Try another search or department to see more roles.</p><button class="button secondary" data-clear-filters>Show all opportunities</button></div>':'<div class="empty"><h3>No open roles just now.</h3><p>Please check back for future opportunities at CAGE.</p></div>';
+  }
+  function openRole(job,button){
+    roleOpener=button||document.getElementById(`role-${job.id}`)?.querySelector("[data-view-role]");
+    document.getElementById('role-dialog-title').textContent=job.title;
+    document.getElementById('role-dialog-meta').textContent=[job.department,job.employment_type,job.work_arrangement,job.location].filter(Boolean).join(' · ');
+    document.getElementById('role-dialog-content').innerHTML=`<div class="job-body"><div class="job-copy">${window.CAGE_JOB_ADVERT.body(job,formatted)}</div><aside class="job-sidebar" aria-label="Application details"><dl><dt>Applications close</dt><dd>${esc(date(job.closing_date))}</dd>${job.duration?`<dt>Duration</dt><dd>${esc(job.duration)}</dd>`:''}${job.compensation?`<dt>Salary / stipend offered</dt><dd>${esc(job.compensation)}</dd>`:''}<dt>Positions</dt><dd>${esc(job.positions||1)}</dd></dl><button class="button primary" data-apply="${esc(job.id)}">Apply for this role <span aria-hidden="true">↗</span></button><small>You will need your CV, salary expectation and answers to any screening questions. Review the role before applying.</small><button type="button" class="button secondary all-opportunities" data-back-opportunities>All opportunities</button></aside></div>`;
+    if(!roleDialog.open)roleDialog.showModal();roleDialog.scrollTop=0;document.getElementById('role-dialog-title').focus();
+  }
+  function closeRole(){roleDialog.close();roleOpener?.focus();}
+  function openLinkedRole(){let id;try{id=decodeURIComponent(location.hash.slice(1));}catch{return;}const job=jobs.find(x=>`role-${x.id}`===id);if(job)openRole(job);}
+  search.addEventListener('input',renderDirectory);department.addEventListener('change',renderDirectory);
+  document.getElementById('close-role').addEventListener('click',closeRole);
+  roleDialog.addEventListener('cancel',event=>{event.preventDefault();closeRole();});
+  list.addEventListener('click',event=>{
+    if(event.target.closest('[data-clear-filters]')){search.value='';department.value='';renderDirectory();search.focus();return;}
+    const button=event.target.closest('[data-view-role]');if(button){const job=jobs.find(x=>x.id===button.dataset.viewRole);if(job)openRole(job,button);}
+  });
+  roleDialog.addEventListener('click',event=>{if(event.target.closest('[data-back-opportunities]'))closeRole();});
   function setStep(value,focus=true){
     step=value;message.textContent='';form.querySelectorAll('[data-step]').forEach(el=>el.hidden=Number(el.dataset.step)!==step);
     form.querySelectorAll('[data-step-label]').forEach(el=>{const n=Number(el.dataset.stepLabel);if(n===step)el.setAttribute('aria-current','step');else el.removeAttribute('aria-current');el.classList.toggle('complete',n<step);});
@@ -53,10 +80,10 @@
     input.setCustomValidity(!file?'Please select your CV.':file.size===0?'This file is empty. Please choose your CV.':file.size>10*1024*1024?'Your CV must be no larger than 10 MB.':!(/\.(pdf|doc|docx)$/i.test(file.name))?'Choose a PDF, DOC or DOCX file.':'');
   }
   function finish(){if(busy)return;dialog.close();opener?.focus();}
-  list.addEventListener('click',event=>{
+  document.addEventListener('click',event=>{
     if(event.target.closest('[data-retry]')){loadJobs();return;}
     const button=event.target.closest('[data-apply]');if(!button)return;const job=jobs.find(x=>x.id===button.dataset.apply);if(!job)return;
-    opener=button;form.reset();form.querySelectorAll('input').forEach(x=>x.setCustomValidity(''));form.hidden=false;success.hidden=true;message.textContent='';
+    opener=roleOpener||button;if(roleDialog.open)roleDialog.close();form.reset();form.querySelectorAll('input').forEach(x=>x.setCustomValidity(''));form.hidden=false;success.hidden=true;message.textContent='';
     document.getElementById('cv-status').textContent='';document.getElementById('note-count').textContent='0 / 2,500';
     form.elements.jobId.value=job.id;document.getElementById('application-title').textContent=job.title;document.getElementById('application-context').textContent=[job.location,`Closes ${date(job.closing_date)}`].filter(Boolean).join(' · ');
     form.elements.coverNote.required=Boolean(job.cover_note_required);document.getElementById('cover-note-requirement').textContent=job.cover_note_required?'*':'(optional)';
