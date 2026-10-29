@@ -1,3 +1,4 @@
+import { assertStaffMfa } from "../_shared/staff-mfa.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" };
@@ -11,6 +12,7 @@ Deno.serve(async req => {
   const userClient = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: req.headers.get("Authorization") || "" } } });
   const { data: auth } = await userClient.auth.getUser();
   if (!auth.user) return json({ ok: false, error: "Unauthorized" }, 401);
+  const mfaError=await assertStaffMfa(userClient);if(mfaError)return json({ok:false,error:mfaError},403);
   const caller = await service.from("profiles").select("role, active, organization_id").eq("id", auth.user.id).single();
   if (!caller.data?.active || !["admin", "manager", "hr"].includes(caller.data.role)) return json({ ok: false, error: "HR access required" }, 403);
   const { interviewId } = await req.json();

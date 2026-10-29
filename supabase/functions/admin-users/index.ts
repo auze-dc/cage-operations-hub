@@ -1,3 +1,4 @@
+import { assertStaffMfa } from "../_shared/staff-mfa.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" };
@@ -14,6 +15,7 @@ Deno.serve(async req => {
   const adminClient = createClient(url, service);
   const { data: auth } = await callerClient.auth.getUser();
   if (!auth.user) return json({ ok: false, error: "Unauthorized" }, 401);
+  const mfaError=await assertStaffMfa(callerClient);if(mfaError)return json({ok:false,error:mfaError},403);
   const { data: caller } = await adminClient.from("profiles").select("organization_id, email, role, active").eq("id", auth.user.id).single();
   if (!caller?.active || caller.role !== "admin") return json({ ok: false, error: "Administrator access required" }, 403);
 
