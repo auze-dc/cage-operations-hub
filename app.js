@@ -360,6 +360,7 @@ const viewMeta = {
   team: ["Team", "CAGE / Capacity"],
   evidence: ["Evidence", "CAGE / Documents"],
   reports: ["Reports", "CAGE / Management"],
+  payroll: ["Salaries & payslips", "CAGE / Payroll"],
   hr: ["Recruitment & HR", "CAGE / People lifecycle"],
   admin: ["User administration", "CAGE / Access control"],
   settings: ["Settings", "CAGE / Workspace administration"]
@@ -388,7 +389,7 @@ const REQUEST_TEMPLATES = {
     requestItem("access", "Site access, dates and permissions checked", "scope"),
     requestItem("method", "Flight, processing and QA method prepared", "scope"),
     requestItem("costing", "Crew, travel, processing and margin costed", "scope"),
-    requestItem("approval", "Scope and commercial position approved", "review"),
+    requestItem("approval", "Scope and commercial details checked", "review"),
     requestItem("submission", "Quote or proposal sent and logged", "submission"),
     requestItem("acceptance", "Signed contract, PO or accepted quote filed", "acceptance")
   ],
@@ -399,7 +400,7 @@ const REQUEST_TEMPLATES = {
     requestItem("access", "Access, shutdowns and permissions checked", "scope"),
     requestItem("method", "Sensor, mission and QA method prepared", "scope"),
     requestItem("costing", "Crew, equipment and reporting costed", "scope"),
-    requestItem("approval", "Scope and commercial position approved", "review"),
+    requestItem("approval", "Scope and commercial details checked", "review"),
     requestItem("submission", "Quote or proposal sent and logged", "submission"),
     requestItem("acceptance", "Signed contract, PO or accepted quote filed", "acceptance")
   ],
@@ -410,7 +411,7 @@ const REQUEST_TEMPLATES = {
     requestItem("access", "Field access, timing and permissions checked", "scope"),
     requestItem("method", "Mapping, analytics or spraying method prepared", "scope"),
     requestItem("costing", "Inputs, equipment, crew and travel costed", "scope"),
-    requestItem("approval", "Scope and commercial position approved", "review"),
+    requestItem("approval", "Scope and commercial details checked", "review"),
     requestItem("submission", "Quote or proposal sent and logged", "submission"),
     requestItem("acceptance", "Signed contract, PO or accepted quote filed", "acceptance")
   ],
@@ -421,7 +422,7 @@ const REQUEST_TEMPLATES = {
     requestItem("permissions", "Location, people and flight permissions checked", "scope"),
     requestItem("method", "Aircraft, crew and editing method prepared", "scope"),
     requestItem("costing", "Capture, travel, editing and licensing costed", "scope"),
-    requestItem("approval", "Scope and commercial position approved", "review"),
+    requestItem("approval", "Scope and commercial details checked", "review"),
     requestItem("submission", "Quote or proposal sent and logged", "submission"),
     requestItem("acceptance", "Signed contract, PO or accepted quote filed", "acceptance")
   ],
@@ -454,7 +455,7 @@ const REQUEST_TEMPLATES = {
     requestItem("security", "Transfer, storage and confidentiality checked", "scope"),
     requestItem("method", "Processing and QA method prepared", "scope"),
     requestItem("costing", "Processing time, software and margin costed", "scope"),
-    requestItem("approval", "Scope and commercial position approved", "review"),
+    requestItem("approval", "Scope and commercial details checked", "review"),
     requestItem("submission", "Quote or proposal sent and logged", "submission"),
     requestItem("acceptance", "Signed contract, PO or accepted quote filed", "acceptance")
   ],
@@ -650,11 +651,13 @@ function loadState() {
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   window.CAGE_PERSONAL?.refreshView();
-  window.CAGE_BACKEND?.scheduleSave(state);
+  return window.CAGE_BACKEND?.scheduleSave(state);
 }
 
 function replaceStateFromCloud(nextState) {
   if (!nextState || typeof nextState !== "object") return;
+  // Never let editable UI records alias the confirmed sync baseline.
+  nextState = structuredClone(nextState);
   const removedLegacySamples = Array.isArray(nextState.opportunityMatches) && nextState.opportunityMatches.some(item => /^sample:/i.test(String(item?.title || "")));
   localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
   state = loadState();
@@ -844,8 +847,15 @@ function projectProgress(projectId) {
 function projectHealth(project) {
   const tasks = projectTasks(project.id);
   if (tasks.length && tasks.every(task => task.status === "Done")) return "complete";
-  if (tasks.some(task => task.status === "Blocked" || isOverdue(task))) return "attention";
+  const deadline = String(project.deadline || "").slice(0,10);
+  const overdueProject = /^\d{4}-\d{2}-\d{2}$/.test(deadline) && deadline < TODAY;
+  if (overdueProject || tasks.some(task => task.status === "Blocked" || isOverdue(task))) return "attention";
   return "on-track";
+}
+
+function displayRecordReference(kind,record) {
+  const repeated=(state[kind]||[]).some(other=>other.id!==record.id&&other.number===record.number);
+  return repeated ? String(record.number)+" · ID "+String(record.id) : record.number;
 }
 
 function healthLabel(health) {
@@ -865,12 +875,10 @@ function showToast(message) {
 }
 
 function currentUserCanSelfApprove() {
- const p=window.CAGE_BACKEND?.currentProfile?.();
- return p?.active!==false && p?.role==='admin' && ['alexander@cagemw.com','ndapile@cagemw.com'].includes(String(p?.email||'').toLowerCase());
+ const p=window.CAGE_BACKEND?.currentProfile?.();return !!p&&p.active!==false&&p.role!=='shared';
 }
 function currentUserCanApprove() {
-  if (!window.CAGE_BACKEND?.isProduction) return true;
-  return window.CAGE_BACKEND.canApprove?.() === true;
+ const p=window.CAGE_BACKEND?.currentProfile?.();return !!p&&p.active!==false&&p.role!=='shared';
 }
 
 function currentUserIsAdmin() {
@@ -1054,22 +1062,23 @@ function renderDashboard() {
 }
 
 function renderRequests() {
+  const scopeRows=window.CAGE_TEAMWORK?.rows("requests",state.requests)||state.requests;
   const searchInput = document.getElementById("request-search");
   const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
-  const active = state.requests.filter(request => !["Converted", "Lost / Declined"].includes(request.stage));
-  const needsInformation = state.requests.filter(request => ["New", "Needs information"].includes(request.stage));
-  const awaitingReview = state.requests.filter(request => request.stage === "Internal review");
-  const converted = state.requests.filter(request => request.stage === "Converted");
+  const active = scopeRows.filter(request => !["Converted", "Lost / Declined"].includes(request.stage));
+  const needsInformation = scopeRows.filter(request => ["New", "Needs information"].includes(request.stage));
+  const awaitingReview = scopeRows.filter(request => request.stage === "Internal review");
+  const converted = scopeRows.filter(request => request.stage === "Converted");
   const deadlineActions = active.filter(request => daysUntil(request.deadline) <= 7);
   renderMetricCards("request-metric-grid", [
     { label: "Open requests", value: String(active.length), unit: "requests", note: `${needsInformation.length} still need clarification`, icon: "↳", tone: "#008fc8", tint: "#e6f7fe" },
-    { label: "Needs action", value: String(state.requests.filter(requestNeedsAction).length), unit: "requests", note: "Owner, deadline or gate action", icon: "!", tone: "#d64e4b", tint: "#feeceb" },
-    { label: "Internal review", value: String(awaitingReview.length), unit: "requests", note: "Nothing is sent before approval", icon: "✓", tone: "#e99a24", tint: "#fff4df" },
+    { label: "Needs action", value: String(scopeRows.filter(requestNeedsAction).length), unit: "requests", note: "Owner, deadline or gate action", icon: "!", tone: "#d64e4b", tint: "#feeceb" },
+    { label: "Review progress", value: String(awaitingReview.length), unit: "requests", note: "Review progress; no manager approval required", icon: "✓", tone: "#e99a24", tint: "#fff4df" },
     { label: "Converted value", value: formatMoney(converted.reduce((sum, request) => sum + Number(request.value || 0), 0), true), unit: "", note: `${converted.length} requests became projects`, icon: "¤", tone: "#168a65", tint: "#e5f5ef" },
     { label: "Due within 7 days", value: String(deadlineActions.length), unit: "requests", note: "Including overdue responses", icon: "□", tone: "#7357c8", tint: "#f0edfb" }
   ]);
 
-  const matches = state.requests.filter(request => {
+  const matches = scopeRows.filter(request => {
     const matchesFilter = requestFilter === "all"
       || (requestFilter === "action" && requestNeedsAction(request))
       || (requestFilter === "service" && !["Tender / RFQ", "Grant"].includes(request.type))
@@ -1087,6 +1096,7 @@ function renderRequests() {
       <button class="request-quick-add" data-new-request-stage="${escapeHtml(column.stages[0])}">＋ Add request</button>
     </section>`;
   }).join("");
+  window.CAGE_TEAMWORK?.applyAccess();
 }
 
 function requestCard(request) {
@@ -1096,7 +1106,7 @@ function requestCard(request) {
   const controlGap = request.stage === "Converted" && !requestAcceptanceComplete(request);
   const dueCopy = days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? "Due today" : `${days}d left`;
   return `<article class="request-card ${requestNeedsAction(request) ? "attention" : ""} ${controlGap ? "control-gap" : ""}">
-    <div class="request-card-top"><span class="request-type">${escapeHtml(request.type)}</span><span class="request-number">${escapeHtml(request.number)}</span></div>
+    <div class="request-card-top"><span class="request-type">${escapeHtml(request.type)}</span><span class="request-number">${escapeHtml(displayRecordReference("requests",request))}</span></div>
     <button class="request-card-title" data-open-request="${request.id}">${escapeHtml(request.title)}</button>
     <p>${escapeHtml(request.organisation)}</p>
     <div class="request-card-meta"><span class="owner-avatar" title="${escapeHtml(owner.name)}">${owner.initials}</span><span class="deadline-chip ${days < 0 ? "overdue" : days <= 7 ? "soon" : ""}">${escapeHtml(dueCopy)}</span>${request.value ? `<strong>${formatMoney(request.value, true)}</strong>` : ""}</div>
@@ -1118,7 +1128,7 @@ function renderRequestDetail(requestId = activeRequestId) {
   const linkedCommercial = state.commercialRecords.find(item => item.id === request.commercial);
   const actionButtons = requestActionButtons(request);
   document.getElementById("request-detail-content").innerHTML = `
-    <div class="dialog-heading request-detail-heading"><div><p class="section-kicker">${escapeHtml(request.number)} · ${escapeHtml(request.type)}</p><h2>${escapeHtml(request.title)}</h2><p>${escapeHtml(request.organisation)}</p></div><button class="icon-button" data-close-request-detail aria-label="Close">×</button></div>
+    <div class="dialog-heading request-detail-heading"><div><p class="section-kicker">${escapeHtml(displayRecordReference("requests",request))} · ${escapeHtml(request.type)}</p><h2>${escapeHtml(request.title)}</h2><p>${escapeHtml(request.organisation)}</p></div><button class="icon-button" data-close-request-detail aria-label="Close">×</button></div>
     <div class="request-detail-status"><span class="status-pill ${requestStatusClass(request.stage)}">${escapeHtml(request.stage)}</span><span>${stats.done}/${stats.total} workflow controls complete</span><div class="progress-track"><span style="width:${stats.percent}%"></span></div></div>
     <div class="request-detail-grid">
       <section>
@@ -1134,31 +1144,28 @@ function renderRequestDetail(requestId = activeRequestId) {
         <label class="request-next-action"><span>Next specific action</span><input data-request-next-action="${request.id}" value="${escapeHtml(request.nextAction)}" maxlength="160"></label>
       </section>
       <aside class="request-checklist-panel">
-        <div class="surface-heading"><div><p class="section-kicker">${escapeHtml(request.type)} template</p><h3>Stage gates</h3></div><strong>${stats.percent}%</strong></div>
+        <div class="surface-heading"><div><p class="section-kicker">${escapeHtml(request.type)} template</p><h3>Progress checklist</h3></div><strong>${stats.percent}%</strong></div>
         <div class="request-checklist">${requestTemplate(request).map(item => `<button class="request-check ${request.checklist?.[item.key] ? "complete" : ""}" data-request-check="${request.id}" data-check-key="${item.key}"><span>${request.checklist?.[item.key] ? "✓" : ""}</span><p><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.phase)}</small></p></button>`).join("")}</div>
       </aside>
     </div>
     ${linkedApproval ? `<div class="request-review-note ${linkedApproval.status.toLowerCase()}"><strong>Latest internal review: ${escapeHtml(linkedApproval.status)}</strong><span>${escapeHtml(linkedApproval.decisionNote || linkedApproval.summary)}</span></div>` : ""}
     ${request.stage === "Lost / Declined" ? `<div class="request-review-note returned"><strong>Closed ${formatDate(request.lostDate || TODAY, { year: true })}: ${escapeHtml(request.lostReason || "Lost or declined")}</strong><span>${escapeHtml(request.lostNote || "No outcome note recorded.")}${request.lostFollowUp ? ` Future follow-up: ${formatDate(request.lostFollowUp, { year: true })}.` : ""}</span></div>` : ""}
-    <div class="request-detail-actions"><button data-open-work-chat="request" data-work-chat-id="${request.id}">◌ Open work chat</button>${actionButtons}${request.deal ? `<button data-request-open-deal="${request.id}">Open CRM opportunity</button>` : ""}${linkedCommercial ? `<button data-request-open-commercial="${request.id}">Open ${escapeHtml(linkedCommercial.type.toLowerCase())}</button>` : ""}${request.project ? `<button class="primary" data-request-open-project="${request.id}">Open delivery project</button>` : ""}</div>
+    <div class="request-detail-actions"><button data-staff-edit="requests" data-record-id="${request.id}">Edit details</button><button data-open-work-chat="request" data-work-chat-id="${request.id}">◌ Open work chat</button>${actionButtons}${request.deal ? `<button data-request-open-deal="${request.id}">Open CRM opportunity</button>` : ""}${linkedCommercial ? `<button data-request-open-commercial="${request.id}">Open ${escapeHtml(linkedCommercial.type.toLowerCase())}</button>` : ""}${request.project ? `<button class="primary" data-request-open-project="${request.id}">Open delivery project</button>` : ""}</div>
   `;
+  window.CAGE_TEAMWORK?.applyAccess();
 }
 
 function requestActionButtons(request) {
-  const buttons = [];
-  if (["New", "Needs information"].includes(request.stage)) buttons.push(`<button data-request-action="qualify" data-request-id="${request.id}" ${requestQualificationComplete(request) ? "" : "disabled"}>Confirm qualified</button>`);
-  if (request.stage === "Qualified") buttons.push(`<button data-request-action="scope" data-request-id="${request.id}">Start scoping</button>`);
-  if (request.stage === "Scoping") {
-    if (!["Tender / RFQ", "Grant"].includes(request.type)) buttons.push(`<button data-request-action="quote" data-request-id="${request.id}">Prepare quote</button>`);
-    buttons.push(`<button class="primary" data-request-action="review" data-request-id="${request.id}" ${requestPreReviewComplete(request) ? "" : "disabled"}>${currentUserCanSelfApprove() ? 'Approve for sending' : 'Request internal approval'}</button>`);
-  }
-  if (request.stage === "Internal review") buttons.push(`<button disabled>Awaiting approval</button>`);
-  if (request.stage === "Approved to send") buttons.push(`<button class="primary" data-request-action="submit" data-request-id="${request.id}">Record submission</button>`);
-  if (request.stage === "Submitted") buttons.push(`<button data-request-action="negotiate" data-request-id="${request.id}">Record negotiation</button>`, `<button class="primary" data-request-action="win" data-request-id="${request.id}">Record award / acceptance</button>`);
-  if (request.stage === "Negotiation") buttons.push(`<button class="primary" data-request-action="win" data-request-id="${request.id}">Record award / acceptance</button>`);
-  if (request.stage === "Won / Awarded") buttons.push(`<button class="primary" data-request-action="convert" data-request-id="${request.id}" ${requestAcceptanceComplete(request) ? "" : "disabled"}>Create contract & project</button>`);
-  if (!["Converted", "Lost / Declined"].includes(request.stage)) buttons.push(`<button data-request-action="schedule" data-request-id="${request.id}">Schedule follow-up</button>`, `<button class="danger" data-request-action="lose" data-request-id="${request.id}">Close as lost</button>`);
-  return buttons.join("");
+ const id=escapeHtml(request.id),b=[];
+ const action=(a,label)=>`<button data-request-action="${a}" data-request-id="${id}">${label}</button>`;
+ if(['New','Needs information'].includes(request.stage))b.push(action('qualify','Mark qualified'));
+ if(request.stage==='Qualified')b.push(action('scope','Start scoping'));
+ if(['Scoping','Internal review'].includes(request.stage)){b.push(action('quote','Prepare quote'));b.push(action('review','Ready to send'));}
+ if(request.stage==='Approved to send')b.push(action('submit','Record submission'));
+ if(['Submitted','Negotiation'].includes(request.stage))b.push(action('win','Record award / acceptance'));
+ if(request.stage==='Won / Awarded')b.push(action('convert','Create contract & project'));
+ if(!['Converted','Lost / Declined'].includes(request.stage))b.push(action('schedule','Schedule follow-up'),action('lose','Close as lost'));
+ return b.join('');
 }
 
 function openRequest(requestId) {
@@ -1215,8 +1222,9 @@ function closeRequestAsLost(event) {
 }
 
 function renderProjects() {
+  const scopeRows=window.CAGE_TEAMWORK?.rows("projects",state.projects)||state.projects;
   const query = document.getElementById("project-search").value.trim().toLowerCase();
-  const projects = state.projects.filter(project => {
+  const projects = scopeRows.filter(project => {
     const health = projectHealth(project);
     const matchesFilter = projectFilter === "all" || health === projectFilter;
     const matchesSearch = !query || `${project.name} ${project.client} ${project.category}`.toLowerCase().includes(query);
@@ -1236,7 +1244,7 @@ function renderProjects() {
           <div class="project-card-meta"><span>Due ${formatDate(project.deadline, { year: true })}</span><strong>${progress}% complete</strong></div>
           <div class="progress-track"><span style="width:${progress}%"></span></div>
           <div class="project-card-footer">
-            <span class="member-stack">${members.slice(0,4).map(member => `<span class="owner-avatar" title="${escapeHtml(member.name)}">${member.initials}</span>`).join("")}</span>
+            <span class="member-stack">${members.slice(0,4).map(member => `<span class="owner-avatar" data-presence-member="${escapeHtml(member.id)}" title="${escapeHtml(member.name)}">${member.initials}</span>`).join("")}</span>
             <button class="text-button" data-project-detail="${project.id}">Open project</button>
           </div>
         </div>
@@ -1267,12 +1275,12 @@ function renderOwnerOptions() {
 
 function renderProjectOptions() {
   const options = state.projects.map(project => `<option value="${project.id}">${escapeHtml(project.name)}</option>`).join("");
-  document.getElementById("task-project-input").innerHTML = `<option value="">Select project</option>${options}`;
+  document.getElementById("task-project-input").innerHTML = `<option value="">No project — standalone task</option>${options}`;
   document.getElementById("event-project-input").innerHTML = `<option value="">No linked project</option>${options}`;
-  document.getElementById("invoice-project-input").innerHTML = `<option value="">Select project</option>${options}`;
-  document.getElementById("expense-project-input").innerHTML = `<option value="">Select project</option>${options}`;
+  document.getElementById("invoice-project-input").innerHTML = `<option value="">Select a project</option>${options}`;
+  document.getElementById("expense-project-input").innerHTML = `<option value="">Select a project</option>${options}`;
   document.getElementById("knowledge-project-input").innerHTML = `<option value="">General CAGE reference</option>${options}`;
-  document.getElementById("mission-project-input").innerHTML = `<option value="">Select project</option>${options}`;
+  document.getElementById("mission-project-input").innerHTML = `<option value="">Select a project</option>${options}`;
   document.getElementById("asset-project-input").innerHTML = `<option value="">Not assigned to a project</option>${options}`;
   const boardFilter = document.getElementById("board-project-filter");
   boardFilter.innerHTML = `<option value="all">All projects</option>${options}`;
@@ -1344,7 +1352,7 @@ function renderTasks() {
             `;
           }).join("")}
         </div>
-        ${boardAddingListId === list.id ? `<form class="quick-card-form" data-quick-card-form="${list.id}"><textarea class="quick-card-input" name="title" maxlength="120" placeholder="Type a card title…" required autofocus></textarea><div class="quick-card-actions"><button class="quick-card-save" type="submit">Add card</button><button class="quick-card-cancel" type="button" data-cancel-quick-card>Cancel</button></div></form>` : `<button class="quick-card-button" data-add-card-list="${list.id}">＋ Add a card</button>`}
+        ${boardAddingListId === list.id ? `<form class="quick-card-form" data-quick-card-form="${list.id}"><textarea class="quick-card-input" name="title" maxlength="120" placeholder="Type a card title…" required autofocus></textarea>${window.CAGE_TEAMWORK?.quickMembers()||""}<div class="quick-card-actions"><button class="quick-card-save" type="submit">Add card</button><button class="quick-card-cancel" type="button" data-cancel-quick-card>Cancel</button></div></form>` : `<button class="quick-card-button" data-add-card-list="${list.id}">＋ Add a card</button>`}
       </section>
     `;
   }).join("")}<section class="kanban-add-list">${addingBoardList ? `<form class="quick-card-form" id="quick-list-form"><input class="quick-list-input" name="title" maxlength="50" placeholder="List heading…" required autofocus><div class="quick-card-actions"><button class="quick-card-save" type="submit">Add list</button><button class="quick-card-cancel" type="button" data-cancel-list>Cancel</button></div></form>` : `<button class="add-list-button" data-add-list>＋ Add another heading</button>`}</section>`;
@@ -1353,7 +1361,7 @@ function renderTasks() {
   requestAnimationFrame(() => document.querySelector("[autofocus]")?.focus());
 }
 
-function addQuickCard(listId, title) {
+function addQuickCard(listId, title, members=[]) {
   const cleanTitle = String(title || "").trim();
   const list = boardListById(listId);
   if (!cleanTitle || !list) return;
@@ -1363,7 +1371,9 @@ function addQuickCard(listId, title) {
     id: `t-${Date.now()}`,
     project: boardProjectFilter !== "all" ? boardProjectFilter : "p-internal",
     title: cleanTitle,
-    owner: "alexander",
+    owner: window.CAGE_BACKEND.currentMemberId(),
+    createdBy:window.CAGE_BACKEND.currentMemberId(),
+    team:[...new Set([window.CAGE_BACKEND.currentMemberId(),...members])],
     due: due.toISOString().slice(0, 10),
     priority: "Medium",
     status: list.status || "To Do",
@@ -1467,8 +1477,9 @@ function renderMetricCards(targetId, metrics) {
 }
 
 function renderCRM() {
+  const scopeRows=window.CAGE_TEAMWORK?.rows("deals",state.deals)||state.deals;
   const stages = ["Prospect", "Lead", "Qualified", "Proposal", "Negotiation", "Won", "Lost"];
-  const activeDeals = state.deals.filter(deal => !["Won", "Lost"].includes(deal.stage));
+  const activeDeals = scopeRows.filter(deal => !["Won", "Lost"].includes(deal.stage));
   const pipelineValue = activeDeals.reduce((sum, deal) => sum + deal.value, 0);
   const weightedValue = activeDeals.reduce((sum, deal) => sum + (deal.value * deal.probability / 100), 0);
   const dueFollowUps = activeDeals.filter(deal => deal.nextAction <= TODAY).length;
@@ -1476,17 +1487,18 @@ function renderCRM() {
     { label: "Open opportunities", value: String(activeDeals.length), unit: "deals", note: `${dueFollowUps} follow-ups due`, icon: "◇", tone: "#7357c8", tint: "#f0edfb" },
     { label: "Pipeline value", value: formatMoney(pipelineValue, true), unit: "", note: "Total open potential", icon: "↗", tone: "#008fc8", tint: "#e6f7fe" },
     { label: "Weighted forecast", value: formatMoney(weightedValue, true), unit: "", note: "Value adjusted by probability", icon: "≈", tone: "#e99a24", tint: "#fff4df" },
-    { label: "Won value", value: formatMoney(state.deals.filter(deal => deal.stage === "Won").reduce((sum, deal) => sum + deal.value, 0), true), unit: "", note: "Ready for delivery and billing", icon: "✓", tone: "#168a65", tint: "#e5f5ef" }
+    { label: "Won value", value: formatMoney(scopeRows.filter(deal => deal.stage === "Won").reduce((sum, deal) => sum + deal.value, 0), true), unit: "", note: "Ready for delivery and billing", icon: "✓", tone: "#168a65", tint: "#e5f5ef" }
   ]);
 
   document.getElementById("crm-pipeline").innerHTML = stages.map(stage => {
-    const deals = state.deals.filter(deal => deal.stage === stage).sort((a, b) => b.value - a.value);
+    const deals = scopeRows.filter(deal => deal.stage === stage).sort((a, b) => b.value - a.value);
     return `
       <section class="pipeline-column crm-stage-column" data-stage="${stage}" data-deal-stage-column="${stage}">
         <div class="pipeline-column-heading"><strong>${stage}</strong><span>${deals.length} · ${formatMoney(deals.reduce((sum, deal) => sum + deal.value, 0), true)}</span></div>
         <div class="pipeline-cards">
           ${deals.length ? deals.map(deal => `
             <article class="deal-card" draggable="true" data-deal-card="${deal.id}">
+              ${deal.category ? `<small class="project-client">${escapeHtml(deal.category)}</small>` : ""}
               <input class="inline-deal-company" data-inline-deal-company="${deal.id}" value="${escapeHtml(deal.company)}" aria-label="Edit organisation for ${escapeHtml(deal.name)}">
               <textarea class="inline-deal-title" data-inline-deal-title="${deal.id}" rows="${Math.min(3, Math.max(1, Math.ceil(deal.name.length / 27)))}" aria-label="Edit opportunity name">${escapeHtml(deal.name)}</textarea>
               <strong class="deal-value">${formatMoney(deal.value, true)}</strong>
@@ -1504,7 +1516,7 @@ function renderCRM() {
             </article>
           `).join("") : `<div class="kanban-empty">No opportunities</div>`}
         </div>
-        ${crmAddingStage === stage ? `<form class="quick-deal-form" data-quick-deal-form="${stage}"><textarea name="name" maxlength="120" placeholder="Type opportunity name…" required autofocus></textarea><input name="company" maxlength="80" placeholder="Organisation (optional)"><div class="quick-card-actions"><button class="quick-card-save" type="submit">Add opportunity</button><button class="quick-card-cancel" type="button" data-cancel-quick-deal>Cancel</button></div></form>` : `<button class="quick-card-button" data-add-deal-stage="${stage}">＋ Add opportunity</button>`}
+        ${crmAddingStage === stage ? `<form class="quick-deal-form" data-quick-deal-form="${stage}"><textarea name="name" maxlength="120" placeholder="Type opportunity name…" required autofocus></textarea><input name="company" maxlength="80" placeholder="Organisation (optional)">${window.CAGE_TEAMWORK?.quickMembers()||""}<div class="quick-card-actions"><button class="quick-card-save" type="submit">Add opportunity</button><button class="quick-card-cancel" type="button" data-cancel-quick-deal>Cancel</button></div></form>` : `<button class="quick-card-button" data-add-deal-stage="${stage}">＋ Add opportunity</button>`}
       </section>
     `;
   }).join("");
@@ -1515,6 +1527,7 @@ function renderCRM() {
       const owner = teamMember(contact.owner);
       return `<tr class="clickable-contact-row" data-contact-detail="${contact.id}" tabindex="0" aria-label="Open ${escapeHtml(contact.company)} relationship"><td><button class="contact-name-button" data-contact-detail="${contact.id}"><span class="project-glyph">${initials(contact.company)}</span><span><strong>${escapeHtml(contact.company)}</strong><span>${escapeHtml(contact.contact)}</span></span></button></td><td><span class="status-pill ${contact.relationship === "Client" ? "done" : contact.relationship === "Partner" ? "on-track" : "to-do"}">${escapeHtml(contact.relationship)}</span></td><td><span class="owner-chip"><span class="owner-avatar">${owner.initials}</span>${escapeHtml(owner.name.split(" ")[0])}</span></td><td>${formatDate(contact.lastActivity)}</td><td><strong>${formatDate(contact.nextAction)}</strong><br><span class="project-client">${escapeHtml(contact.note)}</span></td></tr>`;
     }).join("");
+  window.CAGE_TEAMWORK?.applyAccess();
 }
 
 function openContactDetail(contactId) {
@@ -1571,7 +1584,7 @@ function saveContactDetail(event) {
   showToast("Relationship updated.");
 }
 
-function addQuickDeal(stage, name, company) {
+function addQuickDeal(stage, name, company, members=[]) {
   const cleanName = String(name || "").trim();
   const cleanCompany = String(company || "").trim() || "Organisation to confirm";
   if (!cleanName) return;
@@ -1580,7 +1593,9 @@ function addQuickDeal(stage, name, company) {
     id: `d-${Date.now()}`,
     name: cleanName,
     company: cleanCompany,
-    owner: "alexander",
+    owner: window.CAGE_BACKEND.currentMemberId(),
+    createdBy:window.CAGE_BACKEND.currentMemberId(),
+    team:[...new Set([window.CAGE_BACKEND.currentMemberId(),...members])],
     value: 0,
     stage,
     probability: probabilityByStage[stage] ?? 10,
@@ -1788,6 +1803,7 @@ function renderCompliance() {
   }).join("");
   const alerts = records.filter(record => complianceDisplayStatus(record) !== "Active" || daysUntil(record.renewal) <= 45);
   document.getElementById("compliance-alert-list").innerHTML = alerts.length ? alerts.map(record => { const display = complianceDisplayStatus(record); const days = daysUntil(record.renewal); return `<div class="compliance-alert"><span class="alert-icon ${statusClass(display)}">${display === "Expired" ? "×" : "!"}</span><div><strong>${escapeHtml(record.title)}</strong><span>${days < 0 ? `${Math.abs(days)} days overdue` : days === 0 ? "Due today" : `${days} days remaining`} · ${escapeHtml(teamMember(record.owner).name)}</span></div>${record.status !== "Renewal submitted" ? `<button data-submit-renewal="${record.id}">Mark submitted</button>` : ""}</div>`; }).join("") : `<div class="empty-state"><p>No renewals require action.</p></div>`;
+  window.CAGE_COMPANY_DOCUMENTS?.decorateRequirements();
 }
 
 function renderApprovals() {
@@ -1828,6 +1844,7 @@ function opportunityRows(){
 }
 function opportunityExpired(m){return Boolean(m.deadline&&m.deadline!=='Rolling'&&/^\d{4}-\d{2}-\d{2}$/.test(m.deadline)&&m.deadline<new Date(Date.now()+7200000).toISOString().slice(0,10));}
 async function refreshOpportunityResults(force=false){
+ if(window.CAGE_OPPORTUNITIES){return window.CAGE_OPPORTUNITIES.refresh(force);}
  if(opportunityLoading||(!force&&Date.now()-opportunityLoadedAt<60000)||!window.CAGE_BACKEND?.opportunityData||!window.CAGE_BACKEND?.isProduction())return;
  opportunityLoading=true;opportunityLoadedAt=Date.now();
  try{const rows=await window.CAGE_BACKEND.opportunityData();liveOpportunityMatches=rows.map(r=>({...r.raw_data,id:r.raw_data?.id||r.id,title:r.title,organisation:r.organization,source:r.source_name,platform:r.source_name,url:r.source_url,deadline:r.deadline||'Rolling',match:r.match_score,reason:r.match_reason,status:r.status==='Intake created'?'Added':r.status,foundAt:r.found_at}));opportunityLoadError='';}
@@ -1842,7 +1859,14 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-oppo
 });
 document.addEventListener('input',e=>{if(e.target.id!=='opportunity-search')return;opportunityQuery=e.target.value;const pos=e.target.selectionStart;renderOpportunityMonitor();const el=document.getElementById('opportunity-search');el.focus();el.setSelectionRange(pos,pos);});
 function renderOpportunityMonitor() {
-  const monitor = state.opportunityMonitor;
+  if(window.CAGE_OPPORTUNITIES){window.CAGE_OPPORTUNITIES.mount();return;}
+  // Missing scan history is normal in a fresh workspace. Never seed demo results.
+  const savedMonitor = state.opportunityMonitor || {};
+  const monitor = {
+    ...savedMonitor,
+    sources: Array.isArray(savedMonitor.sources) ? savedMonitor.sources : [],
+    coverage: Array.isArray(savedMonitor.coverage) ? savedMonitor.coverage : []
+  };
   const all=opportunityRows();
   const matches=all.filter(m=>(opportunityFilter==='all'||(opportunityFilter==='new'?m.status==='New'&&!opportunityExpired(m):opportunityFilter==='expired'?opportunityExpired(m):!opportunityExpired(m)&&m.status!=='Dismissed'))&&`${m.title} ${m.organisation} ${m.platform}`.toLowerCase().includes(opportunityQuery.toLowerCase())).sort((a,b)=>b.match-a.match);
   if(!opportunityLoading&&Date.now()-opportunityLoadedAt>=60000)refreshOpportunityResults();
@@ -1872,14 +1896,18 @@ function renderOpportunityMonitor() {
     : `<div class="empty-state"><div>⌕</div><h3>No verified open matches</h3><p>Run a live scan or review the configured sources.</p></div>`;
 }
 
-function createRequestFromMatch(matchId, silent = false) {
+async function createRequestFromMatch(matchId, silent = false) {
   const match = opportunityRows().find(item => item.id === matchId);
   if (!match) return null;
   if (match.request) return requestById(match.request);
   if(!state.opportunityMatches.some(m=>m.id===match.id))state.opportunityMatches.push(match);
+  const recordId = `rq-match-${match.id}`;
+  let number;
+  try { number = await nextRequestNumber(recordId); } catch(error) { showToast(error.message); return null; }
+  if(match.request)return requestById(match.request);
   const request = {
-    id: `rq-${Date.now()}-${match.id}`,
-    number: nextRequestNumber(),
+    id: recordId,
+    number,
     title: match.title.replace(/^Sample:\s*/i, ""),
     organisation: match.organisation,
     contact: "Opportunity monitoring team",
@@ -1967,7 +1995,7 @@ async function runOpportunityScan() {
   await refreshOpportunityResults(true);
   let created = 0;
   if (state.opportunityMonitor.autoIntake) {
-    state.opportunityMatches.filter(match => !match.request && match.match >= 80).forEach(match => { createRequestFromMatch(match.id, true); created += 1; });
+    for (const match of state.opportunityMatches.filter(match => !match.request && match.match >= 80)) { if(await createRequestFromMatch(match.id, true))created += 1; }
   }
   saveState();
   renderAll();
@@ -1978,14 +2006,15 @@ async function runOpportunityScan() {
 }
 
 function renderCommercial() {
+  const scopeRows=window.CAGE_TEAMWORK?.rows("commercialRecords",state.commercialRecords)||state.commercialRecords;
   renderOpportunityMonitor();
   const query = document.getElementById("commercial-search").value.trim().toLowerCase();
-  const records = state.commercialRecords.filter(record => {
+  const records = scopeRows.filter(record => {
     const matchesFilter = commercialFilter === "all" || (commercialFilter === "attention" ? commercialNeedsAttention(record) : record.type === commercialFilter);
     const matchesSearch = !query || `${record.title} ${record.organisation} ${record.type} ${record.nextAction}`.toLowerCase().includes(query);
     return matchesFilter && matchesSearch;
   }).sort((a, b) => Number(commercialNeedsAttention(b)) - Number(commercialNeedsAttention(a)) || a.deadline.localeCompare(b.deadline));
-  const active = state.commercialRecords.filter(record => !["Closed", "Awarded"].includes(record.stage));
+  const active = scopeRows.filter(record => !["Closed", "Awarded"].includes(record.stage));
   renderMetricCards("commercial-metric-grid", [
     { label: "Active records", value: String(active.length), unit: "records", note: "Tenders, grants and contracts", icon: "▣", tone: "#008fc8", tint: "#e6f7fe" },
     { label: "Due within 14 days", value: String(active.filter(record => daysUntil(record.deadline) >= 0 && daysUntil(record.deadline) <= 14).length), unit: "records", note: "Submission or renewal deadline", icon: "!", tone: "#d64e4b", tint: "#feeceb" },
@@ -1997,6 +2026,7 @@ function renderCommercial() {
     const pendingReview = state.approvals.some(item => item.status === "Pending" && ((item.linkedType === "commercial" && item.linkedId === record.id) || (record.request && item.linkedType === "request" && item.linkedId === record.request)));
     return `<article class="commercial-card ${commercialNeedsAttention(record) ? "attention" : ""}"><div class="commercial-card-head"><span class="commercial-type ${record.type.toLowerCase()}">${escapeHtml(record.type)}</span><span class="deadline-chip ${due < 0 ? "overdue" : due <= 14 ? "soon" : ""}">${due < 0 ? `${Math.abs(due)}d overdue` : `${due}d left`}</span></div><h3>${escapeHtml(record.title)}</h3><p class="commercial-org">${escapeHtml(record.organisation)}</p><div class="commercial-progress-head"><span>Completion</span><strong>${record.progress}%</strong></div><div class="progress-track commercial-progress"><span style="width:${record.progress}%"></span></div><div class="commercial-facts"><span><small>Owner</small><strong>${escapeHtml(teamMember(record.owner).name)}</strong></span><span><small>Deadline</small><strong>${formatDate(record.deadline, { year: true })}</strong></span><span><small>Value</small><strong>${record.value ? formatMoney(record.value, true) : "Not recorded"}</strong></span></div><div class="commercial-next"><span>Next action</span><p>${escapeHtml(record.nextAction)}</p></div><div class="commercial-controls"><select data-commercial-stage="${record.id}">${["Monitoring", "Preparing", "Internal review", "Submitted", "Negotiation", "Active", "Awarded", "Closed"].map(stage => `<option ${stage === record.stage ? "selected" : ""}>${stage}</option>`).join("")}</select><label><span>Progress</span><input data-commercial-progress="${record.id}" type="number" min="0" max="100" value="${record.progress}"></label><button data-open-work-chat="commercial" data-work-chat-id="${record.id}">Work chat</button>${record.request ? `<button data-commercial-request="${record.request}">Open request</button>` : ""}${pendingReview ? `<span class="review-requested">Review requested</span>` : `<button data-commercial-review="${record.id}">Request review</button>`}</div></article>`;
   }).join("") : `<div class="empty-state"><div>▣</div><h3>No matching records</h3><p>Clear the filters or add a tender, grant or contract.</p></div>`;
+  window.CAGE_TEAMWORK?.applyAccess();
 }
 
 function renderFinance() {
@@ -2012,27 +2042,28 @@ function renderFinance() {
   ]);
   document.getElementById("auto-reminders").checked = state.settings.autoReminders !== false;
 
-  document.getElementById("finance-quote-list").innerHTML = [...state.quotes].sort((a, b) => b.issued.localeCompare(a.issued)).map(quote => `
+  document.getElementById("finance-quote-list").innerHTML = (window.CAGE_RECORDS?.financeRows('quotes',state.quotes)||[...state.quotes].sort((a,b)=>String(b.issued).localeCompare(String(a.issued)))).map(quote => `
     <tr>
-      <td><button type="button" class="financial-record-link" data-view-document="quote" data-record-id="${quote.id}">${escapeHtml(quote.number)}</button><br><span class="project-client">${escapeHtml(quote.description)}</span></td>
+      <td><button type="button" class="financial-record-link" data-view-document="quote" data-record-id="${quote.id}">${escapeHtml(displayRecordReference("quotes",quote))}</button><br><span class="project-client">${escapeHtml(quote.description)}</span></td>
       <td>${escapeHtml(quote.client)}<br><span class="project-client">${escapeHtml(dealById(quote.deal)?.name || "Direct quote")}</span></td>
       <td>${formatDate(quote.validUntil)}</td>
       <td class="money-cell">${formatMoney(quote.amount)}</td>
       <td><span class="status-pill ${quote.status === "Sent" ? "doing" : quote.status === "Approved" ? "done" : "to-do"}">${escapeHtml(quote.status)}</span></td>
-      <td><button class="document-action" data-send-document="quote" data-document-id="${quote.id}" ${quote.status === "Draft" ? "disabled title=\"Approval is required before sending\"" : ""}>${quote.status === "Draft" ? "Approval pending" : quote.sentAt ? "Resend" : "Send"}</button>${quote.sentAt ? `<div class="document-sent">Sent ${formatDate(quote.sentAt.slice(0, 10))}</div>` : ""}</td>
+      <td><button class="document-action" data-send-document="quote" data-document-id="${quote.id}" >${quote.sentAt ? "Resend" : "Send"}</button>${quote.sentAt ? `<div class="document-sent">Sent ${formatDate(quote.sentAt.slice(0, 10))}</div>` : ""}</td>
     </tr>
   `).join("") || `<tr><td colspan="6"><div class="empty-state"><p>No quotes yet.</p></div></td></tr>`;
 
-  const invoices = state.invoices.filter(invoice => {
+  const invoiceCandidates = state.invoices.filter(invoice => {
     const status = effectiveInvoiceStatus(invoice);
     if (financeFilter === "open") return !["Paid", "Draft"].includes(status);
     if (financeFilter === "overdue") return status === "Overdue";
     if (financeFilter === "paid") return status === "Paid";
     return true;
   }).sort((a, b) => a.due.localeCompare(b.due));
+  const invoices=window.CAGE_RECORDS?.financeRows('invoices',invoiceCandidates)||invoiceCandidates;
   document.getElementById("finance-invoice-list").innerHTML = invoices.map(invoice => {
     const effective = effectiveInvoiceStatus(invoice);
-    return `<tr><td><button type="button" class="financial-record-link" data-view-document="invoice" data-record-id="${invoice.id}">${escapeHtml(invoice.number)}</button><br><span class="project-client">${escapeHtml(invoice.description)}</span></td><td>${escapeHtml(invoice.client)}<br><span class="project-client">${escapeHtml(projectById(invoice.project)?.name || "Unlinked")}</span></td><td><span class="due-date ${effective === "Overdue" ? "overdue" : ""}">${formatDate(invoice.due)}</span></td><td class="money-cell">${formatMoney(invoice.amount)}</td><td><select class="invoice-status-select ${statusClass(effective)}" data-invoice-status="${invoice.id}" aria-label="Status for ${escapeHtml(invoice.number)}">${["Draft", "Sent", "Overdue", "Paid"].map(option => `<option ${option === effective ? "selected" : ""}>${option}</option>`).join("")}</select></td><td><button class="document-action" data-send-document="invoice" data-document-id="${invoice.id}">${invoice.sentAt ? "Resend" : "Send"}</button>${invoice.sentAt ? `<div class="document-sent">Sent ${formatDate(invoice.sentAt.slice(0, 10))}</div>` : ""}</td></tr>`;
+    return `<tr><td><button type="button" class="financial-record-link" data-view-document="invoice" data-record-id="${invoice.id}">${escapeHtml(displayRecordReference("invoices",invoice))}</button><br><span class="project-client">${escapeHtml(invoice.description)}</span></td><td>${escapeHtml(invoice.client)}<br><span class="project-client">${escapeHtml(projectById(invoice.project)?.name || "Unlinked")}</span></td><td><span class="due-date ${effective === "Overdue" ? "overdue" : ""}">${formatDate(invoice.due)}</span></td><td class="money-cell">${formatMoney(invoice.amount)}</td><td><select class="invoice-status-select ${statusClass(effective)}" data-invoice-status="${invoice.id}" aria-label="Status for ${escapeHtml(displayRecordReference("invoices",invoice))}">${["Draft", "Sent", "Overdue", "Paid"].map(option => `<option ${option === effective ? "selected" : ""}>${option}</option>`).join("")}</select></td><td><button class="document-action" data-send-document="invoice" data-document-id="${invoice.id}">${invoice.sentAt ? "Resend" : "Send"}</button>${invoice.sentAt ? `<div class="document-sent">Sent ${formatDate(invoice.sentAt.slice(0, 10))}</div>` : ""}</td></tr>`;
   }).join("") || `<tr><td colspan="6"><div class="empty-state"><p>No invoices match this filter.</p></div></td></tr>`;
 
   const projectFigures = state.projects.map(project => {
@@ -2049,9 +2080,15 @@ function renderFinance() {
 }
 
 function threadIdForMessage(message) {
-  if (message.thread) return message.thread;
-  const project = projectById(message.project);
-  return project?.request || (project ? `project:${project.id}` : "");
+  // Follow a visible project's current request/deal thread without rewriting history.
+  const raw=message.thread|| (message.project?'project:'+message.project:'');
+  if((state.chatGroups||[]).some(g=>g.id===raw))return raw;
+  const project=raw.startsWith('project:')?projectById(raw.slice(8)):(!message.thread?projectById(message.project):null);
+  if(!project)return raw;
+  const request=state.requests.find(r=>r.id===project.request||r.project===project.id);
+  if(request)return request.id;
+  const deal=state.deals.find(d=>d.project===project.id);
+  return deal?'deal:'+deal.id:'project:'+project.id;
 }
 
 function workThreads() {
@@ -2093,9 +2130,9 @@ function workThreads() {
     const project = projectById(deal.project);
     threads.push({ id: `deal:${deal.id}`, title: deal.name, organisation: deal.company, owner: deal.owner, type: "Proactive opportunity", stage: project ? `${projectProgress(project.id)}% delivered` : deal.stage, category: project ? "delivery" : "intake", deal, project });
   });
-  state.projects.filter(project => !project.request && !state.requests.some(request => request.project === project.id) && !state.deals.some(deal => deal.project === project.id)).forEach(project => threads.push({ id: `project:${project.id}`, title: project.name, organisation: project.client, owner: project.owner, type: project.category, stage: `${projectProgress(project.id)}% delivered`, category: "delivery", project }));
+  state.projects.filter(project => !state.requests.some(request => request.project === project.id||request.id===project.request) && !state.deals.some(deal => deal.project === project.id)).forEach(project => threads.push({ id: `project:${project.id}`, title: project.name, organisation: project.client, owner: project.owner, type: project.category, stage: `${projectProgress(project.id)}% delivered`, category: "delivery", project }));
   state.commercialRecords.filter(record => !record.request && !state.requests.some(request => request.commercial === record.id)).forEach(record => threads.push({ id: `commercial:${record.id}`, title: record.title, organisation: record.organisation, owner: record.owner, type: record.type, stage: record.stage, category: "commercial", commercial: record }));
-  return threads;
+  return window.CAGE_TEAMWORK?threads.filter(t=>window.CAGE_TEAMWORK.canThread(t)):threads;
 }
 
 function threadById(id) {
@@ -2109,6 +2146,7 @@ function messagesForThread(threadId) {
 function threadMemberIds(thread) {
   if (Array.isArray(thread?.memberIds)) return [...new Set(thread.memberIds)];
   if (thread?.teamWide) return assignableTeam().map(member => member.id);
+  if (window.CAGE_TEAMWORK) return window.CAGE_TEAMWORK.threadMembers(thread);
   if (thread?.project?.team?.length) return [...new Set(thread.project.team)];
   return thread?.owner ? [thread.owner] : [];
 }
@@ -2163,7 +2201,7 @@ function renderChat() {
     const glyph = thread.title.split(/\s+/).slice(0, 2).map(word => word[0]).join("").toUpperCase();
     const preview = last ? `${last.sender === currentMember ? "You: " : thread.direct ? "" : teamMember(last.sender).name.split(" ")[0]+": "}${last.audio ? "Voice message" : last.text || last.attachment || "Attachment"}` : "Start a conversation";
     const stamp = last ? (last.date === TODAY ? last.time : formatDate(last.date)) : "";
-    return `<button type="button" class="chat-channel ${thread.id === activeChatThread ? "active" : ""} ${unread ? "has-unread" : ""}" data-chat-thread="${escapeHtml(thread.id)}" aria-current="${thread.id === activeChatThread ? "true" : "false"}"><span class="chat-channel-icon ${thread.category}">${escapeHtml(glyph)}</span><span class="chat-channel-copy"><strong>${escapeHtml(thread.title)}</strong><span>${escapeHtml(preview)}</span></span><span class="chat-channel-status"><time>${escapeHtml(stamp)}</time><span>${window.CAGE_MESSENGER?.isFavourite(thread.id) ? '<span class="chat-favourite-mark" aria-label="Favourite">★</span>' : ""}${unread ? `<span class="unread-count">${unread}</span>` : ""}</span></span></button>`;
+    return `<button type="button" class="chat-channel ${thread.id === activeChatThread ? "active" : ""} ${unread ? "has-unread" : ""}" data-chat-thread="${escapeHtml(thread.id)}" aria-current="${thread.id === activeChatThread ? "true" : "false"}"><span class="chat-channel-icon ${thread.category}">${escapeHtml(glyph)}</span><span class="chat-channel-copy"><strong>${escapeHtml(thread.title)}</strong><span>${escapeHtml(preview)}</span></span><span class="chat-channel-status"><time>${escapeHtml(stamp)}</time>${thread.direct?`<span class="cage-presence-label" data-presence-member="${escapeHtml(threadMemberIds(thread).find(id=>id!==currentMember)||currentMember)}"></span>`:""}<span>${window.CAGE_MESSENGER?.isFavourite(thread.id) ? '<span class="chat-favourite-mark" aria-label="Favourite">★</span>' : ""}${unread ? `<span class="unread-count">${unread}</span>` : ""}</span></span></button>`;
   }).join("") : `<div class="chat-list-empty">No conversations match this view.</div>`;
 
   const thread = threadById(activeChatThread);
@@ -2177,7 +2215,7 @@ function renderChat() {
     : `${thread.type} · ${thread.organisation} · Owner: ${teamMember(thread.owner).name}`;
   const openRecordButton = thread.teamWide || thread.customChat ? "" : `<button data-thread-open-view="${thread.request ? "requests" : thread.project ? "projects" : "commercial"}">Open record</button>`;
   const extraMembers = members.length > 5 ? `<span class="chat-member-more" title="${members.slice(5).map(member => escapeHtml(member.name)).join(", ")}">+${members.length - 5}</span>` : "";
-  document.getElementById("chat-header").innerHTML = `<div class="chat-header-main"><span class="chat-channel-icon ${thread.category}">${glyph}</span><span><strong>${escapeHtml(thread.title)}</strong><span>${escapeHtml(headerDetail)}</span></span></div><div class="chat-header-actions">${openRecordButton}<div class="chat-header-members">${members.slice(0, 5).map(member => `<span class="owner-avatar" title="${escapeHtml(member.name)}">${member.initials}</span>`).join("")}${extraMembers}</div></div>`;
+  document.getElementById("chat-header").innerHTML = `<div class="chat-header-main"><span class="chat-channel-icon ${thread.category}">${glyph}</span><span><strong>${escapeHtml(thread.title)}</strong><span>${escapeHtml(headerDetail)}</span></span></div><div class="chat-header-actions">${openRecordButton}<div class="chat-header-members">${members.slice(0, 5).map(member => `<span class="owner-avatar" data-presence-member="${escapeHtml(member.id)}" title="${escapeHtml(member.name)}">${member.initials}</span>`).join("")}${extraMembers}</div></div>`;
   const messages = messagesForThread(thread.id);
   const decisions = messages.filter(message => message.type === "Decision" || message.pinned).length;
   const files = messages.filter(message => message.attachment).length;
@@ -2201,7 +2239,7 @@ function renderChat() {
     if (message.type === "System") return `${day}<div class="message-system"><span>↻</span>${escapeHtml(message.text)}<small>${escapeHtml(message.time)}</small></div>`;
     const type = message.type || "Update";
     const currentMember = window.CAGE_BACKEND?.currentMemberId?.() || "alexander";
-    return `${day}<div data-message-id="${escapeHtml(message.id)}" class="message-row ${message.sender === currentMember ? "mine" : ""} ${type === "Decision" ? "decision" : ""}">${message.sender !== currentMember ? `<span class="owner-avatar">${sender.initials}</span>` : ""}<div class="message-bubble"><div class="message-bubble-head"><span class="message-author">${escapeHtml(sender.name)}</span><span class="message-type ${type === "Update" ? "routine-message " : ""}${type.toLowerCase().replaceAll(" ", "-")}">${escapeHtml(type)}</span></div><p>${escapeHtml(message.text)}</p>${message.audio ? `<button type="button" class="message-attachment" data-play-voice="${message.id}">▶ Voice message · ${Math.ceil(message.audioDuration || 0)}s</button><div data-voice-player="${message.id}"></div>` : message.attachment ? `<button class="message-attachment" data-preview-chat-file="${message.id}">⌁ ${escapeHtml(message.attachment)}</button>` : ""}<span class="message-meta">${escapeHtml(message.time)} ${message.pinned ? "· Pinned decision" : ""} ${message.sender === currentMember ? `<button type="button" class="message-receipt" data-receipt="${escapeHtml(message.id)}">${window.CAGE_CHAT?.receiptLabel(message.id)||"Checking…"}</button>` : ""}</span></div></div>`;
+    return `${day}<div data-message-id="${escapeHtml(message.id)}" class="message-row ${message.sender === currentMember ? "mine" : ""} ${type === "Decision" ? "decision" : ""}">${message.sender !== currentMember ? `<span class="owner-avatar">${sender.initials}</span>` : ""}<div class="message-bubble"><div class="message-bubble-head"><span class="message-author">${escapeHtml(sender.name)}</span><span class="message-type ${type === "Update" ? "routine-message " : ""}${type.toLowerCase().replaceAll(" ", "-")}">${escapeHtml(type)}</span></div>${window.CAGE_TEAMWORK?.replyMarkup(message)||""}<p>${escapeHtml(message.text)}</p><button type="button" class="message-reply-action" data-reply-message="${escapeHtml(message.id)}" aria-label="Reply to ${escapeHtml(sender.name)}">Reply</button>${message.audio ? `<button type="button" class="message-attachment" data-play-voice="${message.id}">▶ Voice message · ${Math.ceil(message.audioDuration || 0)}s</button><div data-voice-player="${message.id}"></div>` : message.attachment ? `<button class="message-attachment" data-preview-chat-file="${message.id}">⌁ ${escapeHtml(message.attachment)}</button>` : ""}<span class="message-meta">${escapeHtml(message.time)} ${message.pinned ? "· Pinned decision" : ""} ${message.sender === currentMember ? `<button type="button" class="message-receipt" data-receipt="${escapeHtml(message.id)}">${window.CAGE_CHAT?.receiptLabel(message.id)||"Checking…"}</button>` : ""}</span></div></div>`;
   }).join("") : thread.customChat
     ? `<div class="empty-state"><div>${thread.direct ? "↔" : "◎"}</div><h3>${thread.direct ? "Start your private conversation" : "Start the group conversation"}</h3><p>Messages and files here are available only to the selected members.</p></div>`
     : thread.teamWide
@@ -2239,14 +2277,17 @@ function addSystemWorkMessage(threadId, text) {
 
 function sendChatMessage(text, attachment = "", attachmentPath = "", extra = {}) {
   const cleanText = String(text || "").trim();
-  if ((!cleanText && !attachment) || !threadById(activeChatThread)) return;
+  if (!cleanText && !attachment) return false;
+  if (!threadById(activeChatThread)) {showToast('This conversation is unavailable. Your text is still in the composer. Reopen the conversation and retry.');return false;}
   const now = new Date();
   const type = document.getElementById("chat-message-type").value || "Update";
+  if(window.CAGE_BACKEND?.isProduction()&&(!window.CAGE_BACKEND.currentProfile()||window.CAGE_BACKEND.moduleLevel('chat')!=='edit')){showToast('Chat edit access and an active session are required. Your text is still in the composer.');return false;}
+  const messageId='msg-'+crypto.randomUUID();
   state.messages.push({
-    id: `msg-${Date.now()}`,
+    id: messageId,
     thread: activeChatThread,
     sender: window.CAGE_BACKEND?.currentMemberId?.() || "alexander",
-    date: TODAY,
+    date: new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Blantyre',year:'numeric',month:'2-digit',day:'2-digit'}).format(now),
     time: now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }),
     type,
     pinned: type === "Decision",
@@ -2256,15 +2297,19 @@ function sendChatMessage(text, attachment = "", attachmentPath = "", extra = {})
     createdAt: now.toISOString(),
     mentions: assignableTeam().filter(person => cleanText.includes("@" + person.name)).map(person => person.id),
     mentionAll: /(^|\s)@all(?=\s|[.,!?:;]|$)/i.test(cleanText),
-    ...extra
+    ...extra,
+    replyTo:window.CAGE_TEAMWORK?.replyId(activeChatThread)||null
   });
-  saveState();
+  try{const queued=saveState();if(window.CAGE_BACKEND?.isProduction()&&queued!==true)throw new Error('The session is refreshing. Please retry');}catch(error){state.messages=state.messages.filter(m=>m.id!==messageId);showToast('Message was not queued: '+error.message+'. Your text has been kept.');return false;}
+  Promise.resolve(window.CAGE_BACKEND?.flushSave()).catch(error=>showToast('Message is waiting to sync: '+error.message));
   document.getElementById("chat-input").value = "";
+  window.CAGE_TEAMWORK?.clearReply(activeChatThread);
   window.CAGE_CHAT?.sent(activeChatThread);
   document.getElementById("chat-message-type").value = "Update";
   hideChatMentionPicker();
   renderChat();
   requestAnimationFrame(() => document.getElementById("chat-input")?.focus({ preventScroll: true }));
+  return true;
 }
 
 function chatMentionMatch() {
@@ -2417,7 +2462,7 @@ function renderTeam() {
     const overdueWidth = Math.max(0, (member.overdue / max) * 100);
     return `
       <div class="team-row">
-        <div class="team-person"><span class="owner-avatar">${member.initials}</span><span><strong>${escapeHtml(member.name)}</strong><span>${escapeHtml(member.role)}</span><small>${escapeHtml(member.email || "Email not recorded")}</small></span></div>
+        <div class="team-person"><span class="owner-avatar" data-presence-member="${escapeHtml(member.id)}">${member.initials}</span><span><strong>${escapeHtml(member.name)}</strong><span>${escapeHtml(member.role)}</span><small>${escapeHtml(member.email || "Email not recorded")}</small></span></div>
         <div class="workload-track"><span class="workload-active" style="width:${activeWidth}%"></span><span class="workload-overdue" style="width:${overdueWidth}%"></span></div>
         <span class="workload-stat"><strong>${member.active}</strong> active</span>
         <span class="account-access ${member.access === "Administrator" ? "administrator" : "standard"}">${escapeHtml(member.access || "Standard user")}</span>
@@ -2481,10 +2526,10 @@ function renderReports() {
       <div class="report-stat"><span>Pending approvals</span><strong>${pendingApprovals.length}</strong></div>
       <div class="report-stat"><span>Open requests</span><strong>${openRequests.length}</strong></div>
     </div>
-    <section class="report-section"><h3>Management attention</h3><ul class="report-list">${requestActions.slice(0,4).map(request => `<li><strong>${escapeHtml(request.number)}</strong> — ${escapeHtml(request.title)} is at ${escapeHtml(request.stage)}; next action: ${escapeHtml(request.nextAction)}</li>`).join("")}${blocked.map(task => `<li><strong>${escapeHtml(task.title)}</strong> — ${escapeHtml(task.blocker || "Blocker reason required")} Owner: ${escapeHtml(teamMember(task.owner).name)}.</li>`).join("") || "<li>No blocked work.</li>"}${attentionProjects.slice(0,3).map(project => `<li>${escapeHtml(project.name)} needs attention because it contains overdue or blocked work.</li>`).join("")}${pendingApprovals.filter(item => item.due <= TODAY).map(item => `<li>Decision due: ${escapeHtml(item.title)} — requested by ${escapeHtml(teamMember(item.requester).name)}.</li>`).join("")}${complianceActions.slice(0,3).map(record => `<li>${escapeHtml(record.title)} — ${escapeHtml(complianceDisplayStatus(record))}; owner ${escapeHtml(teamMember(record.owner).name)}.</li>`).join("")}</ul></section>
+    <section class="report-section"><h3>Management attention</h3><ul class="report-list">${requestActions.slice(0,4).map(request => `<li><strong>${escapeHtml(displayRecordReference("requests",request))}</strong> — ${escapeHtml(request.title)} is at ${escapeHtml(request.stage)}; next action: ${escapeHtml(request.nextAction)}</li>`).join("")}${blocked.map(task => `<li><strong>${escapeHtml(task.title)}</strong> — ${escapeHtml(task.blocker || "Blocker reason required")} Owner: ${escapeHtml(teamMember(task.owner).name)}.</li>`).join("") || "<li>No blocked work.</li>"}${attentionProjects.slice(0,3).map(project => `<li>${escapeHtml(project.name)} needs attention because it contains overdue or blocked work.</li>`).join("")}${pendingApprovals.filter(item => item.due <= TODAY).map(item => `<li>Decision due: ${escapeHtml(item.title)} — requested by ${escapeHtml(teamMember(item.requester).name)}.</li>`).join("")}${complianceActions.slice(0,3).map(record => `<li>${escapeHtml(record.title)} — ${escapeHtml(complianceDisplayStatus(record))}; owner ${escapeHtml(teamMember(record.owner).name)}.</li>`).join("")}</ul></section>
     <section class="report-section"><h3>Field readiness</h3><ul class="report-list">${activeMissions.sort((a, b) => a.start.localeCompare(b.start)).slice(0,4).map(mission => `<li>${formatDate(mission.start)} — ${escapeHtml(mission.title)}; ${readinessCount(mission)}/5 gates complete and ${escapeHtml(assetById(mission.asset)?.name || "equipment unassigned")}.</li>`).join("") || "<li>No active missions.</li>"}</ul></section>
     <section class="report-section"><h3>Due within seven days</h3><ul class="report-list">${dueSoon.map(task => `<li>${escapeHtml(task.title)} — ${escapeHtml(dueLabel(task))}; ${escapeHtml(teamMember(task.owner).name)}.</li>`).join("") || "<li>No tasks due this week.</li>"}</ul></section>
-    <section class="report-section"><h3>Sales and cash</h3><ul class="report-list">${activeDeals.sort((a,b) => b.value - a.value).slice(0,3).map(deal => `<li>${escapeHtml(deal.name)} — ${formatMoney(deal.value, true)} at ${deal.probability}% probability; next action ${formatDate(deal.nextAction)}.</li>`).join("")}${overdueInvoices.map(invoice => `<li>${escapeHtml(invoice.number)} for ${escapeHtml(invoice.client)} is overdue — ${formatMoney(invoice.amount)}.</li>`).join("") || "<li>No overdue invoices.</li>"}</ul></section>
+    <section class="report-section"><h3>Sales and cash</h3><ul class="report-list">${activeDeals.sort((a,b) => b.value - a.value).slice(0,3).map(deal => `<li>${escapeHtml(deal.name)} — ${formatMoney(deal.value, true)} at ${deal.probability}% probability; next action ${formatDate(deal.nextAction)}.</li>`).join("")}${overdueInvoices.map(invoice => `<li>${escapeHtml(displayRecordReference("invoices",invoice))} for ${escapeHtml(invoice.client)} is overdue — ${formatMoney(invoice.amount)}.</li>`).join("") || "<li>No overdue invoices.</li>"}</ul></section>
     <section class="report-section"><h3>Calendar</h3><ul class="report-list">${upcomingEvents.map(event => `<li>${formatDate(event.date)} at ${escapeHtml(event.start)} — ${escapeHtml(event.title)}; ${escapeHtml(teamMember(event.owner).name)}.</li>`).join("") || "<li>No scheduled events this week.</li>"}</ul></section>
     <section class="report-section"><h3>Recently completed</h3><ul class="report-list">${recentlyDone.map(task => `<li>${escapeHtml(task.title)} — evidence: ${escapeHtml(task.evidence || "completion note only")}.</li>`).join("") || "<li>No recent completions recorded.</li>"}</ul></section>
     <section class="report-section"><h3>Recommended actions</h3><ul class="report-list"><li>Qualify every new request and record the next dated action before work is scoped.</li><li>Do not submit offers or start delivery until internal approval and formal acceptance are recorded.</li><li>Clear every deployment gate and compliance action before field mobilisation.</li><li>Resolve blocked work and attach client-ready evidence before closing high-priority tasks.</li></ul></section>
@@ -2512,9 +2557,8 @@ function renderReports() {
   document.getElementById("quality-checks").innerHTML = checks.map(check => `<div class="quality-item"><span class="quality-icon ${check.warning ? "warning" : ""}">${check.warning ? "!" : "✓"}</span><span class="quality-copy"><strong>${check.title}</strong><span>${check.detail}</span></span></div>`).join("");
 }
 
-function nextRequestNumber() {
-  const max = Math.max(0, ...state.requests.map(request => Number(String(request.number).replace(/\D/g, "")) || 0));
-  return `REQ-${new Date(`${TODAY}T00:00:00Z`).getUTCFullYear()}-${String(max + 1).slice(-4).padStart(4, "0")}`;
+async function nextRequestNumber(recordId) {
+  return window.CAGE_BACKEND.reserveRecordNumber('requests', recordId);
 }
 
 function renderRequestPurposeOptions(selected = "") {
@@ -2578,18 +2622,20 @@ function removeRequestPurpose(purpose) {
 }
 
 function openRequestDialog() {
+  delete document.getElementById("request-form").dataset.pendingRequestId;
   renderOwnerOptions();
   const form = document.getElementById("request-form");
   form.reset();
   renderRequestPurposeOptions(state.settings.defaultRequestPurpose || "Drone mapping");
-  form.elements.owner.value = state.settings.defaultOwner || "alexander";
+  form.elements.owner.value = window.CAGE_BACKEND?.currentMemberId?.() || state.settings.defaultOwner || "alexander";
   form.elements.priority.value = "Normal";
   form.elements.deadline.value = dateAfter(3);
+  window.CAGE_TEAMWORK?.memberPicker("request-form",null);
   document.getElementById("request-form-error").textContent = "";
   document.getElementById("request-dialog").showModal();
 }
 
-function createRequest(event) {
+async function createRequest(event) {
   event.preventDefault();
   if (event.submitter?.value === "cancel") {
     document.getElementById("request-dialog").close();
@@ -2598,8 +2644,8 @@ function createRequest(event) {
   const data = new FormData(event.currentTarget);
   const type = String(data.get("type") || "General enquiry");
   const request = {
-    id: `rq-${Date.now()}`,
-    number: nextRequestNumber(),
+    id: event.currentTarget.dataset.pendingRequestId ||= `rq-${crypto.randomUUID()}`,
+    number: "",
     title: String(data.get("title") || "").trim(),
     organisation: String(data.get("organisation") || "").trim(),
     contact: String(data.get("contact") || "").trim(),
@@ -2627,8 +2673,15 @@ function createRequest(event) {
     document.getElementById("request-form-error").textContent = "The expected delivery date cannot be in the past.";
     return;
   }
+  const requestForm = document.getElementById('request-form');
+  if(requestForm.dataset.submitting)return;
+  requestForm.dataset.submitting='true';
+  try { request.number = await nextRequestNumber(request.id); }
+  catch(error) { document.getElementById('request-form-error').textContent=error.message; return; }
+  finally { delete requestForm.dataset.submitting; }
+  Object.assign(request,window.CAGE_TEAMWORK?.memberValues(data,request));
   state.requests.push(request);
-  addSystemWorkMessage(request.id, `${request.number} created by the AI opportunity monitor. Source verification and eligibility review are required before CAGE proceeds.`);
+  addSystemWorkMessage(request.id, `${request.number} created. Review the requirements and agree the next action.`);
   if (!contactByCompany(request.organisation)) {
     state.contacts.push({ id: `c-${Date.now() + 1}`, company: request.organisation, contact: request.contact, relationship: "Prospect", owner: request.owner, lastActivity: TODAY, nextAction: request.deadline, note: request.title });
   }
@@ -2739,33 +2792,9 @@ function syncRequestLinks(request) {
 }
 
 function toggleRequestCheck(requestId, key) {
-  const request = requestById(requestId);
-  const item = requestTemplate(request).find(entry => entry.key === key);
-  if (!request || !item) return;
-  if (key === "approval") {
-    showToast("Approval is completed only from the central decision inbox.");
-    return;
-  }
-  request.checklist ||= {};
-  request.checklist[key] = !request.checklist[key];
-  if (!request.checklist[key] && ["qualify", "scope"].includes(item.phase) && !["Converted", "Lost / Declined"].includes(request.stage)) {
-    request.checklist.approval = false;
-    request.stage = item.phase === "qualify" ? "Needs information" : "Scoping";
-    const pendingReview = state.approvals.find(approval => approval.linkedType === "request" && approval.linkedId === request.id && approval.status === "Pending");
-    if (pendingReview) {
-      pendingReview.status = "Returned";
-      pendingReview.decided = TODAY;
-      pendingReview.decisionNote = "The request scope changed after review was submitted; a new approval is required.";
-    }
-    syncRequestLinks(request);
-  }
-  if (key === "submission" && request.checklist[key] && requestHasApprovedReview(request) && request.stage === "Approved to send") request.stage = "Submitted";
-  if (key === "submission" && !request.checklist[key] && ["Submitted", "Negotiation", "Won / Awarded"].includes(request.stage)) request.stage = "Approved to send";
-  syncRequestLinks(request);
-  saveState();
-  renderAll();
-  renderRequestDetail(request.id);
-  showToast(`${item.label} ${request.checklist[key] ? "completed" : "reopened"}.`);
+ const request=requestById(requestId),item=request&&requestTemplate(request).find(x=>x.key===key);if(!item)return;
+ request.checklist ||= {};request.checklist[key]=!request.checklist[key];
+ saveState();renderAll();renderRequestDetail(request.id);showToast('Checklist updated.');
 }
 
 function rejectRequestStageChange(request, previous, control, message) {
@@ -2774,105 +2803,22 @@ function rejectRequestStageChange(request, previous, control, message) {
 }
 
 function changeRequestStage(requestId, stage, control) {
-  const request = requestById(requestId);
-  if (!request || !REQUEST_STAGE_OPTIONS.includes(stage) || request.stage === stage) return;
-  const previous = request.stage;
-  if (stage === "Lost / Declined" && !request.lostDate) {
-    if (control) control.value = previous;
-    openRequestCloseDialog(request.id);
-    return;
-  }
-  if (["Qualified", "Scoping"].includes(stage) && !requestQualificationComplete(request)) {
-    rejectRequestStageChange(request, previous, control, "Complete the qualification checks before advancing this request.");
-    return;
-  }
-  if (stage === "Internal review") {
-    if (!requestPreReviewComplete(request)) {
-      rejectRequestStageChange(request, previous, control, "Complete the qualification, scope and costing checks before requesting approval.");
-      return;
-    }
-    requestInternalReview(request.id);
-    return;
-  }
-  if (["Approved to send", "Submitted", "Negotiation", "Won / Awarded"].includes(stage) && !requestPreReviewComplete(request)) {
-    rejectRequestStageChange(request, previous, control, "Complete every qualification, scope and costing control before external progression.");
-    return;
-  }
-  if (["Approved to send", "Submitted", "Negotiation", "Won / Awarded"].includes(stage) && !requestHasApprovedReview(request)) {
-    rejectRequestStageChange(request, previous, control, "An approved internal review is required before external submission.");
-    return;
-  }
-  if (["Negotiation", "Won / Awarded"].includes(stage) && !request.checklist?.submission) {
-    rejectRequestStageChange(request, previous, control, "Record the external submission before the outcome or negotiation stage.");
-    return;
-  }
-  if (stage === "Converted") {
-    if (previous !== "Won / Awarded" || !requestAcceptanceComplete(request)) {
-      rejectRequestStageChange(request, previous, control, "File the signed contract, PO, award or accepted quote before creating delivery work.");
-      return;
-    }
-    convertRequest(request.id);
-    return;
-  }
-  request.stage = stage;
-  addSystemWorkMessage(request.id, `Workflow moved from ${previous} to ${stage}.`);
-  if (stage === "Qualified") {
-    ensureRequestCRM(request);
-    ensureRequestCommercial(request);
-  }
-  if (stage === "Submitted") request.checklist.submission = true;
-  syncRequestLinks(request);
-  saveState();
-  renderAll();
-  if (document.getElementById("request-detail-dialog").open) renderRequestDetail(request.id);
-  showToast(stage === "Qualified"
-    ? `${request.number} qualified and linked to a CRM opportunity.`
-    : `${request.number} moved to ${stage}.`);
+ const request=requestById(requestId);if(!request||!REQUEST_STAGE_OPTIONS.includes(stage)||request.stage===stage)return;
+ const previous=request.stage;
+ if(stage==='Lost / Declined'&&!request.lostDate){if(control)control.value=previous;openRequestCloseDialog(request.id);return;}
+ if(stage==='Converted'){convertRequest(request.id);return;}
+ request.stage=stage==='Internal review'?'Approved to send':stage;
+ request.checklist ||= {};
+ if(stage==='Submitted')request.checklist.submission=true;
+ addSystemWorkMessage(request.id,`Workflow moved from ${previous} to ${request.stage}.`);
+ if(stage==='Qualified'){ensureRequestCRM(request);ensureRequestCommercial(request);}
+ syncRequestLinks(request);saveState();renderAll();
+ if(document.getElementById('request-detail-dialog').open)renderRequestDetail(request.id);
+ showToast(`${request.number} moved to ${request.stage==='Approved to send'?'Ready to send':request.stage}.`);
 }
 
 function requestInternalReview(requestId) {
-  const request = requestById(requestId);
-  if (!request) return;
-  if (!requestPreReviewComplete(request)) {
-    showToast("Complete the scope, evidence and costing checks first.");
-    return;
-  }
-  if(currentUserCanSelfApprove()){
-    let approval=state.approvals.find(item=>item.linkedType==='request'&&item.linkedId===request.id&&item.status==='Pending');
-    if(!approval){approval={id:'ap-'+crypto.randomUUID(),type:request.type==='Grant'?'Grant':'Quote',title:'Release '+request.title,requester:window.CAGE_BACKEND.currentMemberId(),submitted:TODAY,due:request.deadline||dateAfter(1),amount:request.value,status:'Pending',summary:'Scope and costing reviewed by the approving administrator.',linkedType:'request',linkedId:request.id};state.approvals.push(approval);}
-    decideApproval(approval.id,'Approved');document.getElementById('request-detail-dialog').close();return;
-  }
-  const pending = state.approvals.some(item => item.linkedType === "request" && item.linkedId === request.id && item.status === "Pending");
-  if (pending) {
-    request.stage = "Internal review";
-    syncRequestLinks(request);
-    saveState();
-    renderAll();
-    showToast("This request is already awaiting an internal decision.");
-    return;
-  }
-  const approvalType = request.type === "Grant" ? "Grant" : request.type === "Tender / RFQ" ? "Submission" : "Quote";
-  state.approvals.push({
-    id: `ap-${Date.now()}`,
-    type: approvalType,
-    title: `Release ${request.title}`,
-    requester: request.owner,
-    submitted: TODAY,
-    due: request.deadline >= TODAY ? request.deadline : dateAfter(1),
-    amount: request.value,
-    status: "Pending",
-    summary: `Review the ${request.type.toLowerCase()} scope, evidence, costing, risks and external response before release.`,
-    linkedType: "request",
-    linkedId: request.id
-  });
-  request.stage = "Internal review";
-  addSystemWorkMessage(request.id, "Scope and costing submitted for internal approval.");
-  syncRequestLinks(request);
-  saveState();
-  document.getElementById("request-detail-dialog").close();
-  renderAll();
-  setView("approvals");
-  showToast("Internal review sent to the central approval inbox.");
+ changeRequestStage(requestId,'Approved to send');
 }
 
 function prepareRequestQuote(requestId) {
@@ -2982,10 +2928,7 @@ function requestTaskDueDate(request, index, total) {
 function convertRequest(requestId) {
   const request = requestById(requestId);
   if (!request) return;
-  if (request.stage !== "Won / Awarded" || !requestAcceptanceComplete(request)) {
-    showToast("Record the award and file acceptance evidence before creating delivery work.");
-    return;
-  }
+
   const deal = ensureRequestCRM(request);
   deal.stage = "Won";
   deal.probability = 100;
@@ -3504,6 +3447,7 @@ function openCommercialDialog() {
   form.elements.owner.value = "alexander";
   form.elements.deadline.value = dateAfter(14);
   form.elements.progress.value = "10";
+  window.CAGE_TEAMWORK?.memberPicker("commercial-form",null);
   document.getElementById("commercial-form-error").textContent = "";
   document.getElementById("commercial-dialog").showModal();
 }
@@ -3531,6 +3475,7 @@ function createCommercialRecord(event) {
     document.getElementById("commercial-form-error").textContent = "Add the organisation, owner, deadline and one clear next action.";
     return;
   }
+  Object.assign(record,window.CAGE_TEAMWORK?.memberValues(data,record));
   state.commercialRecords.push(record);
   saveState();
   document.getElementById("commercial-dialog").close();
@@ -3619,9 +3564,10 @@ function projectLinkedQuotes(projectId) {
 }
 
 function projectReferenceFiles(project) {
-  const uploaded = project.files.map(file => ({ ...file, source: "Project upload" }));
+  const registered=window.CAGE_BACKEND?.projectFiles?.(project.id)||[];
+  const uploaded=[...registered,...project.files.filter(f=>!registered.some(r=>r.path===f.path)).map(file=>({...file,source:'Project upload'}))];
   const taskFiles = projectTasks(project.id).filter(task => task.evidence).map(task => ({ id: `task-${task.id}`, name: task.evidence, uploaded: task.updated, source: task.title }));
-  const chatFiles = state.messages.filter(message => message.project === project.id && message.attachment).map(message => ({ id: `chat-${message.id}`, name: message.attachment, path: message.attachmentPath, uploaded: message.date, source: "Work chat" }));
+  const chatFiles = state.messages.filter(message => (message.project === project.id || workThreads().some(t=>t.project?.id===project.id&&threadIdForMessage(message)===t.id)) && message.attachment).map(message => ({ id: `chat-${message.id}`, name: message.attachment, path: message.attachmentPath, uploaded: message.date, source: "Work chat" }));
   const references = state.knowledge.filter(item => item.project === project.id && item.link).map(item => ({ id: `knowledge-${item.id}`, name: item.link, uploaded: item.updated, source: item.title }));
   return [...uploaded, ...taskFiles, ...chatFiles, ...references];
 }
@@ -3650,7 +3596,8 @@ function projectWorkspaceTab(project, context) {
 
   if (activeProjectTab === "members") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Project team</span><h3>${members.length} members</h3></div><div class="project-inline-action"><select id="project-member-select" aria-label="Select a member"><option value="">Add a colleague…</option>${assignableTeam().filter(member => !project.team.includes(member.id)).map(member => `<option value="${member.id}">${escapeHtml(member.name)}</option>`).join("")}</select><button data-add-project-member="${project.id}">＋ Add</button></div></div><div class="project-member-grid">${members.map(member => `<article><span class="owner-avatar">${member.initials}</span><div><strong>${escapeHtml(member.name)}</strong><small>${escapeHtml(member.role)}</small><em>${member.id === project.owner ? "Project lead" : "Project member"}</em></div>${member.id !== project.owner ? `<button data-remove-project-member="${project.id}" data-member-id="${member.id}" aria-label="Remove ${escapeHtml(member.name)}">×</button>` : ""}</article>`).join("")}</div></section>`;
 
-  if (activeProjectTab === "files") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Documents and evidence</span><h3>${files.length} project files</h3></div><label class="project-upload-button">＋ Upload file<input type="file" data-project-file-input="${project.id}" hidden></label></div><div class="project-file-list">${files.map(file => `<button ${file.path ? `data-open-project-file="${escapeHtml(file.id)}"` : ""} class="${file.path ? "" : "reference-only"}"><span class="project-file-icon">▤</span><span><strong>${escapeHtml(file.name)}</strong><small>${escapeHtml(file.source)}${file.uploaded ? ` · ${formatDate(file.uploaded)}` : ""}</small></span><b>${file.path ? "Open" : "Reference"}</b></button>`).join("") || `<div class="project-empty"><strong>No files recorded</strong><span>Upload a project document or attach evidence to a task.</span></div>`}</div></section>`;
+  if (activeProjectTab === 'files') window.CAGE_BACKEND?.refreshProjectFiles?.(project.id).then(changed=>{if(changed&&activeProjectId===project.id&&activeProjectTab==='files')renderProjectWorkspace();});
+  if (activeProjectTab === "files") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Documents and evidence</span><h3>${files.length} project files</h3><p role="status">${escapeHtml(window.CAGE_BACKEND?.projectFilesNotice?.(project.id)||'')}</p><button type="button" data-refresh-project-files="${project.id}">Refresh files</button></div><label class="project-upload-button">＋ Upload file<input type="file" data-project-file-input="${project.id}" hidden></label></div><div class="project-file-list">${files.map(file => `<button ${file.path ? `data-open-project-file="${escapeHtml(file.id)}"` : ""} class="${file.path ? "" : "reference-only"}"><span class="project-file-icon">▤</span><span><strong>${escapeHtml(file.name)}</strong><small>${escapeHtml(file.source)}${file.uploaded ? ` · ${formatDate(file.uploaded)}` : ""}</small></span><b>${file.path ? "Open" : "Reference"}</b></button>`).join("") || `<div class="project-empty"><strong>No files recorded</strong><span>Upload a project document or attach evidence to a task.</span></div>`}</div></section>`;
 
   if (activeProjectTab === "milestones") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Delivery checkpoints</span><h3>Milestones</h3></div><button data-add-project-milestone="${project.id}">＋ Add milestone</button></div><div class="milestone-list">${project.milestones.slice().sort((a,b) => a.due.localeCompare(b.due)).map(item => `<label class="milestone-row ${item.complete ? "complete" : ""}"><input type="checkbox" data-project-milestone-toggle="${item.id}" ${item.complete ? "checked" : ""}><span><strong>${escapeHtml(item.title)}</strong><small>Due ${formatDate(item.due, { year: true })}${Number(item.cost || 0) ? ` · Budget ${formatMoney(Number(item.cost), true)}` : ""}</small></span><em>${item.complete ? "Complete" : item.due < TODAY ? "Overdue" : "Upcoming"}</em></label>`).join("") || `<div class="project-empty"><strong>No milestones yet</strong><span>Add the major approval, delivery and completion checkpoints for this project.</span></div>`}</div></section>`;
 
@@ -3660,9 +3607,9 @@ function projectWorkspaceTab(project, context) {
 
   if (activeProjectTab === "gantt") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Schedule visual</span><h3>Gantt Chart</h3></div><button data-new-task-project="${project.id}">＋ Add task</button></div>${projectTimeline(tasks)}</section>`;
 
-  if (activeProjectTab === "invoices") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Billing</span><h3>${invoices.length} project invoices</h3></div><button data-new-invoice-project="${project.id}">＋ Create invoice</button></div><div class="project-finance-list">${invoices.map(invoice => `<div><span><button type="button" class="financial-record-link" data-view-document="invoice" data-record-id="${invoice.id}">${escapeHtml(invoice.number)}</button><small>${escapeHtml(invoice.description)}</small></span><span><strong>${formatMoney(invoice.amount, true)}</strong><small>Due ${formatDate(invoice.due)}</small></span><span class="status-pill ${statusClass(invoice.status)}">${escapeHtml(invoice.status)}</span><button data-send-document="invoice" data-document-id="${invoice.id}">${invoice.sentAt ? "Resend" : "Send"}</button></div>`).join("") || `<div class="project-empty"><strong>No invoices yet</strong><span>Create the first project invoice when a billing milestone is reached.</span></div>`}</div></section>`;
+  if (activeProjectTab === "invoices") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Billing</span><h3>${invoices.length} project invoices</h3></div><button data-new-invoice-project="${project.id}">＋ Create invoice</button></div><div class="project-finance-list">${invoices.map(invoice => `<div><span><button type="button" class="financial-record-link" data-view-document="invoice" data-record-id="${invoice.id}">${escapeHtml(displayRecordReference("invoices",invoice))}</button><small>${escapeHtml(invoice.description)}</small></span><span><strong>${formatMoney(invoice.amount, true)}</strong><small>Due ${formatDate(invoice.due)}</small></span><span class="status-pill ${statusClass(invoice.status)}">${escapeHtml(invoice.status)}</span><button data-send-document="invoice" data-document-id="${invoice.id}">${invoice.sentAt ? "Resend" : "Send"}</button></div>`).join("") || `<div class="project-empty"><strong>No invoices yet</strong><span>Create the first project invoice when a billing milestone is reached.</span></div>`}</div></section>`;
 
-  if (activeProjectTab === "quotes") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Commercial record</span><h3>${quotes.length} linked quotations</h3></div><button data-new-quote-project="${project.id}">＋ Create quotation</button></div><div class="project-finance-list">${quotes.map(quote => `<div><span><button type="button" class="financial-record-link" data-view-document="quote" data-record-id="${quote.id}">${escapeHtml(quote.number)}</button><small>${escapeHtml(quote.description)}</small></span><span><strong>${formatMoney(quote.amount, true)}</strong><small>Valid to ${formatDate(quote.validUntil)}</small></span><span class="status-pill ${statusClass(quote.status)}">${escapeHtml(quote.status)}</span><button data-send-document="quote" data-document-id="${quote.id}">${quote.sentAt ? "Resend" : "Send"}</button></div>`).join("") || `<div class="project-empty"><strong>No linked quotations</strong><span>Create a quotation for this project.</span></div>`}</div></section>`;
+  if (activeProjectTab === "quotes") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Commercial record</span><h3>${quotes.length} linked quotations</h3></div><button data-new-quote-project="${project.id}">＋ Create quotation</button></div><div class="project-finance-list">${quotes.map(quote => `<div><span><button type="button" class="financial-record-link" data-view-document="quote" data-record-id="${quote.id}">${escapeHtml(displayRecordReference("quotes",quote))}</button><small>${escapeHtml(quote.description)}</small></span><span><strong>${formatMoney(quote.amount, true)}</strong><small>Valid to ${formatDate(quote.validUntil)}</small></span><span class="status-pill ${statusClass(quote.status)}">${escapeHtml(quote.status)}</span><button data-send-document="quote" data-document-id="${quote.id}">${quote.sentAt ? "Resend" : "Send"}</button></div>`).join("") || `<div class="project-empty"><strong>No linked quotations</strong><span>Create a quotation for this project.</span></div>`}</div></section>`;
 
   return `<section class="project-panel"><div class="project-panel-heading"><div><span>Project spending</span><h3>${context.expenses.length} recorded expenses</h3></div><button data-new-project-expense="${project.id}">＋ Add expense</button></div><div class="project-expense-summary"><span><small>Total project expenses</small><strong>${formatMoney(costs, true)}</strong></span><span><small>Approved</small><strong>${formatMoney(context.expenses.filter(item => (item.status || "Pending") === "Approved").reduce((sum, item) => sum + item.amount, 0), true)}</strong></span><span><small>Pending review</small><strong>${context.expenses.filter(item => (item.status || "Pending") === "Pending").length}</strong></span></div><div class="project-expense-list">${context.expenses.slice().sort((a,b) => b.date.localeCompare(a.date)).map(expense => `<div><span><button type="button" class="financial-record-link" data-view-document="expense" data-record-id="${expense.id}">${escapeHtml(expense.description)}</button><small>${expense.receiptPath ? `<button type="button" data-open-receipt="${expense.id}">Open receipt</button> · ` : ""}${escapeHtml(expense.category)} · ${formatDate(expense.date)}${expense.receipt ? ` · ${escapeHtml(expense.receipt)}` : ""}</small></span><strong>${formatMoney(expense.amount, true)}</strong><select data-expense-status="${expense.id}" aria-label="Status for ${escapeHtml(expense.description)}">${["Pending", "Approved", "Rejected"].map(status => `<option ${status === (expense.status || "Pending") ? "selected" : ""}>${status}</option>`).join("")}</select></div>`).join("") || `<div class="project-empty"><strong>No expenses recorded</strong><span>Add field, equipment, travel or administrative costs against this project.</span></div>`}</div></section>`;
 }
@@ -3682,7 +3629,8 @@ function renderProjectWorkspace() {
   const sourceRequest = state.requests.find(request => request.project === project.id || request.id === project.request);
   const primaryDeal = state.deals.find(deal => deal.project === project.id || deal.id === sourceRequest?.deal);
   const context = { owner, tasks, progress, revenue, costs, invoices, expenses, quotes: projectLinkedQuotes(project.id), events: state.events.filter(event => event.project === project.id), missions: state.missions.filter(mission => mission.project === project.id), members: project.team.map(teamMember), files: projectReferenceFiles(project), primaryDeal };
-  document.getElementById("project-dialog-content").innerHTML = `<header class="project-workspace-header"><div><p class="section-kicker">${escapeHtml(project.category)} · ${escapeHtml(project.client)}</p><h2>${escapeHtml(project.name)}</h2><p>Led by ${escapeHtml(owner.name)} · Due ${formatDate(project.deadline, { year: true })}</p></div><div><button class="project-header-chat" data-open-project-chat="${project.id}">◌ Project chat</button><span class="status-pill ${health}">${healthLabel(health)}</span><button class="icon-button" data-close-project-workspace aria-label="Close project">×</button></div></header><nav class="project-workspace-tabs" aria-label="Project sections">${PROJECT_WORKSPACE_TABS.map(([id,label]) => `<button class="${activeProjectTab === id ? "active" : ""}" data-project-tab="${id}">${label}</button>`).join("")}</nav><main class="project-workspace-body">${projectWorkspaceTab(project, context)}</main>`;
+  document.getElementById("project-dialog-content").innerHTML = `<header class="project-workspace-header"><div><p class="section-kicker">${escapeHtml(project.category)} · ${escapeHtml(project.client)}</p><h2>${escapeHtml(project.name)}</h2><p>Led by ${escapeHtml(owner.name)} · Due ${formatDate(project.deadline, { year: true })}</p></div><div><button data-staff-edit="projects" data-record-id="${project.id}">Edit details</button><button class="project-header-chat" data-open-project-chat="${project.id}">◌ Project chat</button><span class="status-pill ${health}">${healthLabel(health)}</span><button class="icon-button" data-close-project-workspace aria-label="Close project">×</button></div></header><nav class="project-workspace-tabs" aria-label="Project sections">${PROJECT_WORKSPACE_TABS.map(([id,label]) => `<button class="${activeProjectTab === id ? "active" : ""}" data-project-tab="${id}">${label}</button>`).join("")}</nav><main class="project-workspace-body">${projectWorkspaceTab(project, context)}</main>`;
+  window.CAGE_TEAMWORK?.applyAccess();
 }
 
 function openProject(projectId) {
@@ -3733,30 +3681,25 @@ function createMilestone(event) {
 }
 
 async function uploadProjectFile(input) {
-  const project = projectById(input.dataset.projectFileInput);
-  const file = input.files?.[0];
-  if (!project || !file) return;
-  ensureProjectWorkspace(project);
-  try {
-    if (!window.CAGE_BACKEND?.uploadFile) throw new Error("Secure file storage is not connected.");
-    showToast("Uploading project file…");
-    const uploaded = await window.CAGE_BACKEND.uploadFile(file, "project", project.id);
-    project.files.push({
-      id: `project-file-${Date.now()}`,
-      name: uploaded.name || file.name,
-      path: uploaded.path,
-      uploaded: TODAY,
-      by: window.CAGE_BACKEND.currentMemberId?.() || ""
-    });
-    saveState();
-    renderProjectWorkspace();
-    showToast("File added to the project.");
-  } catch (error) {
-    showToast(error.message || "The project file could not be uploaded.");
-  } finally {
-    input.value = "";
-  }
+  const projectId=input.dataset.projectFileInput,file=input.files?.[0];
+  if(!projectById(projectId)||!file||input.dataset.uploading)return;
+  input.dataset.uploading='true';input.disabled=true;
+  try{
+    showToast('Uploading project file…');
+    await window.CAGE_BACKEND.uploadFile(file,'project',projectId);
+    // Storage + attachment registry are authoritative. Never mutate a stale project object.
+    await window.CAGE_BACKEND.refreshProjectFiles(projectId,true);
+    if(activeProjectId===projectId)renderProjectWorkspace();
+    showToast(window.CAGE_BACKEND.projectFilesNotice(projectId)||'File saved to the project.');
+    input.value='';
+  }catch(error){showToast('Project upload failed: '+(error.message||'Please retry.')+' Your local file is unchanged.');}
+  finally{delete input.dataset.uploading;input.disabled=false;}
 }
+document.addEventListener('click',async event=>{
+ const button=event.target.closest('[data-refresh-project-files]');if(!button)return;
+ const id=button.dataset.refreshProjectFiles;await window.CAGE_BACKEND.refreshProjectFiles(id,true);
+ if(activeProjectId===id)renderProjectWorkspace();
+});
 
 function openTask(taskId) {
   openTaskDialog("", taskId);
@@ -3819,16 +3762,19 @@ function openTaskDialog(projectId = "", taskId = "") {
     form.elements.blocker.value = task.blocker || "";
     form.elements.evidence.value = task.evidence || "";
   } else {
-    form.elements.owner.value = state.settings.defaultOwner || "alexander";
+    form.elements.owner.value = window.CAGE_BACKEND?.currentMemberId?.() || state.settings.defaultOwner || "alexander";
     if (typeof projectId === "string" && projectId) form.elements.project.value = projectId;
   }
   document.getElementById("blocker-field").hidden = form.elements.status.value !== "Blocked";
   document.getElementById("blocker-field").querySelector("input").required = form.elements.status.value === "Blocked";
+  window.CAGE_TEAMWORK?.memberPicker("task-form",task);
   document.getElementById("task-form-error").textContent = "";
+  const syncTaskOwner=()=>{form.elements.owner.disabled=!form.elements.project.value;if(!form.elements.project.value)form.elements.owner.value=window.CAGE_BACKEND?.currentMemberId?.()||form.elements.owner.value;};
+  form.elements.project.onchange=syncTaskOwner;syncTaskOwner();
   document.getElementById("task-dialog").showModal();
 }
 
-function createTask(event) {
+async function createTask(event) {
   event.preventDefault();
   if (event.submitter?.value === "cancel") {
     document.getElementById("task-dialog").close();
@@ -3838,11 +3784,11 @@ function createTask(event) {
   const title = String(data.get("title") || "").trim();
   const output = String(data.get("output") || "").trim();
   const project = String(data.get("project") || "");
-  const owner = String(data.get("owner") || "");
+  const owner = String(data.get("owner") || event.currentTarget.elements.owner.value || "");
   const due = String(data.get("due") || "");
   const status = String(data.get("status") || "To Do");
   const blocker = String(data.get("blocker") || "").trim();
-  if (!title || !output || !project || !owner || !due) {
+  if (!title || !output || !owner || !due) {
     document.getElementById("task-form-error").textContent = "Complete every required field before creating the task.";
     return;
   }
@@ -3855,6 +3801,15 @@ function createTask(event) {
     document.getElementById("task-form-error").textContent = "Completion evidence is required before moving a card to Done.";
     return;
   }
+  const existingPersonal=state.tasks.find(item=>item.id===editingTaskId);
+  if(!project && window.CAGE_BACKEND?.isProduction() && (!existingPersonal || (!existingPersonal.project && existingPersonal.owner===window.CAGE_BACKEND.currentMemberId()))) {
+    const button=event.submitter;if(button)button.disabled=true;
+    try {
+      await window.CAGE_BACKEND.collaborationRpc('save_standalone_task',{details:{...window.CAGE_OPS?.taskFields(),id:editingTaskId||`t-${crypto.randomUUID()}`,title,output,due,status,priority:String(data.get('priority')||'Medium'),blocker,evidence,team:window.CAGE_TEAMWORK?.memberValues(data,existingPersonal)?.team||[]}});
+      document.getElementById('task-dialog').close();editingTaskId='';renderAll();setView('mywork');window.CAGE_PERSONAL?.refreshView();showToast('Task saved to My Work.');
+    } catch(error){document.getElementById('task-form-error').textContent=error.message||'Could not save task. Please retry.';}
+    finally{if(button)button.disabled=false;}return;
+  }
   const matchingList = state.boardLists.find(list => list.status === status);
   const existing = state.tasks.find(item => item.id === editingTaskId);
   if (existing) {
@@ -3864,7 +3819,7 @@ function createTask(event) {
   } else {
     state.tasks.push({ id: `t-${Date.now()}`, project, title, owner, due, priority: String(data.get("priority") || "Medium"), status, list: matchingList?.id, output, blocker: status === "Blocked" ? blocker : undefined, evidence, updated: TODAY });
   }
-  const savedTask=existing||state.tasks[state.tasks.length-1];Object.assign(savedTask,window.CAGE_OPS?.taskFields()||{});
+  const savedTask=existing||state.tasks[state.tasks.length-1];Object.assign(savedTask,window.CAGE_OPS?.taskFields()||{},window.CAGE_TEAMWORK?.memberValues(data,savedTask));
   saveState();
   document.getElementById("task-dialog").close();
   renderAll();
@@ -3889,11 +3844,12 @@ function openProjectDialog(dealId = "") {
     form.elements.category.value = /farm|agri/i.test(deal.name) ? "Agriculture" : /hire/i.test(deal.name) ? "Equipment Hire" : "Mapping & Data";
     form.elements.outcome.value = `Deliver the agreed ${deal.name.toLowerCase()} scope for ${deal.company}, with completion evidence and client acceptance.`;
   }
+  window.CAGE_TEAMWORK?.memberPicker("project-form",null);
   document.getElementById("project-form-error").textContent = "";
   document.getElementById("new-project-dialog").showModal();
 }
 
-function createProject(event) {
+async function createProject(event) {
   event.preventDefault();
   if (event.submitter?.value === "cancel") {
     document.getElementById("new-project-dialog").close();
@@ -3906,7 +3862,7 @@ function createProject(event) {
     name: String(data.get("name") || "").trim(),
     client: String(data.get("client") || "").trim(),
     owner: String(data.get("owner") || ""),
-    team: [String(data.get("owner") || "")],
+    team: [...new Set([String(data.get("owner")||""),window.CAGE_BACKEND.currentMemberId(),...data.getAll("collaborators")])],
     deadline: String(data.get("deadline") || ""),
     category: String(data.get("category") || ""),
     outcome: String(data.get("outcome") || "").trim()
@@ -3915,8 +3871,16 @@ function createProject(event) {
     document.getElementById("project-form-error").textContent = "Every project needs a client, lead, deadline and required outcome.";
     return;
   }
+  const form=event.currentTarget;
+  if(window.CAGE_BACKEND?.isProduction()){
+    const button=form.querySelector('button.primary-button');button.disabled=true;
+    try{await window.CAGE_BACKEND.collaborationRpc('collaboration_create_project',{details:project,source_deal:form.dataset.dealId||null});
+      form.dataset.dealId='';document.getElementById('new-project-dialog').close();renderAll();setView('projects');showToast('Project created.');
+    }catch(error){document.getElementById('project-form-error').textContent=error.message;}finally{button.disabled=false;}
+    return;
+  }
   state.projects.push(project);
-  const sourceDeal = dealById(event.currentTarget.dataset.dealId);
+  const sourceDeal = dealById(form.dataset.dealId);
   if (sourceDeal) {
     sourceDeal.project = project.id;
     sourceDeal.stage = "Won";
@@ -3936,6 +3900,7 @@ function openDealDialog(dealId = "") {
   const form = document.getElementById("deal-form");
   form.reset();
   editingDealId = dealId;
+  window.CAGE_CATEGORIES?.select("deal-form",dealById(dealId)?.category||"");
   const deal = dealById(dealId);
   document.getElementById("deal-dialog-kicker").textContent = deal ? "Opportunity details" : "Proactive sales lead";
   document.getElementById("deal-dialog-title").textContent = deal ? "Edit opportunity" : "New opportunity";
@@ -3950,6 +3915,7 @@ function openDealDialog(dealId = "") {
     form.elements.stage.value = "Prospect";
     form.elements.probability.value = "20";
   }
+  window.CAGE_TEAMWORK?.memberPicker("deal-form",deal);
   document.getElementById("deal-form-error").textContent = "";
   document.getElementById("deal-dialog").showModal();
 }
@@ -3972,12 +3938,14 @@ function createDeal(event) {
     probability: Number(data.get("probability") || 20),
     nextAction: String(data.get("nextAction") || ""),
     nextStep: String(data.get("nextStep") || "").trim(),
-    project: existing?.project || ""
+    project: existing?.project || "",
+    category: String(data.get("category") || "").trim()
   };
   if (!deal.name || !deal.company || !deal.owner || !deal.value || !deal.nextAction || !deal.nextStep) {
     document.getElementById("deal-form-error").textContent = "Complete the organisation, value, owner and next action.";
     return;
   }
+  Object.assign(deal,window.CAGE_TEAMWORK?.memberValues(data,existing||deal));
   if (deal.stage === "Won") deal.probability = 100;
   if (existing) {
     const index = state.deals.findIndex(item => item.id === existing.id);
@@ -4086,9 +4054,8 @@ function openInvoiceDialog(projectId = "") {
   document.getElementById("invoice-dialog").showModal();
 }
 
-function nextInvoiceNumber() {
-  const max = Math.max(26000, ...state.invoices.map(invoice => Number(String(invoice.number).replace(/\D/g, "")) || 0));
-  return `INV-${max + 1}`;
+async function nextInvoiceNumber(recordId) {
+  return window.CAGE_BACKEND.reserveRecordNumber('invoices', recordId);
 }
 
 async function createInvoice(event) {
@@ -4106,8 +4073,8 @@ async function createInvoice(event) {
   const data = new FormData(event.currentTarget);
   const invoice = {
     createdBy:window.CAGE_BACKEND.currentMemberId(),
-    id: submittingForm.dataset.pendingInvoiceId ||= `inv-${Date.now()}`,
-    number: submittingForm.dataset.pendingInvoiceNumber ||= nextInvoiceNumber(),
+    id: submittingForm.dataset.pendingInvoiceId ||= `inv-${crypto.randomUUID()}`,
+    number: submittingForm.dataset.pendingInvoiceNumber || "",
     client: String(data.get("client") || "").trim(),
     project: String(data.get("project") || ""),
     issued: String(data.get("issued") || ""),
@@ -4126,6 +4093,8 @@ async function createInvoice(event) {
     document.getElementById("invoice-form-error").textContent = "The due date cannot be before the issue date.";
     return;
   }
+  try { invoice.number = submittingForm.dataset.pendingInvoiceNumber ||= await nextInvoiceNumber(invoice.id); }
+  catch(error) { document.getElementById("invoice-form-error").textContent = error.message; return; }
   if (invoice.status === "Paid") invoice.paid = invoice.issued;
   if (data.get("sendNow") && invoice.status !== "Paid") {
     try {
@@ -4169,6 +4138,7 @@ function openQuoteDialog(dealId = "", projectId = "") {
   renderProjectOptions();
   const form = document.getElementById("quote-form");
   form.reset();
+  delete form.dataset.pendingQuoteId; delete form.dataset.pendingQuoteNumber;
   form.dataset.requestId = "";
   form.dataset.projectId = projectId;
   const validUntil = asDate(TODAY);
@@ -4187,9 +4157,8 @@ function openQuoteDialog(dealId = "", projectId = "") {
   document.getElementById("quote-dialog").showModal();
 }
 
-function nextQuoteNumber() {
-  const max = Math.max(26000, ...state.quotes.map(quote => Number(String(quote.number).replace(/\D/g, "")) || 0));
-  return `Q-${max + 1}`;
+async function nextQuoteNumber(recordId) {
+  return window.CAGE_BACKEND.reserveRecordNumber('quotes', recordId);
 }
 
 async function createQuote(event) {
@@ -4209,8 +4178,8 @@ async function createQuote(event) {
   const requestId = event.currentTarget.dataset.requestId || "";
   const quote = {
     createdBy:window.CAGE_BACKEND.currentMemberId(),
-    id: `q-${Date.now()}`,
-    number: nextQuoteNumber(),
+    id: submittingForm.dataset.pendingQuoteId ||= `q-${crypto.randomUUID()}`,
+    number: submittingForm.dataset.pendingQuoteNumber || "",
     project: event.currentTarget.dataset.projectId || dealById(String(data.get("deal")||""))?.project || "",
     client: String(data.get("client") || "").trim(),
     deal: String(data.get("deal") || ""),
@@ -4223,7 +4192,6 @@ async function createQuote(event) {
     request: requestId
   };
   try { Object.assign(quote,window.CAGE_DOCUMENTS.fields(event.currentTarget)); } catch(error) { document.getElementById("quote-form-error").textContent=error.message; return; }
-  if(quote.status === "Approved" && !currentUserCanApprove()) { document.getElementById("quote-form-error").textContent="A manager or administrator must approve quotations. Save this as a draft."; return; }
   if (!quote.client || !quote.issued || !quote.validUntil || !quote.amount || !quote.recipient || !quote.description) {
     document.getElementById("quote-form-error").textContent = "Complete the client, recipient, dates, amount and scope summary.";
     return;
@@ -4232,11 +4200,9 @@ async function createQuote(event) {
     document.getElementById("quote-form-error").textContent = "The validity date cannot be before the issue date.";
     return;
   }
-  if (data.get("sendNow") && !requestId) {
-    if (quote.status !== "Approved") {
-      document.getElementById("quote-form-error").textContent = "Set the standalone quote to Approved before sending it.";
-      return;
-    }
+  try { quote.number = submittingForm.dataset.pendingQuoteNumber ||= await nextQuoteNumber(quote.id); }
+  catch(error) { document.getElementById("quote-form-error").textContent = error.message; return; }
+  if (data.get("sendNow")) {
     try {
       await window.CAGE_BACKEND.sendDocument({
         type: "quote", record: quote, recipient: quote.recipient,
@@ -4251,49 +4217,16 @@ async function createQuote(event) {
     quote.sentAt = new Date().toISOString();
     quote.automaticFollowUp = true;
   }
-  if (requestId && (!currentUserCanSelfApprove() || (!requestById(requestId) || !requestPreReviewComplete(requestById(requestId))))) quote.status = "Draft";
   const savedQuote=state.quotes.find(q=>q.id===quote.id);if(savedQuote)Object.assign(savedQuote,quote);else state.quotes.push(quote);
-  if(quote.status==='Approved'&&requestId&&currentUserCanSelfApprove()){
-    const request=requestById(requestId);request.quote=quote.id;
-    const approval={id:'ap-'+crypto.randomUUID(),type:'Quote',title:'Approve '+quote.number,requester:window.CAGE_BACKEND.currentMemberId(),submitted:TODAY,decided:TODAY,decidedBy:window.CAGE_BACKEND.currentMemberId(),due:dateAfter(1),amount:quote.amount,status:'Approved',summary:quote.description,decisionNote:'Approved by the authorised administrator.',linkedType:'request',linkedId:requestId};
-    state.approvals.push(approval);applyApprovalOutcome(approval);
-  }
-  if (quote.status === "Draft") {
-    const linkedRequest = requestById(requestId);
-    if (linkedRequest) {
-      linkedRequest.quote = quote.id;
-      if (requestPreReviewComplete(linkedRequest)) {
-        linkedRequest.stage = "Internal review";
-        linkedRequest.nextAction = `Await approval of ${quote.number} before sending it to ${linkedRequest.organisation}.`;
-      } else {
-        linkedRequest.stage = "Scoping";
-        linkedRequest.nextAction = `Complete the remaining scope controls, then submit ${quote.number} for approval.`;
-      }
-      syncRequestLinks(linkedRequest);
-    }
-    if (!linkedRequest || requestPreReviewComplete(linkedRequest)) {
-      state.approvals.push({
-        id: `ap-${Date.now() + 1}`,
-        type: "Quote",
-        title: `Approve ${quote.number} for ${quote.client}`,
-        requester:window.CAGE_BACKEND.currentMemberId(),
-        submitted: TODAY,
-        due: dateAfter(1),
-        amount: quote.amount,
-        status: "Pending",
-        summary: quote.description,
-        linkedType: linkedRequest ? "request" : "quote",
-        linkedId: linkedRequest ? linkedRequest.id : quote.id
-      });
-    }
-  }
+  const request=requestById(requestId);
+  if(request){request.quote=quote.id;syncRequestLinks(request);}
   saveState();
   document.getElementById("quote-dialog").close();
   renderAll();
   setView("finance");
   quoteForm.dataset.requestId = "";
   const linkedRequest = requestById(requestId);
-  showToast(quote.sentAt ? `${quote.number} created and sent to ${quote.recipient}.` : quote.status === "Approved" ? `${quote.number} approved and ready to send.` : requestId && linkedRequest && requestPreReviewComplete(linkedRequest) ? `${quote.number} created and sent for internal approval.` : requestId ? `${quote.number} saved as a draft; complete the request controls before approval.` : `${quote.number} created.`);
+  showToast(quote.sentAt ? `${quote.number} sent to ${quote.recipient}.` : `${quote.number} saved as a draft. You can send it without manager approval.`);
   } finally {
     delete submittingForm.dataset.submitting;
     if(actionButton) actionButton.disabled=false;
@@ -4310,12 +4243,17 @@ function openSendDocument(type, id) {
   form.elements.documentType.value = type;
   form.elements.documentId.value = id;
   form.elements.recipient.value = documentRecord.recipient || "";
+  window.CAGE_DELIVERY.open(type,documentRecord,form);
   form.elements.subject.value = `${type === "quote" ? "Quotation" : "Invoice"} ${documentRecord.number} from CAGE`;
   form.elements.message.value = type === "quote" ? `Hello,\n\nPlease find CAGE quotation ${documentRecord.number} for ${documentRecord.description}.\n\nKind regards,\nCAGE` : `Hello,\n\nPlease find CAGE invoice ${documentRecord.number} for ${documentRecord.description}.\n\nKind regards,\nCAGE`;
   form.elements.automaticFollowUp.checked = documentRecord.automaticFollowUp !== false;
   document.getElementById("send-dialog-title").textContent = `Send ${documentRecord.number}`;
   document.getElementById("send-document-preview").innerHTML = `<strong>${escapeHtml(documentRecord.number)} · ${formatMoney(documentRecord.amount)}</strong><span>${escapeHtml(documentRecord.client)} · ${escapeHtml(documentRecord.description)}</span>`;
   document.getElementById("send-form-error").textContent = "";
+  const canSendInvoice=['invoice','quote'].includes(type)&&window.CAGE_BACKEND?.canSendInvoice?.();
+  const sendButton=form.querySelector('button.primary-button');
+  if(sendButton)sendButton.disabled=!(canSendInvoice||window.CAGE_BACKEND?.moduleLevel('finance')==='edit');
+  form.elements.automaticFollowUp.disabled=true;
   document.getElementById("send-dialog").showModal();
 }
 
@@ -4337,23 +4275,6 @@ async function sendDocument(event) {
     document.getElementById("send-form-error").textContent = "Add a recipient and subject before sending.";
     return;
   }
-  if (type === "quote" && documentRecord.status === "Draft") {
-    document.getElementById("send-form-error").textContent = "This quote must be approved before it can be sent.";
-    return;
-  }
-  if (type === "quote" && documentRecord.request) {
-    const request = requestById(documentRecord.request);
-    if (request && !requestHasApprovedReview(request)) {
-      document.getElementById("send-form-error").textContent = "This quote must be approved in the decision inbox before it can be sent.";
-      return;
-    }
-    if (request) {
-      request.checklist ||= {};
-      request.checklist.submission = true;
-      request.stage = "Submitted";
-      request.nextAction = "Confirm receipt and record the client decision or negotiation.";
-    }
-  }
   const submitButton = event.submitter;
   if (submitButton) submitButton.disabled = true;
   try {
@@ -4366,10 +4287,14 @@ async function sendDocument(event) {
     return;
   }
   if (submitButton) submitButton.disabled = false;
+  if(['invoice','quote'].includes(type)&&window.CAGE_BACKEND?.isProduction()){
+    document.getElementById('send-dialog').close();sendingDocument=null;renderAll();
+    showToast(`${documentRecord.number}: email provider accepted the document for delivery.`);return;
+  }
   documentRecord.recipient = recipient;
   documentRecord.sentAt = new Date().toISOString();
-  documentRecord.automaticFollowUp = Boolean(data.get("automaticFollowUp"));
-  if (type === "quote") documentRecord.status = "Sent";
+  documentRecord.automaticFollowUp = type === "quote" && documentRecord.clientResponse ? false : Boolean(data.get("automaticFollowUp"));
+  if (type === "quote" && documentRecord.status !== "Accepted") documentRecord.status = "Sent";
   if (type === "invoice" && documentRecord.status !== "Paid") documentRecord.status = "Sent";
   saveState();
   document.getElementById("send-dialog").close();
@@ -4873,7 +4798,7 @@ document.addEventListener("click", event => {
   if (addProjectMemberButton) {
     const project = projectById(addProjectMemberButton.dataset.addProjectMember);
     const memberId = document.getElementById("project-member-select")?.value;
-    if (project && memberId && !project.team.includes(memberId)) {
+    if (project && memberId && window.CAGE_TEAMWORK?.manages("projects",project) && !project.team.includes(memberId)) {
       project.team.push(memberId);
       saveState();
       renderAll();
@@ -4886,7 +4811,7 @@ document.addEventListener("click", event => {
   if (removeProjectMemberButton) {
     const project = projectById(removeProjectMemberButton.dataset.removeProjectMember);
     const memberId = removeProjectMemberButton.dataset.memberId;
-    if (project && memberId && memberId !== project.owner) {
+    if (project && memberId && window.CAGE_TEAMWORK?.manages("projects",project) && memberId !== project.owner) {
       project.team = project.team.filter(id => id !== memberId);
       saveState();
       renderAll();
@@ -5146,13 +5071,13 @@ document.addEventListener("submit", event => {
   if (quickDealForm) {
     event.preventDefault();
     const data = new FormData(quickDealForm);
-    addQuickDeal(quickDealForm.dataset.quickDealForm, data.get("name"), data.get("company"));
+    addQuickDeal(quickDealForm.dataset.quickDealForm, data.get("name"), data.get("company"),data.getAll("collaborators"));
     return;
   }
   const quickCardForm = event.target.closest("[data-quick-card-form]");
   if (quickCardForm) {
     event.preventDefault();
-    addQuickCard(quickCardForm.dataset.quickCardForm, new FormData(quickCardForm).get("title"));
+    addQuickCard(quickCardForm.dataset.quickCardForm, new FormData(quickCardForm).get("title"),new FormData(quickCardForm).getAll("collaborators"));
     return;
   }
   if (event.target.id === "quick-list-form") {
@@ -5324,8 +5249,8 @@ document.getElementById("chat-file-input").addEventListener("change", async even
     const draft=document.getElementById("chat-input").value;
     const uploaded = await window.CAGE_BACKEND.uploadFile(file, "chat", originalThread);
     if(activeChatThread!==originalThread) selectChatThread(originalThread);
-    sendChatMessage(draft, file.name, uploaded.path);
-    showToast("File attached to the official work record.");
+    const queued=sendChatMessage(draft, file.name, uploaded.path);
+    if(queued)showToast("Attachment uploaded. Check the message status for server confirmation.");
   } catch (error) {
     showToast(error.message || "The file could not be uploaded.");
   } finally {

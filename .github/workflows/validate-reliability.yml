@@ -28,3 +28,7 @@ jobs:
           node validation/sign-in-access.mjs
           node validation/audit-reliability.mjs
           node validation/background-job-access.mjs
+          node validation/enterprise.mjs
+
+      - name: Audit locked dependency tree
+        run: npm audit --audit-level=moderate

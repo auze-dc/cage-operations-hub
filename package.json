@@ -9,15 +9,15 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "check": "node scripts/check.mjs",
-    "dev": "npx serve dist -l 4173",
-    "export": "node scripts/export.mjs"
+    "dev": "node scripts/dev-server.mjs",
+    "export": "node scripts/export.mjs",
+    "check:enterprise": "node validation/enterprise.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.57.4"
+    "@supabase/supabase-js": "2.115.0"
   },
   "devDependencies": {
-    "archiver": "^7.0.1",
-    "esbuild": "^0.25.9",
-    "serve": "^14.2.4"
+    "archiver": "7.0.1",
+    "esbuild": "0.25.12"
   }
 }

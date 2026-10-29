@@ -16,16 +16,17 @@
   let app = null;
   let profile = null;
   let workspaceVersion = 0;
+  let collaborationAccess = {};
   let saveTimer = null;
   let pendingState = null;
-  let cloudBase = {}, syncConflicts = [], savingNow=false;
+  let cloudBase = {}, syncConflicts = [], savingNow=false, remoteSnapshot=null;
   const draftKey=()=>"cage-unsynced-"+profile?.id;
   let saveChain = Promise.resolve();
   let realtimeChannel = null;
   let applyingRemote = false;
   let lastAccessRefresh = 0;
   let moduleAccess = {};
-  let workspacePoll = null;
+  let workspacePoll = null, workspacePollRunning=false;
   let greetingLanguage = "English";
 
   const GREETINGS = {
@@ -48,19 +49,24 @@
 
   function showBanner(message, tone = "") {
     if (tone !== "error" && /^(All changes saved|Saving changes|Workspace updated|Connected to)/.test(message)) return;
+    delete banner.dataset.connection;
     banner.textContent = message;
     banner.className = `sync-banner visible ${tone}`.trim();
   }
 
   function hideBanner(delay = 1200) {
-    window.setTimeout(() => { banner.className = "sync-banner"; }, delay);
+    const message=banner.textContent;
+    window.setTimeout(() => { if(banner.textContent===message)banner.className = "sync-banner"; }, delay);
   }
 
   function showLogin(message = "") {
+    window.dispatchEvent(new CustomEvent("cage:access-closed"));
     document.body.classList.remove("session-checking");
     document.body.classList.add("auth-pending");
     gate.hidden = false;
     loginForm.hidden = false;
+    loginForm.removeAttribute("aria-busy");
+    loginForm.querySelector('[type=submit]').disabled=false;
     passwordSetupForm.hidden = true;
     forgotPasswordButton.hidden = false;
     document.getElementById("auth-title").textContent = "Sign in to Operations Hub";
@@ -134,7 +140,8 @@
     if (settingsNav) settingsNav.hidden = !isAdmin;
     document.querySelectorAll(".hr-privileged").forEach(element => { element.hidden = !["admin", "manager", "hr"].includes(profile?.role); });
     window.CAGE_PERSONAL?.applyAccess();
-    if (isViewer) document.querySelectorAll("button.primary-button, .mobile-add-button").forEach(button => { if (!button.closest(".auth-card")) button.disabled = true; });
+    if (isViewer) document.querySelectorAll("button.primary-button, .mobile-add-button").forEach(button => { if (!button.closest(".auth-card, [data-view-panel=training], .academy-dialog, [data-view-panel=compliance], #compliance-dialog, .company-dialog, [data-view-panel=payroll], .payroll-dialog") && !((button.matches('[data-send-document=invoice],[data-send-document=quote]')||(button.closest('#send-form')&&['invoice','quote'].includes(document.getElementById('send-form').elements.documentType.value)))&&profile?.active&&profile.role!=='shared'&&moduleLevel('finance')!=='none') ) button.disabled = true; });
+    window.CAGE_TEAMWORK?.applyAccess();
   }
 
   async function loadProfile(userId) {
@@ -149,63 +156,86 @@
   }
 
   async function loadWorkspace() {
-    const { data, error } = await client.rpc("get_my_workspace");
-    if (error) throw error;
-    if (!data) {
-      if (profile.role !== "admin") throw new Error("The workspace has not been initialized. Ask an administrator to sign in first.");
-      const initial = { organization_id: config.organizationId, data: app.seedData, version: 1, updated_by: profile.id };
-      const result = await client.from("workspace_states").insert(initial).select("data, version").single();
-      if (result.error) throw result.error;
-      workspaceVersion = result.data.version;
-      cloudBase=structuredClone(result.data.data);
-      app.replaceState(result.data.data);
-      return;
-    }
-    workspaceVersion = data.version || 0;
-    cloudBase=structuredClone(data.data);
-    app.replaceState(data.data);
+    const uid=profile?.id,generation=sessionGeneration;
+    const {data,error}=await client.rpc('get_my_workspace').abortSignal(AbortSignal.timeout(15000));
+    if(uid!==profile?.id||generation!==sessionGeneration)return;
+    if(error)throw error;
+    if(!data?.data)throw new Error('Workspace data is unavailable. Ask an administrator to review it.');
+    receiveWorkspace(data);
   }
 
+  // A slow connection must never start overlapping background workspace reads.
+  // Back off after failures, but keep saved drafts and explicit save retries intact.
   function subscribe() {
     if (workspacePoll) clearInterval(workspacePoll);
+    let failures=0, nextPoll=0, nextAccess=0;
     workspacePoll = setInterval(async () => {
-      if (!profile || document.hidden || pendingState) return;
+      if (!profile || document.hidden || savingNow || sessionLoad || workspacePollRunning || navigator.onLine===false || Date.now()<nextPoll) return;
+      workspacePollRunning=true;
+      const pollUser=profile.id,pollGeneration=sessionGeneration;
       try {
-        await loadModuleAccess();
-        const result = await client.rpc("get_my_workspace");
+        if(Date.now()>=nextAccess){await loadModuleAccess();nextAccess=Date.now()+60000;}
+        const result = await client.rpc("get_my_workspace").abortSignal(AbortSignal.timeout(15000));
+        if(pollUser!==profile?.id||pollGeneration!==sessionGeneration||savingNow)return;
         if (result.error) throw result.error;
-        if (result.data && result.data.version !== workspaceVersion) {
-          workspaceVersion = result.data.version;
-          applyingRemote = true;
-          cloudBase=structuredClone(result.data.data);
-          app.replaceState(result.data.data);
-          applyingRemote = false;
-        }
+        if(!result.data?.data)throw new Error('Workspace data is unavailable. Ask an administrator to review it.');
+        if(result.data.version!==workspaceVersion || !window.CAGE_SYNC.equal(result.data.data,remoteSnapshot))receiveWorkspace(result.data);
+        failures=0;
+        if(banner.dataset.connection==='interrupted'){delete banner.dataset.connection;banner.className='sync-banner';}
+        if(pendingState&&!savingNow)flushSave();
         applyPermissions();
-      } catch (error) { applyingRemote = false; showBanner(error.message || "Connection interrupted", "error"); }
-    }, 8000);
+      } catch (error) {
+        if(pollUser!==profile?.id||pollGeneration!==sessionGeneration)return;
+        failures++;
+        if(!pendingState&&!syncConflicts.length){showBanner('Cloud connection interrupted. Your workspace remains open. Retrying…', 'error');banner.dataset.connection='interrupted';}
+      } finally {workspacePollRunning=false;nextPoll=Date.now()+Math.min(60000,8000*2**Math.min(failures,3));}
+    }, 1000);
   }
 
   // Chat messages are append-only. Read state is stored in personal_notifications,
   // so legacy changes to an existing message (such as unread=false) must never be
   // sent back through the workspace save function.
+  function preservedSettings(){return JSON.parse(localStorage.getItem(draftKey()+":protected-settings")||"[]");}
+  // CAGE reset compatibility 2026-09-23
+  function resetEpoch(state) { return typeof state?._resetEpoch === 'string' ? state._resetEpoch : null; }
+  function quarantineResetDraft(saved) {
+    const recoveryKey=draftKey()+":before-reset:"+Date.now();
+    // Write the recovery copy successfully before removing the active draft.
+    localStorage.setItem(recoveryKey,JSON.stringify({savedAt:new Date().toISOString(),draft:saved}));
+    localStorage.removeItem(draftKey());
+    pendingState=null;syncConflicts=[];
+    window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:false}}));
+  }
   function writableChanges(base, next) {
-    return window.CAGE_SYNC.changes(base, next).filter(change =>
-      change.key !== "messages" || (change.before === null && change.after !== null)
+    const changes=window.CAGE_SYNC.changes(base,next).filter(c=>c.key!=="_resetEpoch");
+    const excluded=profile?.role==='admin'?[]:changes.filter(c=>c.id===null);
+    if(excluded.length){
+      const saved=preservedSettings();
+      for(const change of excluded)if(!saved.some(item=>window.CAGE_SYNC.equal(item.change,change)))saved.push({savedAt:new Date().toISOString(),change});
+      // Save the recovery copy BEFORE excluding anything from the active draft.
+      localStorage.setItem(draftKey()+":protected-settings",JSON.stringify(saved));
+    }
+    return changes.filter(change =>
+      (profile?.role==='admin'||change.id!==null)&&
+      (change.key !== "messages" || (change.before === null && change.after !== null))
     );
+  }
+  function downloadPreservedSettings(){
+    const blob=new Blob([JSON.stringify({memberId:profile?.id,settings:preservedSettings()},null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='cage-local-settings-draft.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
 
   function transientSyncError(error) {
     const message=String(error?.message||error||'').toLowerCase();
     return !navigator.onLine || /fetch|network|timeout|timed out|jwt|token|connection|502|503|504/.test(message);
   }
-  async function syncRpcWithRetry(patches) {
+  async function syncRpcWithRetry(patches, expectedEpoch) {
     let lastError;
     for (let attempt=0; attempt<3; attempt++) {
       try {
         if (!navigator.onLine) throw new Error('You are offline');
         if (attempt) { try { await client.auth.refreshSession(); } catch {} await new Promise(r=>setTimeout(r,350*attempt)); }
-        const result=await client.rpc("save_workspace_changes",{changes:patches});
+        const result=await client.rpc("save_workspace_changes_isolated",{changes:patches,expected_epoch:expectedEpoch}).abortSignal(AbortSignal.timeout(20000));
         if(result.error)throw result.error;
         return result.data;
       } catch(error) {
@@ -216,23 +246,116 @@
     throw lastError;
   }
 
-  async function flushSave() {
-    if(!pendingState||!profile||applyingRemote||savingNow||syncConflicts.length)return;
-    const snapshot=structuredClone(pendingState),base=structuredClone(cloudBase),patches=writableChanges(base,snapshot);
-    if(!patches.length){pendingState=null;localStorage.removeItem(draftKey());hideBanner(0);app.replaceState(cloudBase);window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:false}}));return;}
-    savingNow=true;showBanner("Saving changes…");
-    try {
-      const data=await syncRpcWithRetry(patches);
-      if(data?.conflicts?.length){syncConflicts=data.conflicts;window.dispatchEvent(new CustomEvent("cage:conflicts",{detail:{conflicts:syncConflicts,patches}}));showBanner("Your draft is safe. Review the conflicting changes.","error");return;}
-      await loadWorkspace();
-      const newer=writableChanges(snapshot,pendingState||snapshot);
-      pendingState=null;
-      if(newer.length){pendingState=window.CAGE_SYNC.apply(cloudBase,newer);app.replaceState(pendingState);localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));}
-      else localStorage.removeItem(draftKey());
-      hideBanner(0);window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:!!pendingState}}));
-    } catch(error){showBanner("Not synced: "+error.message+". Your draft is kept on this device.","error");window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:true,error:error.message}}));}
-    finally {savingNow=false;if(pendingState&&!syncConflicts.length)setTimeout(()=>{if(navigator.onLine)flushSave();},6000);}
+  // Rejected edits are preserved separately and never suppress normal refresh.
+  function blockedDrafts(){
+    const saved=JSON.parse(localStorage.getItem(draftKey()+':blocked')||'[]');
+    if(!Array.isArray(saved))throw new Error('Draft recovery storage needs review. Do not clear browser data.');
+    return saved;
   }
+  function recordSaveStatus(key,id){
+    const blocked=blockedDrafts().find(x=>x.change.key===key&&x.change.id===id);
+    if(blocked)return {state:'blocked',reason:blocked.reason};
+    if(pendingState&&writableChanges(cloudBase,pendingState).some(x=>x.key===key&&x.id===id))return {state:'pending'};
+    return {state:cloudBase[key]?.some?.(r=>r.id===id)?'saved':'unknown'};
+  }
+  function recordLabel(change){
+    const r=change.after||change.before||{};
+    const module={quotes:'Quote',invoices:'Invoice',contacts:'Contact',messages:'Message',requests:'Request',projects:'Project',tasks:'Task',approvals:'Approval'}[change.key]||change.key;
+    return `${module}: ${r.number||r.title||r.name||(change.key==='messages'?String(r.text||'').slice(0,100):'')||change.id||'settings'}`;
+  }
+  function syncNotice(){
+    const blocked=blockedDrafts();
+    if(blocked.length)showBanner(`${recordLabel(blocked[0].change)} could not be saved. ${blocked.length} draft(s) need attention. Open “Drafts needing attention” for the reason; other work continues.`,'error');
+    else if(!pendingState)hideBanner(0);
+    window.dispatchEvent(new CustomEvent('cage:sync',{detail:{pending:!!pendingState,blocked:blocked.length}}));
+  }
+  function persistActive(base,next){
+    // Persist before changing the in-memory or rendered state.
+    if(next)localStorage.setItem(draftKey(),JSON.stringify({base,next}));
+    else localStorage.removeItem(draftKey());
+  }
+  function showWorkspace(data,patches){
+    const nextBase=window.CAGE_SYNC.apply(data.data,patches.map(c=>({...c,after:c.before})));
+    const next=patches.length?window.CAGE_SYNC.apply(data.data,patches):null;
+    if(pendingState||patches.length)persistActive(nextBase,next);cloudBase=nextBase;pendingState=next;workspaceVersion=data.version||0;remoteSnapshot=structuredClone(data.data);
+    applyingRemote=true;try{app.replaceState(next||data.data);}finally{applyingRemote=false;}
+  }
+  function receiveWorkspace(data){
+    window.CAGE_FINANCE_NUMBER_FLOOR=data.financeNumberFloor||{};
+    collaborationAccess=data.collaboration||{};
+    if(!data?.data)throw new Error('Workspace data is unavailable.');
+    if(pendingState&&resetEpoch(cloudBase)!==resetEpoch(data.data))quarantineResetDraft({base:cloudBase,next:pendingState});
+    const patches=pendingState?writableChanges(cloudBase,pendingState):[];
+    showWorkspace(data,patches);
+    applyPermissions();
+  }
+  async function retryBlockedDraft(id){
+    const item=blockedDrafts().find(x=>x.id===id);if(!item)throw new Error('This recovery draft is no longer listed.');
+    if(savingNow)throw new Error('A save is in progress. Try again shortly.');
+    if(item.epoch!==resetEpoch(cloudBase))throw new Error('This draft belongs to an earlier workspace. Download it for review; it cannot be replayed.');
+    const active=pendingState?writableChanges(cloudBase,pendingState):[];
+    if(active.some(c=>c.key===item.change.key&&c.id===item.change.id))throw new Error('This record already has an active edit. Save or review it first.');
+    // Retain the original before-value: permission recovery must not overwrite
+    // a colleague's intervening changes. Keep the recovery copy until success.
+    const base=window.CAGE_SYNC.apply(cloudBase,[{...item.change,after:item.change.before}]);
+    const next=window.CAGE_SYNC.apply(pendingState||cloudBase,[item.change]);
+    persistActive(base,next);cloudBase=base;pendingState=next;app.replaceState(next);
+    await flushSave();
+  }
+  function downloadBlockedDrafts(){
+    const blob=new Blob([JSON.stringify({savedAt:new Date().toISOString(),drafts:blockedDrafts()},null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='cage-drafts-needing-attention.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+  async function flushSave(){
+    if(!pendingState||!profile||applyingRemote||savingNow)return;
+    const snapshot=structuredClone(pendingState),base=structuredClone(cloudBase),patches=writableChanges(base,snapshot);
+    if(!patches.length){persistActive(cloudBase,null);pendingState=null;app.replaceState(cloudBase);syncNotice();return;}
+    const user=profile.id,generation=sessionGeneration,key=draftKey();
+    savingNow=true;showBanner('Saving changes…');
+    try{
+      const data=await syncRpcWithRetry(patches,resetEpoch(base));
+      if(user!==profile?.id||generation!==sessionGeneration)return;
+      if(!Array.isArray(data?.results)||data.results.length!==patches.length||patches.some(c=>data.results.filter(r=>r.key===c.key&&r.id===c.id&&['saved','blocked','conflict'].includes(r.status)).length!==1))throw new Error('Unexpected sync response. Your drafts remain on this device.');
+      const latest=structuredClone(pendingState||snapshot),newer=writableChanges(snapshot,latest);
+      let recovery=blockedDrafts();const rejected=[];
+      for(const c of patches){
+        const outcome=data.results.find(r=>r.key===c.key&&r.id===c.id);
+        if(outcome.status==='saved'){
+          recovery=recovery.filter(x=>!(x.change.key===c.key&&x.change.id===c.id&&window.CAGE_SYNC.equal(x.change.after,c.after)));
+        }else{
+          const change={...c,after:newer.find(x=>x.key===c.key&&x.id===c.id)?.after??c.after};
+          // Preserve deletions too (null is a real after-value).
+          const edit=newer.find(x=>x.key===c.key&&x.id===c.id);if(edit)change.after=edit.after;
+          const old=recovery.find(x=>window.CAGE_SYNC.equal(x.change,change)&&x.epoch===resetEpoch(base));
+          const item={id:old?.id||crypto.randomUUID(),savedAt:old?.savedAt||new Date().toISOString(),epoch:resetEpoch(base),change,reason:outcome.reason||'This record could not be saved.',kind:outcome.status,code:outcome.code};
+          recovery=recovery.filter(x=>x.id!==item.id);recovery.push(item);rejected.push(change);
+        }
+      }
+      // Recovery write MUST succeed before taking rejected items out of the queue.
+      localStorage.setItem(key+':blocked',JSON.stringify(recovery));
+      const remaining=newer.filter(c=>!rejected.some(x=>x.key===c.key&&x.id===c.id));
+      // Build a confirmed base even if the following refresh fails. Successful
+      // edits are no longer dirty; newer edits keep their original before-values.
+      const savedPatches=patches.filter(c=>data.results.some(r=>r.key===c.key&&r.id===c.id&&r.status==='saved'));
+      const confirmed=window.CAGE_SYNC.apply(base,savedPatches);
+      const next=remaining.length?window.CAGE_SYNC.apply(confirmed,remaining):null;
+      persistActive(confirmed,next);cloudBase=confirmed;pendingState=next;syncConflicts=[];
+      applyingRemote=true;try{app.replaceState(next||confirmed);}finally{applyingRemote=false;}
+      await loadWorkspace();
+      if(user!==profile?.id||generation!==sessionGeneration)return;
+      syncNotice();
+    }catch(error){
+      if(user!==profile?.id||generation!==sessionGeneration)return;
+      if(/Workspace was reset/i.test(error.message||'')){
+        quarantineResetDraft({base,next:pendingState||snapshot});await loadWorkspace();
+      }else showBanner('Not synced: '+error.message+'. Your draft is kept on this device.','error');
+      window.dispatchEvent(new CustomEvent('cage:sync',{detail:{pending:!!pendingState,error:error.message}}));
+    }finally{
+      savingNow=false;
+      if(user===profile?.id&&generation===sessionGeneration&&pendingState)setTimeout(()=>{if(user===profile?.id&&generation===sessionGeneration&&navigator.onLine)flushSave();},6000);
+    }
+  }
+
   async function resolveSync(choices) {
     for(const c of syncConflicts){const choice=choices.find(x=>x.key===c.key&&x.id===c.id)?.choice;if(!choice)throw new Error("Choose which version to keep for every conflict");cloudBase=window.CAGE_SYNC.apply(cloudBase,[{...c,after:c.current}]);if(choice==='theirs')pendingState=window.CAGE_SYNC.apply(pendingState,[{...c,after:c.current}]);}
     syncConflicts=[];localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));app.replaceState(pendingState);await flushSave();
@@ -242,6 +365,11 @@
   async function discardDraftRecord(key,id) {pendingState=window.CAGE_SYNC.apply(pendingState,[{key,id,after:id===null?cloudBase[key]:cloudBase[key]?.find(r=>r.id===id)||null}]);syncConflicts=syncConflicts.filter(c=>c.key!==key||c.id!==id);localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));app.replaceState(pendingState);await flushSave();}
   async function restoreDraft() {
     const saved=JSON.parse(localStorage.getItem(draftKey())||"null");if(!saved)return;
+    if(resetEpoch(saved.base)!==resetEpoch(cloudBase)) {
+      quarantineResetDraft(saved);app.replaceState(cloudBase);
+      showBanner("A draft from before the reset was kept separately. The fresh workspace is ready.","error");
+      return;
+    }
     const patches=writableChanges(saved.base,saved.next);
     if(!patches.length){localStorage.removeItem(draftKey());pendingState=null;app.replaceState(cloudBase);window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:false}}));return;}
     pendingState=window.CAGE_SYNC.apply(cloudBase,patches);cloudBase=window.CAGE_SYNC.apply(cloudBase,patches.map(c=>({...c,after:c.before})));app.replaceState(pendingState);await flushSave();
@@ -249,9 +377,11 @@
   window.addEventListener("online",()=>flushSave());
 
   function scheduleSave(nextState) {
-    if (!configured() || !profile || applyingRemote) return;
-    pendingState = JSON.parse(JSON.stringify(nextState));
-    localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next:pendingState}));
+    if (!configured() || !profile || applyingRemote) return false;
+    const next = JSON.parse(JSON.stringify(nextState));
+    // Storage must succeed before accepting the edit into the in-memory queue.
+    localStorage.setItem(draftKey(),JSON.stringify({base:cloudBase,next}));
+    pendingState = next;
     window.dispatchEvent(new CustomEvent("cage:sync",{detail:{pending:true}}));
     window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => {
@@ -259,97 +389,133 @@
         showBanner(error.message || "Cloud sync failed", "error");
       });
     }, 650);
+    return true;
   }
 
-  async function establishSession(session) {
-    if (!session?.user) {
-      showLogin();
+  // Login reliability 2026-09-24. Auth callbacks only schedule work outside the auth lock.
+  let sessionLoad=null,sessionLoadUser=null,sessionGeneration=0,sessionReady=false,lastLoadedUser=null,accessRefreshRunning=false,authEventVersion=0,lastAuthSession=null;
+  const retryLogin=document.createElement('button');retryLogin.type='button';retryLogin.className='secondary-button';retryLogin.textContent='Retry opening workspace';retryLogin.hidden=true;loginError.after(retryLogin);
+  function limited(promise,label,ms=20000){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(label+' timed out. Check your connection and retry.')),ms);})]).finally(()=>clearTimeout(timer));}
+  function loginFailure(error){sessionReady=false;profile=null;clearInterval(workspacePoll);workspacePoll=null;showLogin(error?.message||'The workspace could not load. Retry without resetting your password.');retryLogin.hidden=false;banner.className='sync-banner';}
+  let accessRetryTimer=null;
+  function sessionCheckFailure(error,refresh,uid,generation){
+    const transient=![401,403].includes(Number(error?.status))&&error?.code!=='PGRST116'&&(/fetch|network|timeout|timed out|connection|502|503|504/i.test(error?.message||'')||[500,502,503,504].includes(Number(error?.status)));
+    if(refresh&&transient&&sessionReady&&profile?.id===uid){
+      showBanner('Connection interrupted while checking your access. Your workspace stays open; changes may wait for sync. Retrying…','error');
+      clearTimeout(accessRetryTimer);
+      accessRetryTimer=setTimeout(()=>{if(generation===sessionGeneration&&profile?.id===uid){lastAccessRefresh=0;refreshAccess();}},15000);
       return;
     }
-    showBanner("Opening the secure CAGE workspace…");
-    try {
-      profile = await loadProfile(session.user.id);
-      await loadModuleAccess();
-      await loadWorkspace();
-      chooseGreetingLanguage();
-      setCurrentUser();
-      applyPermissions();
-      subscribe();
-      hideLogin();
-      hideBanner();
-      window.dispatchEvent(new CustomEvent("cage:session-ready", { detail: { profile } }));
-    } catch (error) {
-      await client.auth.signOut();
-      showLogin(error.message || "Access could not be verified.");
-      banner.className = "sync-banner";
+    clearTimeout(accessRetryTimer);loginFailure(error);
+  }
+  function temporaryAccessError(error){
+    const status=Number(error?.status);
+    if([400,401,403,404,406,422].includes(status)||['PGRST116','42501','SESSION_CHANGED'].includes(error?.code))return false;
+    return [408,429,500,502,503,504].includes(status)||['57014','PGRST003'].includes(error?.code)||/fetch|network|timeout|timed out|connection|failed to load/i.test(error?.message||'');
+  }
+  // Retry only idempotent access reads. Each attempt gets its own deadline and
+  // aborts before retrying, so a stalled request cannot accumulate in the background.
+  async function accessRead(request,label,uid,generation){
+    for(let attempt=0;attempt<2;attempt++){
+      if(generation!==sessionGeneration)throw Object.assign(new Error('Your session changed.'),{code:'SESSION_CHANGED'});
+      const controller=new AbortController();
+      try{
+        const result=await limited(request(controller.signal),label,15000);
+        if(generation!==sessionGeneration)throw Object.assign(new Error('Your session changed.'),{code:'SESSION_CHANGED'});
+        if(result.error)throw Object.assign(new Error(result.error.message),{status:result.status,code:result.error.code});
+        return result;
+      }catch(error){
+        if(!temporaryAccessError(error))throw error;
+        if(attempt===1)throw Object.assign(new Error(label+' could not load because the connection timed out or the service is unavailable. Retry opening the workspace; you do not need to reset your password.'),{status:error.status,code:error.code});
+        if(!sessionReady)loginError.textContent='The connection is slow. Retrying '+label.toLowerCase()+'…';
+      }finally{controller.abort();}
+      await new Promise(resolve=>setTimeout(resolve,1000));
     }
   }
-
-  async function refreshAccess() {
-    if (!client || !profile || Date.now() - lastAccessRefresh < 3000) return;
-    lastAccessRefresh = Date.now();
-    try {
-      profile = await loadProfile(profile.id);
-      await loadModuleAccess();
-      if(!pendingState) await loadWorkspace();
-      setCurrentUser();
-      app?.renderAll?.();
-      applyPermissions();
-    } catch (error) {
-      await client.auth.signOut();
-      showLogin(error.message || "Your access has changed. Sign in again.");
-    }
+  async function verifiedProfile(uid,generation){
+    const r=await accessRead(signal=>client.from('profiles').select('id, organization_id, email, full_name, initials, role, active, assignable').eq('id',uid).eq('organization_id',config.organizationId).single().abortSignal(signal),'Your staff profile',uid,generation);
+    if(!r.data?.active||r.data.id!==uid||r.data.organization_id!==config.organizationId)throw new Error('This account does not have an active staff profile in this organisation.');
+    if(!['admin','manager','hr','finance','member','viewer','shared'].includes(r.data.role))throw new Error('Your staff role could not be verified. Contact your administrator.');
+    return r.data;
   }
-
-  async function boot(appApi) {
-    app = appApi;
-    document.body.classList.add("auth-pending");
-    if (!configured()) {
-      showLogin("Deployment setup is incomplete. Add the Supabase settings described in DEPLOYMENT_GUIDE.md and rebuild.");
-      return;
-    }
-    if (!window.supabase?.createClient) {
-      showLogin("The secure database client could not load. Check the deployment build.");
-      return;
-    }
-    client = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
-    });
-    const { data } = await client.auth.getSession();
-    if (passwordSetupPending && data.session) showPasswordSetup();
-    else await establishSession(data.session);
-    client.auth.onAuthStateChange((event, session) => {
-      if (event === "PASSWORD_RECOVERY") {
-        passwordSetupPending = true;
-        showPasswordSetup();
-        return;
-      }
-      if (event === "SIGNED_IN" && passwordSetupPending) {
-        showPasswordSetup();
-        return;
-      }
-      if (event === "SIGNED_IN" && session?.user && profile?.id !== session.user.id) establishSession(session);
-      if (event === "SIGNED_OUT") {
-        profile = null;
-        showLogin();
-      }
-    });
+  async function establishSession(session,refresh=false){
+    if(!session?.user){sessionGeneration++;sessionReady=false;profile=null;clearInterval(workspacePoll);showLogin();return;}
+    const uid=session.user.id;lastAuthSession=session.access_token||uid;
+    if(sessionLoad&&sessionLoadUser===uid)return sessionLoad;
+    if(sessionReady&&profile?.id===uid&&!refresh)return;
+    const generation=refresh&&sessionReady&&profile?.id===uid?sessionGeneration:++sessionGeneration;sessionLoadUser=uid;
+    if(!refresh){sessionReady=false;showLogin('Opening your verified workspace…');retryLogin.hidden=true;loginForm.setAttribute('aria-busy','true');loginForm.querySelector('[type=submit]').disabled=true;}
+    sessionLoad=(async()=>{
+      try{
+        const nextProfile=await verifiedProfile(uid,generation);
+        const access=await accessRead(signal=>client.from('module_access').select('module,access').eq('user_id',uid).abortSignal(signal),'Module permissions',uid,generation);
+        const workspace=await accessRead(signal=>client.rpc('get_my_workspace').abortSignal(signal),'Workspace data',uid,generation);
+        if(!workspace.data?.data||typeof workspace.data.data!=='object')throw new Error('Workspace data is unavailable. Please contact your administrator.');
+        if(generation!==sessionGeneration)return;
+        if(lastLoadedUser&&lastLoadedUser!==uid){pendingState=null;syncConflicts=[];cloudBase={};remoteSnapshot=null;clearTimeout(saveTimer);}
+        profile=nextProfile;moduleAccess=Object.fromEntries((access.data||[]).map(row=>[row.module,row.access]));lastLoadedUser=uid;
+        if(!savingNow)receiveWorkspace(workspace.data);
+        try{chooseGreetingLanguage();}catch{greetingLanguage="English";}setCurrentUser();applyPermissions();subscribe();sessionReady=true;retryLogin.hidden=true;hideLogin();hideBanner();
+        if(!refresh)window.dispatchEvent(new CustomEvent('cage:session-ready',{detail:{profile}}));
+      }catch(error){if(generation===sessionGeneration)sessionCheckFailure(error,refresh,uid,generation);}
+      finally{if(generation===sessionGeneration){sessionLoad=null;sessionLoadUser=null;loginForm.removeAttribute('aria-busy');loginForm.querySelector('[type=submit]').disabled=false;}}
+    })();
+    return sessionLoad;
   }
-
-  loginForm.addEventListener("submit", async event => {
-    event.preventDefault();
-    if (!client) return;
-    loginError.textContent = "";
-    const button = event.submitter;
-    button.disabled = true;
-    button.textContent = "Signing in…";
-    const { error } = await client.auth.signInWithPassword({
-      email: document.getElementById("login-email").value.trim().toLowerCase(),
-      password: document.getElementById("login-password").value
-    });
-    if (error) loginError.textContent = "The email or password is incorrect, or the account has not been invited.";
-    button.disabled = false;
-    button.textContent = "Sign in";
+  async function refreshAccess(){
+    if(!client||!profile||!sessionReady||sessionLoad||accessRefreshRunning||Date.now()-lastAccessRefresh<3000)return;
+    lastAccessRefresh=Date.now();accessRefreshRunning=true;const refreshGeneration=sessionGeneration;
+    try{const r=await limited(client.auth.getSession(),'Session check');if(refreshGeneration!==sessionGeneration)return;if(r.error)throw r.error;await establishSession(r.data.session,true);}
+    catch(error){if(refreshGeneration===sessionGeneration)sessionCheckFailure(error,true,profile?.id,refreshGeneration);}finally{accessRefreshRunning=false;}
+  }
+  retryLogin.addEventListener('click',async()=>{retryLogin.disabled=true;try{const r=await limited(client.auth.getSession(),'Session check');if(r.error)throw r.error;if(!r.data.session){showLogin('Please sign in again.');retryLogin.hidden=true;}else await establishSession(r.data.session);}catch(error){loginFailure(error);}finally{retryLogin.disabled=false;}});
+  // Bound auth HTTP requests as well as the UI wait. A timed-out Promise.race alone
+  // leaves the SDK's refresh request holding the session lock in the background.
+  async function authFetch(input,options={}){
+    const url=typeof input==='string'?input:input.url;
+    if(!url?.startsWith(config.supabaseUrl+'/auth/v1/'))return window.fetch(input,options);
+    const controller=new AbortController(),parent=options.signal||input?.signal;
+    const abort=()=>controller.abort(parent.reason);
+    if(parent?.aborted)abort();else parent?.addEventListener('abort',abort,{once:true});
+    const timeout=setTimeout(()=>controller.abort(new DOMException('Sign-in connection timed out','TimeoutError')),10000);
+    try{return await window.fetch(input,{...options,signal:controller.signal});}
+    finally{clearTimeout(timeout);parent?.removeEventListener('abort',abort);}
+  }
+  async function boot(appApi){
+    app=appApi;
+    document.body.classList.remove('auth-pending');
+    document.body.classList.add('session-checking');
+    if(!configured()){showLogin('Deployment setup is incomplete. Ask your administrator to verify the runtime configuration.');return;}
+    if(!window.supabase?.createClient){showLogin('The database client could not load. Refresh the page or check your connection.');return;}
+    try{
+      client=window.supabase.createClient(config.supabaseUrl,config.supabaseAnonKey,{global:{fetch:authFetch},auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,lockAcquireTimeout:10000}});
+      client.auth.onAuthStateChange((event,session)=>{
+        if(!['SIGNED_IN','SIGNED_OUT','PASSWORD_RECOVERY'].includes(event))return;
+        const eventVersion=++authEventVersion;
+        if(event==='SIGNED_OUT'){lastAuthSession=null;sessionGeneration++;sessionReady=false;profile=null;sessionLoad=null;sessionLoadUser=null;clearInterval(workspacePoll);}
+        setTimeout(()=>{
+          if(eventVersion!==authEventVersion)return;
+          if(event==='PASSWORD_RECOVERY'){passwordSetupPending=true;showPasswordSetup();return;}
+          if(event==='SIGNED_OUT'){window.CAGE_LOCATION?.stop?.();window.CAGE_PRESENCE?.stop?.();retryLogin.hidden=true;showLogin();return;}
+          if(event==='SIGNED_IN'&&passwordSetupPending){showPasswordSetup();return;}
+          if(event==='SIGNED_IN'&&session?.user&&!passwordSetupPending&&(session.access_token||session.user.id)!==lastAuthSession)establishSession(session);
+        },0);
+      });
+      const bootVersion=authEventVersion;
+      const r=await limited(client.auth.getSession(),'Session check');if(bootVersion!==authEventVersion)return;if(r.error)throw r.error;
+      if(passwordSetupPending&&r.data.session)showPasswordSetup();else await establishSession(r.data.session);
+    }catch(error){loginFailure(error);}
+  }
+  loginForm.addEventListener('submit',async event=>{
+    event.preventDefault();if(!client)return;
+    const button=event.submitter||loginForm.querySelector('[type=submit]');if(button.disabled)return;
+    button.disabled=true;button.textContent='Signing in…';loginError.textContent='';retryLogin.hidden=true;
+    try{
+      const r=await limited(client.auth.signInWithPassword({email:document.getElementById('login-email').value.trim().toLowerCase(),password:document.getElementById('login-password').value}),'Sign-in');
+      if(r.error)throw r.error;
+      if(passwordSetupPending)showPasswordSetup();else await establishSession(r.data.session);
+    }catch(error){showLogin(error?.message||'Sign-in could not complete. Check your connection and retry.');retryLogin.hidden=false;}
+    finally{button.disabled=false;button.textContent='Sign in';}
   });
 
   passwordSetupForm.addEventListener("submit", async event => {
@@ -388,28 +554,44 @@
     loginError.textContent = error ? error.message : "A password reset email has been sent.";
   });
 
-  document.getElementById("sign-out-button").addEventListener("click", async () => {
-    localStorage.removeItem("cage-operations-hub-production-cache-v1");
-    if (client) await client.auth.signOut();
+  document.getElementById("sign-out-button").addEventListener("click", async event => {
+    const button=event.currentTarget;if(button.disabled)return;button.disabled=true;
+    try{
+      const uid=profile?.id;
+      const decision=await window.CAGE_DRAFT_PRIVACY?.choose(uid)||'cancel';
+      if(decision==='cancel')return;
+      clearTimeout(saveTimer);await saveChain;
+      await window.CAGE_LOCATION?.stop?.();
+      await window.CAGE_PRESENCE?.stop?.();
+      if(client){const r=await client.auth.signOut();if(r?.error)throw r.error;}
+      pendingState=null;syncConflicts=[];cloudBase={};remoteSnapshot=null;
+      if(decision==='clear')window.CAGE_DRAFT_PRIVACY?.clear(uid);
+      else localStorage.removeItem("cage-operations-hub-production-cache-v1");
+    }catch(error){showBanner(error.message||'Sign-out could not complete. Your drafts were kept.','error');}
+    finally{button.disabled=false;}
   });
 
   async function sendDocument(payload) {
-    if(moduleLevel("finance")!=="edit") throw new Error("Finance edit access is required.");
+    payload={...payload,...window.CAGE_DELIVERY.fields(payload)};
+    if(!profile?.active||profile.role==='shared'||moduleLevel('finance')==='none') throw new Error('Access to this document is required.');
     clearTimeout(saveTimer);
     await saveChain;
     if(pendingState) await flushSave();
     if(pendingState) throw new Error("Wait for cloud sync before sending this document.");
-    const prepared=await client.rpc("prepare_document_delivery",{doc_type:payload.type,doc_record:payload.record});
+    const prepared=moduleLevel('finance')!=='edit'
+      ?await client.rpc(payload.type==='quote'?'prepare_staff_quote_send':'prepare_staff_invoice_send',{doc_record:payload.record})
+      :await client.rpc("prepare_document_delivery",{doc_type:payload.type,doc_record:payload.record});
     if(prepared.error) throw prepared.error;
     workspaceVersion=prepared.data.version;
     await loadWorkspace();
     payload={...payload,record:prepared.data.record};
-    const attemptKey=`cage-send-attempt:${profile.id}:${payload.type}:${payload.record.id}`;
-    const fingerprint=JSON.stringify([payload.type,payload.record,payload.recipient,payload.subject,payload.message]);
+    const attemptKey=`cage-send-v2:${profile.id}:${payload.type}:${payload.record.id}`;
+    const fingerprintRecord={...payload.record};for(const key of ['status','recipient','sentAt','automaticFollowUp','clientResponse'])delete fingerprintRecord[key];
+    const fingerprint=JSON.stringify([payload.type,fingerprintRecord,payload.recipient,payload.cc,payload.bcc,payload.approver,payload.subject,payload.message]);
     let attempt;try{attempt=JSON.parse(localStorage.getItem(attemptKey)||'null');}catch{}
     if(!attempt||attempt.fingerprint!==fingerprint)attempt={id:crypto.randomUUID(),fingerprint};
     localStorage.setItem(attemptKey,JSON.stringify(attempt));
-    const { data, error } = await client.functions.invoke("send-document", { body: {...payload,deliveryAttempt:attempt.id} });
+    const { data, error } = await client.functions.invoke("send-document-v2", { body: {...payload,deliveryAttempt:attempt.id} });
     if (error) {
       let message=error.message || "Email delivery failed.";
       try { const response=await error.context?.json(); message=response?.error || message; } catch {}
@@ -417,9 +599,15 @@
     }
     if (!data?.ok) throw new Error(data?.error || "Email delivery failed.");
     localStorage.removeItem(attemptKey);
+    await loadWorkspace();
     return data;
   }
 
+  async function opportunityDashboard(){const r=await client.rpc('opportunity_dashboard');if(r.error)throw r.error;return r.data;}
+  async function opportunitySave(target,version,details){const r=await client.rpc('opportunity_save',{target,expected_version:version,details});if(r.error)throw r.error;return r.data;}
+  async function opportunitySettings(details){const r=await client.rpc('opportunity_settings_save',{details});if(r.error)throw r.error;return r.data;}
+  async function opportunityAdd(details){const r=await client.rpc('opportunity_add',{details});if(r.error)throw r.error;return r.data;}
+  async function opportunityFiles(id){const r=await client.from('attachments').select('*').eq('record_type','opportunity').eq('record_id',id).order('created_at',{ascending:false});if(r.error)throw r.error;return r.data;}
   async function opportunityData(){
     const rows=[];for(let offset=0;;offset+=1000){
       const r=await client.from('opportunity_matches').select('*').eq('organization_id',profile.organization_id).order('found_at',{ascending:false}).order('id').range(offset,offset+999);
@@ -431,30 +619,54 @@
   async function admissionReminder(id,due,note,requestKey){const r=await client.rpc('queue_academy_payment_reminder',{app:id,due_on:due,note,request_key:requestKey});if(r.error)throw r.error;return r.data;}
   async function scanOpportunities() {
     if (!client || !profile) throw new Error("Sign in before running an opportunity scan.");
-    if (!['admin', 'manager'].includes(profile.role)) throw new Error("Only an Administrator or Manager can run a live scan.");
+    if (!profile.active || profile.role === 'shared') throw new Error("An active staff account is required to run a live scan.");
     const { data, error } = await client.functions.invoke("opportunity-scan", { body: { organizationId: config.organizationId, manual: true } });
-    if (error) throw new Error(error.message || "Live opportunity search failed.");
+    if (error) {let detail;try{detail=await error.context?.json();}catch{}throw new Error(detail?.error||error.message||"Live opportunity search failed.");}
     if (!data?.ok) throw new Error(data?.error || "Live opportunity search failed.");
     return data;
   }
 
+  const projectFileCache=new Map();
+  function projectCacheKey(id){return (profile?.id||'signed-out')+':'+id;}
+  function projectFiles(id){return projectFileCache.get(projectCacheKey(id))?.rows||[];}
+  function projectFilesNotice(id){const entry=projectFileCache.get(projectCacheKey(id));return entry?.error|| (entry?.loading?'Loading saved project files…':'');}
+  async function refreshProjectFiles(id,force=false){
+    if(!profile||moduleLevel('projects')==='none')return false;
+    const key=projectCacheKey(id),prior=projectFileCache.get(key);
+    if(prior?.loading){if(!force)return false;await prior.done;if(!profile||projectCacheKey(id)!==key)return false;return refreshProjectFiles(id,true);}
+    if(!force&&prior&&Date.now()-prior.at<15000)return false;
+    const uid=profile.id,org=profile.organization_id,entry={rows:prior?.rows||[],at:Date.now(),loading:true,error:''};let complete;entry.done=new Promise(resolve=>{complete=resolve;});projectFileCache.set(key,entry);
+    try{
+      const rows=[];
+      for(let offset=0;;offset+=1000){
+        const r=await client.from('attachments').select('id,file_name,storage_path,created_at,uploaded_by').eq('organization_id',org).eq('record_type','project').eq('record_id',id).order('created_at',{ascending:true}).order('id',{ascending:true}).range(offset,offset+999).abortSignal(AbortSignal.timeout(15000));
+        if(r.error)throw r.error;rows.push(...r.data);if(r.data.length<1000)break;
+      }
+      if(profile?.id!==uid)return false;
+      entry.rows=rows.map(r=>({id:'attachment-'+r.id,name:r.file_name,path:r.storage_path,uploaded:r.created_at?.slice(0,10),by:r.uploaded_by,source:'Project upload'}));
+    }catch(e){entry.error='Project files could not refresh: '+e.message+'. Retry from Documents.';}
+    finally{entry.loading=false;entry.at=Date.now();complete();}
+    return profile?.id===uid;
+  }
   async function uploadFile(file, recordType, recordId) {
     if (!client || !profile) throw new Error("Sign in before uploading files.");
+    if(recordType==='project'&&moduleLevel('projects')!=='edit')throw new Error('Projects edit access is required to upload. Contact your administrator.');
     if (file.size > 50 * 1024 * 1024) throw new Error("Files must be 50 MB or smaller.");
+    const uploader=profile.id,organizationId=profile.organization_id;
     const safeName = file.name.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "file";
     const safeRecord = String(recordId || "general").replace(/[^a-zA-Z0-9._-]+/g, "-");
-    const path = `${config.organizationId}/${recordType}/${safeRecord}/${Date.now()}-${safeName}`;
+    const path = `${organizationId}/${recordType}/${safeRecord}/${crypto.randomUUID()}-${safeName}`;
     const uploaded = await client.storage.from("cage-files").upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
     if (uploaded.error) throw new Error(uploaded.error.message);
     const logged = await client.from("attachments").insert({
-      organization_id: config.organizationId,
+      organization_id: organizationId,
       record_type: recordType,
       record_id: String(recordId || ""),
       file_name: file.name,
       storage_path: path,
       mime_type: file.type || null,
       size_bytes: file.size,
-      uploaded_by: profile.id
+      uploaded_by: uploader
     });
     if (logged.error) {
       await client.storage.from("cage-files").remove([path]);
@@ -463,6 +675,56 @@
     return { path, name: file.name };
   }
 
+  async function companyDocuments() {
+    if(!profile?.active||profile.role==='shared')throw new Error('Active staff access required.');
+    const read=async table=>{const rows=[];for(let offset=0;;offset+=500){let q=client.from(table).select('*');q=table==='company_document_links'?q.order('document_id').order('opportunity_id'):q.order('id');const r=await q.range(offset,offset+499);if(r.error)throw r.error;rows.push(...r.data);if(r.data.length<500)return rows;}};
+    const [documents,versions,links,people]=await Promise.all([
+      read('company_documents'),read('company_document_versions'),read('company_document_links'),
+      hubRows('profiles','id,full_name,active,role')]);
+    return {documents,versions,links,people:people.filter(p=>p.active&&p.role!=='shared')};
+  }
+  async function companyDocumentSave(id,revision,details,file) {
+    if(!profile?.active||profile.role==='shared')throw new Error('Active staff access required.');
+    const uid=profile.id,generation=sessionGeneration;
+    let upload=null;
+    if(file){
+      if(!file.size||file.size>20971520)throw new Error('Choose a file between 1 byte and 20 MB.');
+      const mimeByExtension={pdf:'application/pdf',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',doc:'application/msword',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',xls:'application/vnd.ms-excel',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',txt:'text/plain'};
+      const mime=mimeByExtension[file.name.split('.').pop().toLowerCase()];
+      if(!mime)throw new Error('Choose a PDF, image, Word, Excel or text file.');
+      const path=profile.organization_id+'/'+uid+'/'+id+'/'+crypto.randomUUID()+'/'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+      const r=await client.storage.from('company-documents').upload(path,file,{contentType:mime,upsert:false});if(r.error)throw r.error;
+      upload={path,name:file.name};
+    }
+    if(profile?.id!==uid||generation!==sessionGeneration)throw new Error('Your session changed. Sign in and reopen the library.');
+    const r=await client.rpc('company_document_save',{target:id,expected_revision:revision,details,upload});
+    if(r.error){
+      // Never delete after an ambiguous network response: the transaction may have committed.
+      throw new Error(r.error.message+' Your form is preserved. If the connection was interrupted, refresh the library before retrying.');
+    }
+    return r.data;
+  }
+  async function companyDocumentHistory(id){const r=await client.from('company_document_activity').select('*').eq('document_id',id).order('created_at',{ascending:false}).limit(100);if(r.error)throw r.error;return r.data;}
+  async function companyDocumentUrl(path){const r=await client.storage.from('company-documents').createSignedUrl(path,60,{download:true});if(r.error)throw r.error;return r.data.signedUrl;}
+  async function companyDocumentLink(id,opportunity,linked){const r=await client.rpc('company_document_link',{target:id,opportunity,linked});if(r.error)throw r.error;}
+
+  async function managedRecords(kind){
+    if(!profile)throw new Error('Sign in first.');
+    const allowed=["hub_work_categories", "task_plans", "daily_priorities", "training_courses", "training_cohorts", "learners", "training_sessions", "learner_attendance", "training_assessments", "training_certificates", "training_practical_logs", "training_documents", "training_materials", "cohort_messages", "academy_intakes", "academy_applications", "academy_application_files", "stem_applications", "job_openings", "job_applications", "interviews", "employee_documents", "equipment_kits", "equipment_reservations", "invoice_payments", "personal_reminders", "hub_events", "hub_notices", "hub_notice_files", "attachments"];
+    if(!allowed.includes(kind))throw new Error('Unknown record type');
+    const rows=[];for(let offset=0;;offset+=500){let query=client.from(kind).select('*');for(const column of kind==='learner_attendance'?['session_id','learner_id']:kind==='task_plans'?['user_id','task_id']:kind==='daily_priorities'?['user_id','day']:['id'])query=query.order(column);const r=await query.range(offset,offset+499);if(r.error)throw r.error;rows.push(...r.data);if(r.data.length<500)break;}return rows;
+  }
+  async function deleteManagedRecord(source,kind,record){
+    await flushSave();if(pendingState||savingNow)throw new Error('Wait for your pending changes to sync, then retry deletion.');
+    const id=record.id||(record.session_id?[record.session_id,record.learner_id]:[record.user_id,record.task_id||record.day]).join(':');
+    const r=await client.functions.invoke('delete-record',{body:{source,kind,id,expected:record}});
+    if(r.error){let message=r.error.message;try{message=(await r.error.context.json()).error||message;}catch{}throw new Error(message);}
+    if(!r.data?.ok)throw new Error(r.data?.error||'Deletion failed');
+    projectFileCache.clear();try{await loadWorkspace();}catch{r.data.warning=(r.data.warning||'Record deleted.')+' Refresh the workspace to update the list.';}window.dispatchEvent(new CustomEvent('cage:records-deleted'));
+    return r.data;
+  }
+  async function deletionReceipts(){const r=await client.from('record_deletion_log').select('id,kind,record_id,deleted_at,storage_path,storage_removed_at').order('deleted_at',{ascending:false}).limit(100);if(r.error)throw r.error;return r.data;}
+  async function retryFileCleanup(id){const r=await client.functions.invoke('delete-record',{body:{retry:id}});if(r.error)throw r.error;if(!r.data?.ok)throw new Error(r.data?.error||'Retry failed');return r.data;}
   async function openFile(path) {
     const result = await client.storage.from("cage-files").createSignedUrl(path, 60);
     if (result.error || !result.data?.signedUrl) throw new Error(result.error?.message || "The file link could not be created.");
@@ -613,17 +875,26 @@
   });
 
   async function loadModuleAccess() {
-    const result = await client.from("module_access").select("module,access").eq("user_id",profile.id);
-    if(result.error) throw new Error("Install the Hub 14 database update before using this version. " + result.error.message);
+    const accessUser=profile?.id,accessGeneration=sessionGeneration;
+    if(!accessUser)return;
+    const result = await client.from("module_access").select("module,access").eq("user_id",accessUser).abortSignal(AbortSignal.timeout(15000));
+    if(accessUser!==profile?.id||accessGeneration!==sessionGeneration)return;
+    if(result.error) throw Object.assign(new Error("Your access permissions could not load. Check your connection and retry."),{status:result.status,code:result.error.code});
     const previous = JSON.stringify(moduleAccess);
     moduleAccess = Object.fromEntries((result.data||[]).map(row=>[row.module,row.access]));
     if(previous !== JSON.stringify(moduleAccess)) workspaceVersion = -1;
   }
   function moduleLevel(module) {
     if (!profile) return "none";
+    if(module === "payroll") return profile.active && profile.role !== "shared" ? (["admin","finance"].includes(profile.role) ? "edit" : "view") : "none";
+    if(module === "compliance") return profile.active && profile.role !== "shared" ? "edit" : "none";
+    if(profile.active!==false&&profile.role!=="shared"&&["projects","requests","tasks","crm","commercial","finance","approvals"].includes(module))return "edit";
+    if(module === "notices" && profile.role === "shared") return "none";
+    if(module === "training") return profile.active === false || profile.role === "shared" ? "none" : "edit";
     if(profile.role === "admin") return "edit";
     if(["admin","settings"].includes(module)) return "none";
-    if(profile.role === "viewer") return moduleAccess[module] === "none" ? "none" : "view";
+    if(profile.role === "viewer") return ['projects','requests','crm','commercial'].includes(module)?'view':moduleAccess[module] === "none" ? "none" : "view";
+    if(['projects','requests','crm','commercial'].includes(module)&&profile.active&&profile.role!=='shared')return moduleAccess[module]==='edit'||(!moduleAccess[module]&&profile.role!=='viewer')?'edit':'view';
     if(moduleAccess[module]) return moduleAccess[module];
     if(module === "approvals") return profile.role === "manager" ? "edit" : "none";
     if(module === "hr") return ["manager","hr"].includes(profile.role) ? "edit" : "view";
@@ -653,9 +924,11 @@
     await loadWorkspace();
   }
   async function personalData() {
+    const userId=profile?.id;
+    if(!userId)throw new Error('Sign in to load your reminders and notifications.');
     const results=await Promise.all([
-      client.from("personal_reminders").select("*").order("due_at"),
-      client.from("personal_notifications").select("*").order("created_at",{ascending:false}).limit(150)
+      client.from("personal_reminders").select("*").eq("user_id",userId).order("due_at").abortSignal(AbortSignal.timeout(15000)),
+      client.from("personal_notifications").select("*").eq("user_id",userId).order("created_at",{ascending:false}).limit(150).abortSignal(AbortSignal.timeout(15000))
     ]);
     for(const r of results) if(r.error) throw r.error;
     return {reminders:results[0].data,notifications:results[1].data};
@@ -726,10 +999,33 @@
     if(table==='daily_priorities')values={...values,user_id:profile.id};
     const r=await client.from(table).upsert(values,table==='cohort_messages'?{onConflict:'id',ignoreDuplicates:true}:conflict?{onConflict:conflict}:undefined).select();if(r.error)throw r.error;return r.data;
   }
+  async function collaborationRpc(name,args) {
+    if(!['collaboration_create_project','collaboration_add_members','save_standalone_task'].includes(name))throw Error('Unknown collaboration action');
+    await flushSave();if(pendingState||savingNow)throw Error('Wait for your changes to sync, then retry.');
+    const result=await client.rpc(name,args);if(result.error)throw result.error;
+    try{await loadWorkspace();}catch{showBanner('Saved. Refresh to load the updated workspace.','error');}
+    return result.data;
+  }
   async function opsRpc(name,args) {
-    if(!['reserve_equipment','cancel_reservation','record_payment','equipment_busy'].includes(name))throw new Error('Unknown action');
-    if(name==='equipment_busy'){const r=await client.rpc(name,args);if(r.error)throw r.error;return r.data;}
+    if(!['reserve_equipment','cancel_reservation','record_payment','equipment_busy','edit_finance_document','staff_edit_finance_document','staff_edit_work_record','record_payment_with_receipt','get_payment_receipt'].includes(name))throw new Error('Unknown action');
+    if(['equipment_busy','get_payment_receipt'].includes(name)){const r=await client.rpc(name,args);if(r.error)throw r.error;return r.data;}
     await flushSave();if(pendingState)throw new Error('Sync your draft before continuing');const r=await client.rpc(name,args);if(r.error)throw r.error;await loadWorkspace();return r.data;
+  }
+  async function quoteOrder(qid,action,expected,details={},version=0){
+    if(action==='read'){const r=await client.rpc('quote_order_read',{qid});if(r.error)throw r.error;return r.data;}
+    await flushSave();if(pendingState||savingNow)throw new Error('Wait for your changes to sync, then retry.');
+    const r=await client.rpc('quote_order_action',{qid,action_name:action,expected,details,expected_version:version});if(r.error)throw r.error;
+    try{await loadWorkspace();}catch{showBanner('Workflow saved. Refresh the workspace to see the latest records.','error');}return r.data;
+  }
+  async function sendOrderDocument(payload){
+    const r=await client.functions.invoke('send-order-document',{body:payload});
+    if(r.error){let e;try{e=await r.error.context?.json();}catch{}throw new Error(e?.error||r.error.message);}
+    if(!r.data?.ok)throw new Error(r.data?.error||'Email delivery was not confirmed. Retry unchanged.');return r.data;
+  }
+  async function sendPaymentReceipt(paymentId,recipient){
+    const r=await client.functions.invoke('send-payment-receipt',{body:{paymentId,recipient}});
+    if(r.error){let detail;try{detail=await r.error.context?.json();}catch{}throw new Error(detail?.error||r.error.message||'Receipt email could not be confirmed. Retry the same recipient.');}
+    if(!r.data?.ok)throw new Error(r.data?.error||'Receipt email could not be confirmed.');return r.data;
   }
   async function sendCohort(payload) {const r=await client.functions.invoke('send-cohort-message',{body:payload});if(r.error)throw r.error;if(!r.data?.ok)throw new Error(r.data?.error||'Email failed');return r.data;}
   async function academyData() {
@@ -744,7 +1040,7 @@
     let payments=[];
     if(moduleLevel('finance')!=='none') payments=await opsData('invoice_payments');
     let applicationBalances=[],applicationBalancesUnavailable=false;
-    if(['admin','manager'].includes(profile.role)&&moduleLevel('training')==='edit'){
+    if(moduleLevel('training')==='edit'){
       try{const admissions=await admissionData();applicationBalances=admissions.applications.filter(a=>a.learner_id).map(a=>{const paid=admissions.files.filter(f=>f.application_id===a.id&&f.kind==='payment'&&f.review_status==='Verified').reduce((n,f)=>n+Number(f.amount||0),0);return {application_id:a.id,learner_id:a.learner_id,balance:Math.max(Number(a.form_snapshot.fee||0)-paid,0),currency:a.form_snapshot.currency,due_on:a.balance_due_on};});}
       catch{applicationBalancesUnavailable=true;}
     }
@@ -786,7 +1082,7 @@
     const q=values?client.from('app_notification_preferences').upsert({...values,user_id:profile.id,updated_at:new Date().toISOString()}).select().single():client.from('app_notification_preferences').select('*').eq('user_id',profile.id).maybeSingle();
     const r=await q;if(r.error)throw r.error;return r.data;
   }
-  const applicationColumns='id,organization_id,intake_id,full_name,email,phone,answers,form_snapshot,category,identity_type,status,staff_notes,submitted_at,reviewed_by,updated_at,learner_id,cohort_id,balance_due_on,balance_plan_version';
+  const applicationColumns='id,organization_id,intake_id,full_name,email,phone,answers,form_snapshot,category,identity_type,status,staff_notes,submitted_at,reviewed_by,updated_at,learner_id,cohort_id,balance_due_on,balance_plan_version,review_version,information_verified_by,information_verified_at,planned_cohort_id,enrolment_draft,correction_note';
   async function admissionData(){
     const read=async(table,columns='*')=>{let out=[];for(let offset=0;;offset+=1000){const r=await client.from(table).select(columns).eq('organization_id',profile.organization_id).range(offset,offset+999);if(r.error)throw r.error;out.push(...r.data);if(r.data.length<1000)return out;}};
     const [intakes,applications,files,emailResult]=await Promise.all([
@@ -800,6 +1096,9 @@
     const q=id?client.from('academy_intakes').update(clean).eq('id',id).eq('revision',revision).eq('organization_id',profile.organization_id):client.from('academy_intakes').insert({...clean,organization_id:profile.organization_id,created_by:profile.id});
     const r=await q.select().maybeSingle();if(r.error)throw r.error;if(!r.data)throw new Error('This call was changed by another staff member. Refresh before saving. Your editing form is still open.');return r.data;
   }
+  async function admissionReviewStep(values){const r=await client.rpc('save_academy_review',values);if(r.error)throw r.error;}
+  async function admissionIdentity(file_key,new_status,note){const r=await client.rpc('review_academy_identity',{file_key,new_status,note});if(r.error)throw r.error;}
+  async function admissionCohortPlan(values){const r=await client.rpc('save_academy_cohort_plan',values);if(r.error)throw r.error;}
   async function admissionReview(id,status,note){const r=await client.rpc('review_academy_application',{app:id,new_status:status,note});if(r.error)throw r.error;}
   async function admissionPayment(id,status,note){const r=await client.rpc('review_academy_payment',{file_key:id,new_status:status,note});if(r.error)throw r.error;}
   // Enrollment queues the welcome email in the same database transaction.
@@ -829,22 +1128,79 @@
     const r=await client.from('stem_applications').update({status:values.status,notes:values.notes,reviewed_by:profile.id,updated_at:new Date().toISOString()}).eq('id',id).select().single();if(r.error)throw r.error;return r.data;
   }
   async function enrolStem(application,cohort,details) {const r=await client.rpc('enrol_stem_application',{application_key:application,cohort_key:cohort,details});if(r.error)throw r.error;return r.data;}
+  async function hubCall(name,args={}) {
+    if(!['hub_push_save','hub_push_remove','hub_push_settings','hub_push_preferences','hub_push_read','hub_partner_list','hub_partner_create','hub_partner_revoke','hub_partner_enrol','hub_delivery_status','hub_notice_save','hub_notice_mark','hub_notice_file','hub_calendar_list','hub_event_save','hub_event_exception','hub_event_reply','hub_event_conflicts'].includes(name))throw new Error('Unknown Hub operation');
+    const r=await client.rpc(name,args);if(r.error)throw r.error;return r.data;
+  }
+  async function hubRows(table,columns='*') {
+    let rows=[];for(let offset=0;;offset+=1000){const r=await client.from(table).select(columns).range(offset,offset+999);if(r.error)throw r.error;rows.push(...r.data);if(r.data.length<1000)return rows;}
+  }
+  async function hubData() {
+    const [notices,reads,files,people]=await Promise.all([hubRows('hub_notices'),hubRows('hub_notice_reads'),hubRows('hub_notice_files'),hubRows('profiles','id,full_name,role,active')]);
+    return {notices,reads,files,people:people.filter(p=>p.active&&p.role!=='shared')};
+  }
+  async function hubSources() {
+    const read=async(t,c)=>hubRows(t,c);
+    const [cohorts,sessions,interviews,departments]=await Promise.all([
+      moduleLevel('training')==='none'?[]:read('training_cohorts','id,name,start_date,end_date,status,lead_instructor'),
+      moduleLevel('training')==='none'?[]:read('training_sessions','id,cohort_id,title,starts_at,ends_at,cancelled,instructor_id,venue'),
+      moduleLevel('hr')==='none'?[]:read('interviews','id,scheduled_start,scheduled_end,status,location_or_link'),
+      read('staff_work_settings','department')]);
+    return {cohorts,sessions,interviews,departments:[...new Set(departments.map(d=>d.department).filter(Boolean))]};
+  }
+  async function hubAttachment(nid,file) {
+    if(file.size>10485760)throw new Error('Attachments must be 10 MB or smaller.');
+    const path=nid+'/'+crypto.randomUUID()+'/'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    const r=await client.storage.from('hub-notices').upload(path,file,{upsert:false});if(r.error)throw r.error;
+    await hubCall('hub_notice_file',{nid,file_path:path,file_name:file.name});
+  }
+  async function hubDownload(path) {
+    const r=await client.storage.from('hub-notices').createSignedUrl(path,60,{download:true});if(r.error)throw r.error;return r.data.signedUrl;
+  }
+  async function hubEvent(id) {const r=await client.from('hub_events').select('*').eq('id',id).single();if(r.error)throw r.error;const g=await client.from('hub_event_guests').select('*').eq('event_id',id);if(g.error)throw g.error;return {...r.data,guests:g.data};}
+  async function presenceHeartbeat(sid,availability) {const r=await client.rpc("hub_presence_heartbeat",{sid,availability}).abortSignal(AbortSignal.timeout(10000));if(r.error)throw r.error;return r.data;}
   window.CAGE_BACKEND = {
-    admissionData,admissionSave,admissionReview,admissionPayment,admissionFile,admissionEnrol,admissionEmailStatus,admissionEnrolmentEmail,
+    reserveRecordNumber: async(kind, record_id)=>{
+      const r=await client.rpc('reserve_workspace_number',{kind,record_id});
+      if(r.error)throw new Error('Could not allocate a unique reference. Your form is preserved. '+r.error.message);
+      return r.data;
+    },
+    pushConfig: async()=>{const r=await client.functions.invoke('hub-push',{body:{action:'config'}});if(r.error)throw r.error;return r.data;},
+    documentHistory: async(doc_type,doc_id)=>{const r=await client.rpc("document_history_v2",{doc_type,doc_id});if(r.error)throw r.error;return r.data||[];},
+    canSendInvoice: ()=>!!profile?.active&&profile.role!=='shared'&&moduleLevel('finance')!=='none',
+    locationCanRead: async()=>{const r=await client.rpc('hub_location_can_read');if(r.error)throw r.error;return r.data;},
+    locationPublish: async(values)=>{const r=await client.rpc('hub_location_publish',values).abortSignal(AbortSignal.timeout(12000));if(r.error)throw r.error;},
+    locationStop: async(sid)=>{const r=await client.rpc('hub_location_stop',{sid}).abortSignal(AbortSignal.timeout(12000));if(r.error)throw r.error;},
+    locationList: async()=>{const r=await client.rpc('hub_location_list').abortSignal(AbortSignal.timeout(10000));if(r.error)throw r.error;return r.data;},
+    categoryList: async(category_module)=>{const r=await client.rpc("hub_category_list",{category_module});if(r.error)throw r.error;return r.data;},
+    categoryAdd: async(category_module,category_name)=>{const r=await client.rpc("hub_category_add",{category_module,category_name});if(r.error)throw r.error;return r.data;},
+    companyDocuments,companyDocumentSave,companyDocumentHistory,companyDocumentUrl,companyDocumentLink,
+    payrollData: async(target=null)=>{const r=await client.rpc("payroll_read",{target}).abortSignal(AbortSignal.timeout(20000));if(r.error)throw r.error;return r.data;},
+    payrollWrite: async(action,target,expected,payload)=>{const r=await client.rpc("payroll_write",{action,target,expected,payload}).abortSignal(AbortSignal.timeout(25000));if(r.error)throw r.error;return r.data;},
+    presenceHeartbeat,
+    presenceStatusSettings: async()=>{const r=await client.rpc("hub_status_settings");if(r.error)throw r.error;return r.data;},
+    presenceStatusForget: async(emoji_value,message_value)=>{const r=await client.rpc("hub_status_forget",{emoji_value,message_value});if(r.error)throw r.error;},
+    presenceStatus: async(values)=>{const r=await client.rpc("hub_status_save",values);if(r.error)throw r.error;},
+    presenceWeek: async(week_of)=>{const r=await client.rpc("hub_presence_week",{week_of});if(r.error)throw r.error;return r.data;},
+    hubCall,hubData,hubSources,hubAttachment,hubDownload,hubEvent,
+    admissionReviewStep,admissionIdentity,admissionCohortPlan,admissionData,admissionSave,admissionReview,admissionPayment,admissionFile,admissionEnrol,admissionEmailStatus,admissionEnrolmentEmail,
     enrolStem,
     chatReceipts,acknowledgeChat,appNotificationPreferences,stemData,reviewStem,
+    academyActivity: async()=>{const r=await client.from("academy_activity_log").select("*").order("created_at",{ascending:false}).order("id",{ascending:false}).limit(200);if(r.error)throw r.error;return r.data||[];},
     academyAttendance,
     academyData, academySave, academyCompletion,
-    opsData,opsSave,opsRpc,sendCohort,
-    resolveSync, restoreDraft, flushSave, reviewSync, discardDraftRecord, syncState:()=>({pending:!!pendingState,conflicts:syncConflicts.length}),
+    opsData,opsSave,opsRpc,sendCohort,sendPaymentReceipt,quoteOrder,sendOrderDocument,
+    recordSaveStatus, resolveSync, restoreDraft, flushSave, reviewSync, discardDraftRecord, downloadPreservedSettings, blockedDrafts, recordLabel, retryBlockedDraft, downloadBlockedDrafts, syncState:()=>({pending:!!pendingState,conflicts:syncConflicts.length,blocked:blockedDrafts().length,localSettings:preservedSettings().length}),
     emailPreferences, saveEmailPreferences, emailRouting, saveEmailRouting, readChatNotifications, requestTaskHelp,
     plannerData, saveTaskPlan, savePlanningCapacity, updatePlannedTask,
+    collaborationRpc, collaborationAccess:()=>collaborationAccess,
     moduleLevel, personalData, saveReminder, readNotification, accessAccounts, saveModuleAccess, fileUrl,
     boot,
     scheduleSave,
     sendDocument,
-    scanOpportunities, opportunityData, admissionBalance, admissionReminder, admissionReminderHistory,
-    uploadFile,
+    scanOpportunities, opportunityData, opportunityDashboard, opportunitySave, opportunitySettings, opportunityAdd, opportunityFiles, admissionBalance, admissionReminder, admissionReminderHistory,
+    managedRecords, deleteManagedRecord, deletionReceipts, retryFileCleanup,
+    projectFiles, projectFilesNotice, refreshProjectFiles, uploadFile,
     openFile,
     loadHR,
     createJob,
@@ -860,6 +1216,7 @@
     applyPermissions,
     canApprove: () => ["admin", "manager"].includes(profile?.role),
     isProduction: configured,
+    askEinstein: async()=>{throw new Error('AI chat has been retired. Use Elder’s built-in help.');},
     currentProfile: () => profile,
     currentMemberId: () => profile?.email?.split("@")[0] === "bonfancio" ? "bonifancio" : profile?.email?.split("@")[0] || "alexander"
   };
