@@ -25,6 +25,7 @@ for attempt in $(seq 1 40); do
   fi
   if [ "$attempt" = 40 ]; then
     echo 'Disposable fixture did not start.' >&2
+    docker logs --tail 60 "$task_container" >&2
     exit 1
   fi
   sleep 1
