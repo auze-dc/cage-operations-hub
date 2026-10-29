@@ -1,0 +1,21 @@
+name: Validate recovery tooling
+on:
+  pull_request:
+    paths:
+      - scripts/recovery.py
+      - validation/recovery_test.py
+      - validation/recovery-postgres.sh
+      - .github/workflows/recovery-tooling.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify private Storage export and failure handling
+        run: python3 validation/recovery_test.py
+      - name: Prove PostgreSQL archive restores in a disposable container
+        run: bash validation/recovery-postgres.sh

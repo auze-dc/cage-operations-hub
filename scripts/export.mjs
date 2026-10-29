@@ -14,7 +14,7 @@ await new Promise((resolve, reject) => {
   archive.glob("**/*", {
     cwd: root,
     dot: true,
-    ignore: [".git/**", ".openai/**", "node_modules/**", "*.zip", ".env", ".env.*", "**/runtime-config.js", "**/node_modules/**", "tmp/**", "validation/artifacts/**", ".supabase/**", "supabase/.temp/**"]
+    ignore: [".git/**", ".openai/**", "node_modules/**", "*.zip", ".env", ".env.*", "**/runtime-config.js", "**/node_modules/**", "tmp/**", "validation/artifacts/**", ".supabase/**", "supabase/.temp/**", "**/__pycache__/**", "**/*.pyc", "**/.pgpass", "**/.pg_service.conf", "**/*.recovery-secrets.json", "recovery-backups/**"]
   });
   archive.finalize();
 });
