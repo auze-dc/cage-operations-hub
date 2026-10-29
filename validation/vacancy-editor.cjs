@@ -1,0 +1,21 @@
+const {JSDOM}=require('jsdom'),fs=require('node:fs'),assert=require('node:assert/strict');
+const tick=()=>new Promise(r=>setTimeout(r,0));
+(async()=>{
+ const html=fs.readFileSync('dist/index.html','utf8'),dom=new JSDOM(html,{url:'https://hub.example.test',runScripts:'outside-only'}),w=dom.window,d=w.document;let writes=[],fail=false;
+ w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};
+ w.showToast=()=>{};w.CAGE_BACKEND={currentProfile:()=>({id:'author',role:'admin'}),createJob:async data=>{writes.push(data);if(fail)throw Error('Concurrent change');return {id:'saved',updated_at:'later'}}};w.CAGE_HR_UI={load:async()=>{}};
+ w.eval(fs.readFileSync('dist/job-advert.js','utf8'));w.eval(fs.readFileSync('dist/vacancy-editor.js','utf8'));
+ const api=w.CAGE_VACANCY_EDITOR,f=d.getElementById('job-form'),dialog=d.getElementById('job-dialog');
+ const change=(name,value)=>{f.elements[name].value=value;f.elements[name].dispatchEvent(new w.Event('input',{bubbles:true}))};
+ const submit=async value=>{f.dispatchEvent(new w.SubmitEvent('submit',{cancelable:true,submitter:f.querySelector(`[value="${value}"]`)}));await tick()};
+ api.open();await submit('publish');assert.equal(writes.length,0);assert.match(d.getElementById('job-form-error').textContent,/required/);
+ change('title','GIS <script>alert(1)</script>');change('closingDate','2099-11-04');d.getElementById('vacancy-close').click();api.open();assert.equal(f.elements.title.value,'GIS <script>alert(1)</script>');assert.match(d.getElementById('vacancy-save-state').textContent,/Recovered/);assert.equal(d.querySelectorAll('#vacancy-preview-content script').length,0);
+ await submit('draft');assert.equal(writes.length,1);assert.equal(writes[0].status,'Draft');assert.equal(dialog.open,false);assert.equal(w.sessionStorage.length,0);
+ const job={id:'existing',updated_at:'original',title:'Existing job',department:'Data',location:'Lilongwe',employment_type:'Permanent',description:'Summary',requirements:'GIS',responsibilities:'Map',closing_date:'2099-11-04',status:'Draft',positions:1,screening_questions:['Why this role?']};
+ api.open(job);change('screeningQuestions','Repeated\nRepeated');await submit('publish');assert.equal(writes.length,1);change('screeningQuestions','Why this role?');fail=true;await submit('publish');assert.equal(writes.length,2);assert.equal(writes[1].id,'existing');assert.equal(writes[1].updatedAt,'original');assert.equal(dialog.open,true);assert.match(d.getElementById('job-form-error').textContent,/Concurrent/);assert.equal(d.getElementById('vacancy-publish').disabled,false);
+ fail=false;await submit('publish');assert.equal(writes[2].status,'Open');assert.equal(writes[2].screeningQuestions[0],'Why this role?');
+ api.open(job,true);await submit('draft');assert.equal(writes[3].id,undefined);assert.equal(writes[3].status,'Draft');assert.match(writes[3].title,/copy/);
+ api.open(job);change('title','Unsaved');d.getElementById('vacancy-close').click();api.open(job);d.getElementById('vacancy-discard').click();assert.equal(f.elements.title.value,'Existing job');
+ change('title','Private draft');w.dispatchEvent(new w.CustomEvent('cage:session-ended'));assert.equal(dialog.open,false);assert.equal(w.sessionStorage.length,0);
+ console.log('PASS: vacancy steps, required fields, escaped preview, tab recovery, save draft, publish, edit identity, failure recovery, duplication, discard and sign-out privacy.');dom.window.close();
+})().catch(e=>{console.error(e);process.exitCode=1});
