@@ -16,7 +16,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
-      - run: npm run build
+      - name: Verify production build with isolated configuration
+        run: npm run build
+        env:
+          SUPABASE_URL: https://build-fixture.supabase.co
+          SUPABASE_ANON_KEY: sb_publishable_build_fixture_not_a_credential
+          CAGE_ORGANIZATION_ID: 00000000-0000-4000-8000-000000000001
+          APP_URL: https://hub.example.test
       - run: node validation/background-reliability.mjs
       - run: node validation/go-live-guards.mjs
       - name: Install isolated DOM and SQL test dependencies
