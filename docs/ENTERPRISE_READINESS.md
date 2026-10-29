@@ -18,14 +18,16 @@ For incident response, record the affected module, exact error, timestamp/time z
 
 The 09:00–12:25 UTC sample on 29 October contained 1,756 successful get_my_workspace reads and three presence heartbeat 401 responses, with no 500-class responses in that sample. Earlier outages remain relevant; one healthy sample does not establish sustained availability or prove their root cause is fixed.
 
+See docs/DISASTER_RECOVERY.md for the recovery test procedure. Detailed operational inventories and restore evidence must remain private.
+
 ## Required before an enterprise sign-off
 
-- Each administrator must complete authenticator enrollment on their own device, then verify repeat sign-in and lost-device recovery. The MFA interface, Data API guard, 103 restrictive database/storage policies and two service-privileged Edge guards were deployed on 29 October 2026. Isolated tests and rollback-only production role checks passed; these do not replace a real account-holder acceptance test.
-- Password breach checks if supported by the Supabase plan.
+- Each administrator must complete authenticator enrollment on their own device, then verify repeat sign-in and lost-device recovery. A real account-holder enrollment and successful workspace opening have been verified. The MFA interface, Data API guard and restrictive database/storage policies and two service-privileged Edge guards were deployed on 29 October 2026. Isolated tests and rollback-only production role checks passed; these do not replace a real account-holder acceptance test.
+- Breached-password protection is enabled and its security-advisor warning has cleared. This checks new or changed passwords; it does not change existing passwords.
 - Trace residual auth, notification and background-job errors; validate resource/capacity changes using measurements.
 - Approve a historical reference reconciliation mapping; do not renumber sent documents automatically.
 - Independent staff/cross-organization tests, browser testing and financial/HR integration tests in isolation.
-- Private database/storage backup plus a demonstrated restore in an isolated environment.
+- Private database and Storage-file backups plus a demonstrated restore in an isolated environment. Validate the actual contents and recovery coverage; database backup metadata does not replace file-byte backups.
 - Agreed availability/error/latency targets and an incident-response owner.
 
 Do not describe a passing build or this tracker as proof that every item is complete. See the 29 October 2026 audit for evidence and scope.
