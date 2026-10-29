@@ -447,7 +447,11 @@
     if(!refresh){sessionReady=false;showLogin('Opening your verified workspace…');retryLogin.hidden=true;loginForm.setAttribute('aria-busy','true');loginForm.querySelector('[type=submit]').disabled=true;}
     sessionLoad=(async()=>{
       try{
+        if(window.CAGE_SECURITY)await window.CAGE_SECURITY.ensure(client,{bootstrap:true});
+        if(generation!==sessionGeneration)return;
         const nextProfile=await verifiedProfile(uid,generation);
+        if(window.CAGE_SECURITY)await window.CAGE_SECURITY.ensure(client,{requireEnrollment:nextProfile.role==='admin'});
+        if(generation!==sessionGeneration)return;
         const access=await accessRead(signal=>client.from('module_access').select('module,access').eq('user_id',uid).abortSignal(signal),'Module permissions',uid,generation);
         const workspace=await accessRead(signal=>client.rpc('get_my_workspace').abortSignal(signal),'Workspace data',uid,generation);
         if(!workspace.data?.data||typeof workspace.data.data!=='object')throw new Error('Workspace data is unavailable. Please contact your administrator.');
