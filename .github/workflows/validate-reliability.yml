@@ -39,6 +39,7 @@ jobs:
           node validation/mfa-security.mjs
           NODE_PATH="$CAGE_TEST_MODULES" node validation/careers-flow.cjs
           NODE_PATH="$CAGE_TEST_MODULES" node validation/vacancy-editor.cjs
+          NODE_PATH="$CAGE_TEST_MODULES" node validation/hr-vacancy-filter.cjs
           node validation/vacancy-api.mjs
           node validation/vacancy-schema.mjs
 
