@@ -33,7 +33,7 @@
   function renderJobs() {
     const target = document.getElementById("job-opening-list");
     if (!canHR()) { target.innerHTML = ""; return; }
-    target.innerHTML = hrData.jobs.length ? hrData.jobs.map(job => `<div class="hr-list-row"><div><strong>${esc(job.title)}</strong><span>${esc(job.department)} · ${esc(job.employment_type)} · closes ${esc(job.closing_date)}</span></div><div class="hr-row-actions"><span class="status-pill ${job.status === "Open" ? "done" : "attention"}">${esc(job.status === "Open" && job.closing_date < window.CAGE_JOB_ADVERT.today() ? "Closed" : job.status)}</span><button data-edit-vacancy="${job.id}">Edit</button><button data-duplicate-vacancy="${job.id}">Duplicate</button></div></div>`).join("") : '<div class="empty-state"><p>No vacancies have been created.</p></div>';
+    target.innerHTML = hrData.jobs.length ? hrData.jobs.map(job => `<div class="hr-list-row"><div><strong>${esc(job.title)}</strong><span>${esc(job.department)} · ${esc(job.employment_type)} · closes ${esc(job.closing_date)}</span></div><div class="hr-row-actions"><span class="status-pill ${job.status === "Open" ? "done" : "attention"}">${esc(job.status === "Open" && job.closing_date < window.CAGE_JOB_ADVERT.today() ? "Closed" : job.status)}</span><button data-view-applicants="${esc(job.id)}">View applicants (${hrData.applications.filter(item => item.job_opening_id === job.id).length})</button><a class="vacancy-advert-link" href="./careers#role-${encodeURIComponent(job.id)}" target="_blank" rel="noopener">Open advert ↗</a><button data-edit-vacancy="${job.id}">Edit</button><button data-duplicate-vacancy="${job.id}">Duplicate</button></div></div>`).join("") : '<div class="empty-state"><p>No vacancies have been created.</p></div>';
   }
 
   function renderInterviews() {
@@ -46,18 +46,30 @@
     }).join("") : '<div class="empty-state"><p>No upcoming interviews.</p></div>';
   }
 
+  function renderVacancyFilter() {
+    const select = document.getElementById("candidate-vacancy-filter"), selected = select.value;
+    const counts = new Map();
+    for (const item of hrData.applications) counts.set(item.job_opening_id, (counts.get(item.job_opening_id) || 0) + 1);
+    select.innerHTML = `<option value="">All vacancies (${hrData.applications.length})</option>` + hrData.jobs.map(job => `<option value="${esc(job.id)}">${esc(job.title)} · ${esc(job.closing_date)} (${counts.get(job.id) || 0})</option>`).join("") + [...counts].filter(([id]) => !hrData.jobs.some(job => job.id === id)).map(([id,count]) => `<option value="${esc(id)}">Vacancy details unavailable (${count})</option>`).join("");
+    if ([...select.options].some(option => option.value === selected)) select.value = selected;
+  }
+
   function renderCandidates() {
     const target = document.getElementById("candidate-board");
     if (!canHR()) { target.innerHTML = ""; return; }
     const query = document.getElementById("candidate-search").value.trim().toLowerCase();
-    const candidates = hrData.applications.filter(item => `${item.full_name} ${item.email}`.toLowerCase().includes(query));
+    const vacancyId = document.getElementById("candidate-vacancy-filter").value;
+    const candidates = hrData.applications.filter(item => (!vacancyId || item.job_opening_id === vacancyId) && `${item.full_name} ${item.email}`.toLowerCase().includes(query));
+    const vacancy = hrData.jobs.find(job => job.id === vacancyId);
+    document.getElementById("candidate-result-summary").textContent = `Showing ${candidates.length} of ${hrData.applications.length} applications · ${vacancyId ? vacancy?.title || "Vacancy details unavailable" : "All vacancies"}${query ? " · Search applied" : ""}`;
+    if (!candidates.length) { target.innerHTML = '<div class="empty-state candidate-filter-empty"><p>No applications match this view. Choose All vacancies or clear your search to see more applicants.</p></div>'; return; }
     const columns = [
       ["New", ["New"]], ["Screening", ["Screening"]], ["Shortlisted", ["Shortlisted"]],
       ["Interview", ["Interview", "Reference checks"]], ["Decision", ["Offer", "Hired", "Rejected", "Withdrawn"]]
     ];
     target.innerHTML = columns.map(([title, stages]) => `<section class="candidate-column"><h4>${title} · ${candidates.filter(item => stages.includes(item.stage)).length}</h4>${candidates.filter(item => stages.includes(item.stage)).map(item => {
       const job = hrData.jobs.find(job => job.id === item.job_opening_id);
-      return `<article class="candidate-card"><strong>${esc(item.full_name)}</strong><small>${esc(job?.title || "Vacancy")}<br>${esc(item.email)} · ${esc(item.phone)}</small><p class="candidate-salary">${item.salary_expectation != null ? `${esc(item.salary_currency)} ${Number(item.salary_expectation).toLocaleString()} / ${esc(item.salary_period)} gross` : "Salary expectation not supplied (earlier application)"}</p>${(item.screening_answers || []).map(answer => `<details><summary>${esc(answer.question)}</summary><p>${esc(answer.answer)}</p></details>`).join("")}<div class="hr-row-actions"><button data-candidate-cv="${esc(item.cv_storage_path)}">CV</button><button data-interview-candidate="${item.id}">Interview</button></div><select data-candidate-stage="${item.id}" aria-label="Stage for ${esc(item.full_name)}">${STAGES.map(stage => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select></article>`;
+      return `<article class="candidate-card"><strong>${esc(item.full_name)}</strong><small><span class="candidate-vacancy-label">${esc(job?.title || "Vacancy details unavailable")}</span><br>${esc(item.email)} · ${esc(item.phone)}</small><p class="candidate-salary">${item.salary_expectation != null ? `${esc(item.salary_currency)} ${Number(item.salary_expectation).toLocaleString()} / ${esc(item.salary_period)} gross` : "Salary expectation not supplied (earlier application)"}</p>${(item.screening_answers || []).map(answer => `<details><summary>${esc(answer.question)}</summary><p>${esc(answer.answer)}</p></details>`).join("")}<div class="hr-row-actions"><button data-candidate-cv="${esc(item.cv_storage_path)}">CV</button><button data-interview-candidate="${item.id}">Interview</button></div><select data-candidate-stage="${item.id}" aria-label="Stage for ${esc(item.full_name)}">${STAGES.map(stage => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select></article>`;
     }).join("")}</section>`).join("");
   }
 
@@ -73,7 +85,7 @@
 
   function render() {
     if (!document.getElementById("hr-metrics")) return;
-    metrics(); renderProfile(); renderJobs(); renderInterviews(); renderCandidates(); renderAdmin();
+    metrics(); renderProfile(); renderJobs(); renderInterviews(); renderVacancyFilter(); renderCandidates(); renderAdmin();
   }
 
   async function load(includeAdmin = false) {
@@ -92,6 +104,7 @@
   document.getElementById("upload-cv-button").addEventListener("click", () => { document.getElementById("employee-document-form").reset(); document.getElementById("employee-document-dialog").showModal(); });
   document.getElementById("invite-user-button").addEventListener("click", () => { document.getElementById("invite-user-form").reset(); document.getElementById("invite-user-dialog").showModal(); });
   document.getElementById("candidate-search").addEventListener("input", renderCandidates);
+  document.getElementById("candidate-vacancy-filter").addEventListener("change", renderCandidates);
 
   function openInterview(applicationId = "") {
     const form = document.getElementById("interview-form"); form.reset();
@@ -135,6 +148,13 @@
     }
   });
   document.addEventListener("click", event => {
+    const applicants = event.target.closest("[data-view-applicants]");
+    if (applicants) {
+      const select = document.getElementById("candidate-vacancy-filter");
+      select.value = applicants.dataset.viewApplicants;
+      document.getElementById("candidate-search").value = "";
+      renderCandidates(); select.scrollIntoView({ block: "center" }); select.focus({preventScroll:true});
+    }
     const vacancy = event.target.closest("[data-edit-vacancy],[data-duplicate-vacancy]");
     if (vacancy) window.CAGE_VACANCY_EDITOR.open(hrData.jobs.find(job => job.id === (vacancy.dataset.editVacancy || vacancy.dataset.duplicateVacancy)), Boolean(vacancy.dataset.duplicateVacancy));
     const saveAccess = event.target.closest("[data-save-user-access]");

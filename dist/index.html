@@ -511,7 +511,7 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
             <article class="surface hr-privileged"><div class="surface-heading"><div><p class="section-kicker">Interview calendar</p><h3>Upcoming interviews</h3></div><button class="text-button" id="schedule-interview-button">Schedule</button></div><div id="interview-list" class="hr-list"></div></article>
           </div>
           <article class="surface hr-privileged"><div class="surface-heading"><div><p class="section-kicker">Vacancies</p><h3>Open roles</h3></div><span class="prototype-note">Applications: /careers.html</span></div><div id="job-opening-list" class="hr-list"></div></article>
-          <article class="surface hr-privileged"><div class="surface-heading"><div><p class="section-kicker">Candidate pipeline</p><h3>Applications</h3></div><label class="inline-search"><span>⌕</span><input id="candidate-search" type="search" placeholder="Search candidates"></label></div><div id="candidate-board" class="candidate-board"></div></article>
+          <article class="surface hr-privileged"><div class="surface-heading"><div><p class="section-kicker">Candidate pipeline</p><h3>Applications</h3></div><div class="candidate-toolbar"><label class="candidate-vacancy-filter"><span>Vacancy</span><select id="candidate-vacancy-filter" aria-describedby="candidate-result-summary"><option value="">All vacancies</option></select></label><label class="inline-search"><span aria-hidden="true">⌕</span><input id="candidate-search" type="search" aria-label="Search candidates" placeholder="Search candidates"></label></div></div><p id="candidate-result-summary" class="candidate-result-summary" role="status" aria-live="polite"></p><div id="candidate-board" class="candidate-board"></div></article>
         </section>
 
         <section class="view-panel" data-view-panel="admin">
@@ -994,9 +994,9 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
   <script src="./app.js?v=enterprise-20261029" defer></script>
   <script src="./payroll.js?v=20261027-pension3" defer></script>
   <script src="./job-advert.js?v=20261029" defer></script>
-<script src="./hr.js?v=vacancy-20261029" defer></script>
+<script src="./hr.js?v=vacancy-filter-20261102" defer></script>
 <script src="./vacancy-editor.js?v=20261029" defer></script>
-<link rel="stylesheet" href="./vacancy-editor.css?v=20261029">
+<link rel="stylesheet" href="./vacancy-editor.css?v=vacancy-filter-20261102">
   <script src="./training.js?v=21.0.0" defer></script>
 <script src="./vendor/pdf-lib.min.js?v=15.9.0" defer></script>
 <script src="./document-pdf.js?v=tpin-20260930" defer></script>

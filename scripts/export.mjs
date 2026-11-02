@@ -1,11 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import archiver from "archiver";
+import { ZipArchive } from "archiver";
 
 const root = path.resolve(import.meta.dirname, "..");
 const outputPath = path.join(root, "CAGE_Operations_Hub_Production_Export.zip");
 const output = fs.createWriteStream(outputPath);
-const archive = archiver("zip", { zlib: { level: 9 } });
+const archive = new ZipArchive({ zlib: { level: 9 } });
 
 await new Promise((resolve, reject) => {
   output.on("close", resolve);
@@ -14,7 +14,7 @@ await new Promise((resolve, reject) => {
   archive.glob("**/*", {
     cwd: root,
     dot: true,
-    ignore: [".git/**", ".openai/**", "node_modules/**", "*.zip", ".env", ".env.*", "**/runtime-config.js", "**/node_modules/**", "tmp/**", "validation/artifacts/**", ".supabase/**", "supabase/.temp/**", "**/__pycache__/**", "**/*.pyc", "**/.pgpass", "**/.pg_service.conf", "**/*.recovery-secrets.json", "recovery-backups/**"]
+    ignore: [".git", ".git/**", ".openai/**", "node_modules/**", "*.zip", ".env", ".env.*", "**/runtime-config.js", "**/node_modules/**", "tmp/**", "validation/artifacts/**", ".supabase/**", "supabase/.temp/**", "**/__pycache__/**", "**/*.pyc", "**/.pgpass", "**/.pg_service.conf", "**/*.recovery-secrets.json", "recovery-backups/**"]
   });
   archive.finalize();
 });
