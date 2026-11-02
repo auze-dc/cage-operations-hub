@@ -43,5 +43,10 @@ jobs:
           node validation/vacancy-api.mjs
           node validation/vacancy-schema.mjs
 
+      - name: Verify source export after ZIP dependency update
+        run: |
+          npm run export
+          python3 validation/source-export.py
+
       - name: Audit locked dependency tree
         run: npm audit --audit-level=moderate
