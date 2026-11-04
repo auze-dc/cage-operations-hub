@@ -127,3 +127,7 @@ grant execute on function recruitment_private.write_review(uuid,integer,text,tex
 create function public.application_review_write(p_application uuid,p_expected_version integer,p_action text,p_notes text,p_scores jsonb default '{}'::jsonb,p_stage text default null,p_reviewer uuid default null,p_request_id uuid default null) returns jsonb language sql security invoker set search_path='' as $$select recruitment_private.write_review(p_application,p_expected_version,p_action,p_notes,p_scores,p_stage,p_reviewer,p_request_id)$$;
 revoke all on function public.application_review_write(uuid,integer,text,text,jsonb,text,uuid,uuid) from public, anon;
 grant execute on function public.application_review_write(uuid,integer,text,text,jsonb,text,uuid,uuid) to authenticated;
+
+-- Explicit default-deny policies; guarded owner-executed helpers remain the only access path.
+create policy internal_helpers_only on recruitment_private.review_events for all to public using (false) with check (false);
+create policy internal_helpers_only on recruitment_private.review_receipts for all to public using (false) with check (false);
