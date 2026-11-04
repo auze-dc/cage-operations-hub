@@ -59,9 +59,9 @@
     if (!canHR()) { target.innerHTML = ""; return; }
     const query = document.getElementById("candidate-search").value.trim().toLowerCase();
     const vacancyId = document.getElementById("candidate-vacancy-filter").value;
-    const candidates = hrData.applications.filter(item => (!vacancyId || item.job_opening_id === vacancyId) && `${item.full_name} ${item.email}`.toLowerCase().includes(query));
+    const candidates = hrData.applications.filter(item => (!vacancyId || item.job_opening_id === vacancyId) && (!document.getElementById("candidate-assigned-to-me").checked || item.assigned_reviewer === profile()?.id) && `${item.full_name} ${item.email}`.toLowerCase().includes(query));
     const vacancy = hrData.jobs.find(job => job.id === vacancyId);
-    document.getElementById("candidate-result-summary").textContent = `Showing ${candidates.length} of ${hrData.applications.length} applications · ${vacancyId ? vacancy?.title || "Vacancy details unavailable" : "All vacancies"}${query ? " · Search applied" : ""}`;
+    document.getElementById("candidate-result-summary").textContent = `Showing ${candidates.length} of ${hrData.applications.length} applications · ${vacancyId ? vacancy?.title || "Vacancy details unavailable" : "All vacancies"}${query ? " · Search applied" : ""}${document.getElementById("candidate-assigned-to-me").checked ? " · Assigned to me" : ""}`;
     if (!candidates.length) { target.innerHTML = '<div class="empty-state candidate-filter-empty"><p>No applications match this view. Choose All vacancies or clear your search to see more applicants.</p></div>'; return; }
     const columns = [
       ["New", ["New"]], ["Screening", ["Screening"]], ["Shortlisted", ["Shortlisted"]],
@@ -69,7 +69,7 @@
     ];
     target.innerHTML = columns.map(([title, stages]) => `<section class="candidate-column"><h4>${title} · ${candidates.filter(item => stages.includes(item.stage)).length}</h4>${candidates.filter(item => stages.includes(item.stage)).map(item => {
       const job = hrData.jobs.find(job => job.id === item.job_opening_id);
-      return `<article class="candidate-card"><strong>${esc(item.full_name)}</strong><small><span class="candidate-vacancy-label">${esc(job?.title || "Vacancy details unavailable")}</span><br>${esc(item.email)} · ${esc(item.phone)}</small><p class="candidate-salary">${item.salary_expectation != null ? `${esc(item.salary_currency)} ${Number(item.salary_expectation).toLocaleString()} / ${esc(item.salary_period)} gross` : "Salary expectation not supplied (earlier application)"}</p>${(item.screening_answers || []).map(answer => `<details><summary>${esc(answer.question)}</summary><p>${esc(answer.answer)}</p></details>`).join("")}<div class="hr-row-actions"><button data-candidate-cv="${esc(item.cv_storage_path)}">CV</button><button data-interview-candidate="${item.id}">Interview</button></div><select data-candidate-stage="${item.id}" aria-label="Stage for ${esc(item.full_name)}">${STAGES.map(stage => `<option ${stage === item.stage ? "selected" : ""}>${stage}</option>`).join("")}</select></article>`;
+      return `<article class="candidate-card"><strong>${esc(item.full_name)}</strong><small><span class="candidate-vacancy-label">${esc(job?.title || "Vacancy details unavailable")}</span><br>${esc(item.email)} · ${esc(item.phone)}</small><p class="candidate-salary">${item.salary_expectation != null ? `${esc(item.salary_currency)} ${Number(item.salary_expectation).toLocaleString()} / ${esc(item.salary_period)} gross` : "Salary expectation not supplied (earlier application)"}</p>${(item.screening_answers || []).map(answer => `<details><summary>${esc(answer.question)}</summary><p>${esc(answer.answer)}</p></details>`).join("")}<div class="hr-row-actions"><button data-candidate-cv="${esc(item.cv_storage_path)}">CV</button><button data-interview-candidate="${item.id}">Interview</button></div><div class="candidate-review-line"><span class="status-pill">${esc(item.stage)}</span><span>${item.assigned_reviewer ? item.assigned_reviewer === profile()?.id ? "Assigned to you" : "Reviewer assigned" : "Unassigned"}</span></div><button class="secondary-button candidate-review-button" data-review-candidate="${esc(item.id)}">Review applicant</button></article>`;
     }).join("")}</section>`).join("");
   }
 
@@ -105,6 +105,7 @@
   document.getElementById("invite-user-button").addEventListener("click", () => { document.getElementById("invite-user-form").reset(); document.getElementById("invite-user-dialog").showModal(); });
   document.getElementById("candidate-search").addEventListener("input", renderCandidates);
   document.getElementById("candidate-vacancy-filter").addEventListener("change", renderCandidates);
+  document.getElementById("candidate-assigned-to-me").addEventListener("change", renderCandidates);
 
   function openInterview(applicationId = "") {
     const form = document.getElementById("interview-form"); form.reset();
@@ -141,18 +142,13 @@
     catch (e) { error.textContent = e.message || "User could not be invited."; }
   });
 
-  document.addEventListener("change", async event => {
-    if (event.target.matches("[data-candidate-stage]")) {
-      try { await window.CAGE_BACKEND.updateApplicationStage(event.target.dataset.candidateStage, event.target.value); showToast("Candidate stage updated."); await load(); }
-      catch (e) { showToast(e.message || "Stage could not be changed."); }
-    }
-  });
   document.addEventListener("click", event => {
     const applicants = event.target.closest("[data-view-applicants]");
     if (applicants) {
       const select = document.getElementById("candidate-vacancy-filter");
       select.value = applicants.dataset.viewApplicants;
       document.getElementById("candidate-search").value = "";
+      document.getElementById("candidate-assigned-to-me").checked = false;
       renderCandidates(); select.scrollIntoView({ block: "center" }); select.focus({preventScroll:true});
     }
     const vacancy = event.target.closest("[data-edit-vacancy],[data-duplicate-vacancy]");
@@ -174,5 +170,5 @@
   });
 
   window.addEventListener("cage:session-ready", () => load(isAdmin()));
-  window.CAGE_HR_UI = { load, render };
+  window.CAGE_HR_UI = { load, render, application: id => canHR() ? hrData.applications.find(item => item.id === id) : null };
 })();
