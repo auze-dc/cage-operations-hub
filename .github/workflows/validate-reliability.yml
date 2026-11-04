@@ -42,6 +42,8 @@ jobs:
           NODE_PATH="$CAGE_TEST_MODULES" node validation/hr-vacancy-filter.cjs
           node validation/vacancy-api.mjs
           node validation/vacancy-schema.mjs
+          node validation/recruitment-reviews.mjs
+          NODE_PATH="$CAGE_TEST_MODULES" node validation/recruitment-reviews-ui.cjs
 
       - name: Verify source export after ZIP dependency update
         run: |

@@ -1210,6 +1210,8 @@
     managedRecords, deleteManagedRecord, deletionReceipts, retryFileCleanup,
     projectFiles, projectFilesNotice, refreshProjectFiles, uploadFile,
     openFile,
+    applicationReviewRead: async (id,before=null) => { const r=await client.rpc('application_review_read',{p_application:id,p_before:before}).abortSignal(AbortSignal.timeout(20000)); if(r.error)throw r.error; return r.data; },
+    applicationReviewWrite: async payload => { const r=await client.rpc('application_review_write',payload).abortSignal(AbortSignal.timeout(25000)); if(r.error)throw r.error; return r.data; },
     loadHR,
     createJob,
     updateApplicationStage,
