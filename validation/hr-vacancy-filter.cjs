@@ -23,5 +23,21 @@ const section=[...board.querySelectorAll('.candidate-column')].find(x=>x.querySe
 assert(section);assert.match(section.textContent,/Candidate Two/);assert(!section.querySelector('[data-interview-candidate]'));assert(section.querySelector('[data-review-candidate]'));assert(section.querySelector('[data-candidate-cv]'));
 assert.equal(d.getElementById('hr-nav-count').textContent,'3');assert(board.querySelector('[data-not-shortlisted="one"]'));
 assert(![...board.querySelectorAll('.candidate-column')].find(x=>x.querySelector('h4').textContent.startsWith('Decision')).textContent.includes('Candidate Two'));
+// Pointer fixtures exercise real event handlers without writing live records.
+let moves=[];w.CAGE_RECRUITMENT_REVIEWS={open:(...args)=>moves.push(args)};
+const handle=board.querySelector('[data-move-candidate="one"]');
+const column=title=>[...board.querySelectorAll('.candidate-column')].find(x=>x.querySelector('h4').textContent.startsWith(title));
+let hit=column('Screening');d.elementFromPoint=()=>hit;
+const pointer=(type,x=100,y=100)=>{const e=new w.Event(type,{bubbles:true,cancelable:true});Object.assign(e,{pointerId:7,button:0,isPrimary:true,clientX:x,clientY:y});handle.dispatchEvent(e)};
+pointer('pointerdown',10,10);pointer('pointermove');assert(hit.classList.contains('candidate-drop-target'));pointer('pointerup');
+assert.equal(moves.length,1);assert.equal(moves[0][0],'one');assert.equal(moves[0][2],'Screening');assert.equal(applications[0].stage,'New');assert(!board.querySelector('.candidate-drop-target'));
+hit=column('Not Shortlisted');pointer('pointerdown',10,10);pointer('pointermove');pointer('pointerup');assert.equal(moves.at(-1)[2],'Rejected');
+hit=column('Decision');pointer('pointerdown',10,10);pointer('pointermove');pointer('pointerup');assert.equal(moves.at(-1)[2],'Offer');
+const savedMoves=moves.length;hit=column('New');pointer('pointerdown',10,10);pointer('pointermove');pointer('pointerup');assert.equal(moves.length,savedMoves);
+hit=null;pointer('pointerdown',10,10);pointer('pointermove');pointer('pointerup');assert.equal(moves.length,savedMoves);
+hit=column('Interview');pointer('pointerdown',10,10);pointer('pointermove');pointer('pointercancel');pointer('pointerup');assert.equal(moves.length,savedMoves);assert(!board.querySelector('.candidate-dragging'));
+pointer('pointerdown',10,10);pointer('pointermove');d.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape'}));pointer('pointerup');assert.equal(moves.length,savedMoves);
+handle.click();assert.equal(moves.at(-1)[2],'New');assert.equal(moves.length,savedMoves+1);
+role='member';pointer('pointerdown',10,10);pointer('pointermove');pointer('pointerup');handle.click();assert.equal(moves.length,savedMoves+1);
 assert.equal(writes,0);role='member';w.CAGE_HR_UI.render();assert.equal(board.innerHTML,'');dom.window.close();console.log('PASS: vacancy counts, isolated candidate pipelines, combined name search, one-click vacancy selection, incoming applications and retained selection, empty/all states, escaped job titles, direct advert links and no writes.');
 })().catch(e=>{console.error(e);process.exitCode=1});

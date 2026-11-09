@@ -1398,3 +1398,10 @@ td { padding: 15px 12px; border-top: 1px solid var(--line-soft); color: #314753;
   .report-layout { display: block; }
   .report-paper { border: 0; box-shadow: none; }
 }
+
+/* Recruitment moves work with a mouse, touch, or keyboard. */
+.candidate-drag-handle { display: block; margin: 0 0 8px auto; padding: 5px 9px; border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--muted); cursor: grab; touch-action: none; user-select: none; }
+.candidate-drag-handle:focus-visible { outline: 3px solid #00ADEF; outline-offset: 2px; }
+.candidate-dragging { opacity: .6; outline: 2px solid #00ADEF; }
+.candidate-dragging .candidate-drag-handle { cursor: grabbing; }
+.candidate-column.candidate-drop-target { outline: 3px solid #00ADEF; outline-offset: -3px; background: #def5ff; }
