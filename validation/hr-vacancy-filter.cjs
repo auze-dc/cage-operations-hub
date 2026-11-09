@@ -18,5 +18,10 @@ applications.push({id:'four',job_opening_id:'gis',full_name:'Candidate Four',ema
 search.value='no-match';search.dispatchEvent(new w.Event('input'));assert.match(board.textContent,/No applications match/);search.value='';search.dispatchEvent(new w.Event('input'));filter.value='';filter.dispatchEvent(new w.Event('change'));assert.equal(board.querySelectorAll('.candidate-card').length,4);
 assert.equal(d.querySelector('[data-view-applicants="sales"]').textContent,'View applicants (2)');assert.equal(d.querySelector('.vacancy-advert-link').getAttribute('href'),'./careers#role-sales');
 const own=d.getElementById('candidate-assigned-to-me');own.checked=true;own.dispatchEvent(new w.Event('change'));assert.equal(board.querySelectorAll('.candidate-card').length,1);d.querySelector('[data-view-applicants="gis"]').click();assert.equal(own.checked,false);assert.equal(board.querySelectorAll('.candidate-card').length,2);
+filter.value='';own.checked=false;search.value='';applications[1].stage='Rejected';await w.CAGE_HR_UI.load();
+const section=[...board.querySelectorAll('.candidate-column')].find(x=>x.querySelector('h4').textContent==='Not Shortlisted · 1');
+assert(section);assert.match(section.textContent,/Candidate Two/);assert(!section.querySelector('[data-interview-candidate]'));assert(section.querySelector('[data-review-candidate]'));assert(section.querySelector('[data-candidate-cv]'));
+assert.equal(d.getElementById('hr-nav-count').textContent,'3');assert(board.querySelector('[data-not-shortlisted="one"]'));
+assert(![...board.querySelectorAll('.candidate-column')].find(x=>x.querySelector('h4').textContent.startsWith('Decision')).textContent.includes('Candidate Two'));
 assert.equal(writes,0);role='member';w.CAGE_HR_UI.render();assert.equal(board.innerHTML,'');dom.window.close();console.log('PASS: vacancy counts, isolated candidate pipelines, combined name search, one-click vacancy selection, incoming applications and retained selection, empty/all states, escaped job titles, direct advert links and no writes.');
 })().catch(e=>{console.error(e);process.exitCode=1});

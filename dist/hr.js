@@ -1,6 +1,7 @@
 (function () {
   "use strict";
   const STAGES = ["New", "Screening", "Shortlisted", "Interview", "Reference checks", "Offer", "Hired", "Rejected", "Withdrawn"];
+  const stageLabel = stage => stage === "Rejected" ? "Not Shortlisted" : stage;
   const ROLE_LABELS = { admin: "Administrator", manager: "Manager", hr: "HR", finance: "Finance", member: "Member", viewer: "Viewer", shared: "Shared account" };
   let hrData = { jobs: [], applications: [], interviews: [], employeeProfile: null, documents: [] };
   let adminData = [];
@@ -65,11 +66,11 @@
     if (!candidates.length) { target.innerHTML = '<div class="empty-state candidate-filter-empty"><p>No applications match this view. Choose All vacancies or clear your search to see more applicants.</p></div>'; return; }
     const columns = [
       ["New", ["New"]], ["Screening", ["Screening"]], ["Shortlisted", ["Shortlisted"]],
-      ["Interview", ["Interview", "Reference checks"]], ["Decision", ["Offer", "Hired", "Rejected", "Withdrawn"]]
+      ["Interview", ["Interview", "Reference checks"]], ["Decision", ["Offer", "Hired", "Withdrawn"]], ["Not Shortlisted", ["Rejected"]]
     ];
     target.innerHTML = columns.map(([title, stages]) => `<section class="candidate-column"><h4>${title} · ${candidates.filter(item => stages.includes(item.stage)).length}</h4>${candidates.filter(item => stages.includes(item.stage)).map(item => {
       const job = hrData.jobs.find(job => job.id === item.job_opening_id);
-      return `<article class="candidate-card"><strong>${esc(item.full_name)}</strong><small><span class="candidate-vacancy-label">${esc(job?.title || "Vacancy details unavailable")}</span><br>${esc(item.email)} · ${esc(item.phone)}</small><p class="candidate-salary">${item.salary_expectation != null ? `${esc(item.salary_currency)} ${Number(item.salary_expectation).toLocaleString()} / ${esc(item.salary_period)} gross` : "Salary expectation not supplied (earlier application)"}</p>${(item.screening_answers || []).map(answer => `<details><summary>${esc(answer.question)}</summary><p>${esc(answer.answer)}</p></details>`).join("")}<div class="hr-row-actions"><button data-candidate-cv="${esc(item.cv_storage_path)}">CV</button><button data-interview-candidate="${item.id}">Interview</button></div><div class="candidate-review-line"><span class="status-pill">${esc(item.stage)}</span><span>${item.assigned_reviewer ? item.assigned_reviewer === profile()?.id ? "Assigned to you" : "Reviewer assigned" : "Unassigned"}</span></div><button class="secondary-button candidate-review-button" data-review-candidate="${esc(item.id)}">Review applicant</button></article>`;
+      return `<article class="candidate-card"><strong>${esc(item.full_name)}</strong><small><span class="candidate-vacancy-label">${esc(job?.title || "Vacancy details unavailable")}</span><br>${esc(item.email)} · ${esc(item.phone)}</small><p class="candidate-salary">${item.salary_expectation != null ? `${esc(item.salary_currency)} ${Number(item.salary_expectation).toLocaleString()} / ${esc(item.salary_period)} gross` : "Salary expectation not supplied (earlier application)"}</p>${(item.screening_answers || []).map(answer => `<details><summary>${esc(answer.question)}</summary><p>${esc(answer.answer)}</p></details>`).join("")}<div class="hr-row-actions"><button data-candidate-cv="${esc(item.cv_storage_path)}">CV</button>${!["Hired", "Rejected", "Withdrawn"].includes(item.stage) ? `<button data-interview-candidate="${item.id}">Interview</button><button data-not-shortlisted="${esc(item.id)}">Not Shortlisted</button>` : ""}</div><div class="candidate-review-line"><span class="status-pill">${esc(stageLabel(item.stage))}</span><span>${item.assigned_reviewer ? item.assigned_reviewer === profile()?.id ? "Assigned to you" : "Reviewer assigned" : "Unassigned"}</span></div><button class="secondary-button candidate-review-button" data-review-candidate="${esc(item.id)}">Review applicant</button></article>`;
     }).join("")}</section>`).join("");
   }
 
