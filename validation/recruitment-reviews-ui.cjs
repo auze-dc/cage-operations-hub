@@ -15,6 +15,12 @@ change('action','assessment');change('notes','Evidence for scorecard.');await su
 change('action','stage');change('stage','Shortlisted');await submit();assert.equal(writes.length,3);change('notes','Meets essential role requirements.');await submit();assert.equal(writes[3].p_stage,'Shortlisted');assert.equal(context.application.stage,'Shortlisted');assert.equal(d.getElementById('review-current').textContent.includes('Shortlisted'),true);
 change('action','assignment');change('reviewer','reviewer');await submit();assert.equal(writes[4].p_reviewer,'reviewer');
 change('action','note');change('notes','Keep this draft through reload.');failRead=true;d.getElementById('review-reload').click();await tick();assert.equal(f.elements.notes.value,'Keep this draft through reload.');assert.match(d.getElementById('review-error').textContent,/History unavailable/);failRead=false;
+// A screening decision uses the existing audited stage action and requires a reason.
+const decline=d.createElement('button');decline.dataset.notShortlisted='app';d.body.append(decline);decline.click();await tick();
+assert.equal(f.elements.action.value,'stage');assert.equal(f.elements.stage.value,'Rejected');assert.equal(f.elements.stage.selectedOptions[0].textContent,'Not Shortlisted');
+const beforeDecline=writes.length;await submit();assert.equal(writes.length,beforeDecline);
+change('notes','CV does not demonstrate the essential GIS experience.');await submit();assert.equal(context.application.stage,'Rejected');assert.match(d.getElementById('review-current').textContent,/Not Shortlisted/);assert.match(d.getElementById('review-history').textContent,/New → Not Shortlisted/);
+change('stage','Screening');change('notes','Reconsider after receiving further evidence.');await submit();assert.equal(context.application.stage,'Screening');
 w.dispatchEvent(new w.CustomEvent('cage:session-ended'));assert(!dialog.open);assert.equal(d.getElementById('review-history').textContent,'');assert.equal(f.elements.notes.value,'');
 context.can_edit=false;await w.CAGE_RECRUITMENT_REVIEWS.open('app',d.querySelector('[data-review-candidate]'));assert.equal(d.getElementById('review-save').disabled,true);const count=writes.length;await submit();assert.equal(writes.length,count);
 dom.window.close();console.log('PASS: escaped private review display, required notes/scores/decisions, stable retry request, saved history, assignment, reload failure recovery, no browser persistence, sign-out cleanup and read-only controls.');
