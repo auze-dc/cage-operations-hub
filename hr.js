@@ -56,6 +56,7 @@
   }
 
   function renderCandidates() {
+    clearCandidateDrag();
     const target = document.getElementById("candidate-board");
     if (!canHR()) { target.innerHTML = ""; return; }
     const query = document.getElementById("candidate-search").value.trim().toLowerCase();
@@ -68,11 +69,69 @@
       ["New", ["New"]], ["Screening", ["Screening"]], ["Shortlisted", ["Shortlisted"]],
       ["Interview", ["Interview", "Reference checks"]], ["Decision", ["Offer", "Hired", "Withdrawn"]], ["Not Shortlisted", ["Rejected"]]
     ];
-    target.innerHTML = columns.map(([title, stages]) => `<section class="candidate-column"><h4>${title} · ${candidates.filter(item => stages.includes(item.stage)).length}</h4>${candidates.filter(item => stages.includes(item.stage)).map(item => {
+    target.innerHTML = columns.map(([title, stages]) => `<section class="candidate-column" data-candidate-stages="${stages.join("|")}" aria-label="${esc(title)}"><h4>${title} · ${candidates.filter(item => stages.includes(item.stage)).length}</h4>${candidates.filter(item => stages.includes(item.stage)).map(item => {
       const job = hrData.jobs.find(job => job.id === item.job_opening_id);
-      return `<article class="candidate-card"><strong>${esc(item.full_name)}</strong><small><span class="candidate-vacancy-label">${esc(job?.title || "Vacancy details unavailable")}</span><br>${esc(item.email)} · ${esc(item.phone)}</small><p class="candidate-salary">${item.salary_expectation != null ? `${esc(item.salary_currency)} ${Number(item.salary_expectation).toLocaleString()} / ${esc(item.salary_period)} gross` : "Salary expectation not supplied (earlier application)"}</p>${(item.screening_answers || []).map(answer => `<details><summary>${esc(answer.question)}</summary><p>${esc(answer.answer)}</p></details>`).join("")}<div class="hr-row-actions"><button data-candidate-cv="${esc(item.cv_storage_path)}">CV</button>${!["Hired", "Rejected", "Withdrawn"].includes(item.stage) ? `<button data-interview-candidate="${item.id}">Interview</button><button data-not-shortlisted="${esc(item.id)}">Not Shortlisted</button>` : ""}</div><div class="candidate-review-line"><span class="status-pill">${esc(stageLabel(item.stage))}</span><span>${item.assigned_reviewer ? item.assigned_reviewer === profile()?.id ? "Assigned to you" : "Reviewer assigned" : "Unassigned"}</span></div><button class="secondary-button candidate-review-button" data-review-candidate="${esc(item.id)}">Review applicant</button></article>`;
+      return `<article class="candidate-card" data-candidate-id="${esc(item.id)}"><button type="button" class="candidate-drag-handle" data-move-candidate="${esc(item.id)}" aria-label="Move ${esc(item.full_name)} to another recruitment section" title="Drag to another section, or click to choose a stage">⠿ Move</button><strong>${esc(item.full_name)}</strong><small><span class="candidate-vacancy-label">${esc(job?.title || "Vacancy details unavailable")}</span><br>${esc(item.email)} · ${esc(item.phone)}</small><p class="candidate-salary">${item.salary_expectation != null ? `${esc(item.salary_currency)} ${Number(item.salary_expectation).toLocaleString()} / ${esc(item.salary_period)} gross` : "Salary expectation not supplied (earlier application)"}</p>${(item.screening_answers || []).map(answer => `<details><summary>${esc(answer.question)}</summary><p>${esc(answer.answer)}</p></details>`).join("")}<div class="hr-row-actions"><button data-candidate-cv="${esc(item.cv_storage_path)}">CV</button>${!["Hired", "Rejected", "Withdrawn"].includes(item.stage) ? `<button data-interview-candidate="${item.id}">Interview</button><button data-not-shortlisted="${esc(item.id)}">Not Shortlisted</button>` : ""}</div><div class="candidate-review-line"><span class="status-pill">${esc(stageLabel(item.stage))}</span><span>${item.assigned_reviewer ? item.assigned_reviewer === profile()?.id ? "Assigned to you" : "Reviewer assigned" : "Unassigned"}</span></div><button class="secondary-button candidate-review-button" data-review-candidate="${esc(item.id)}">Review applicant</button></article>`;
     }).join("")}</section>`).join("");
   }
+
+  // Dragging prepares an audited decision; only Save review changes the record.
+  let candidateDrag = null;
+  const candidateBoard = document.getElementById("candidate-board");
+  function clearCandidateDrag() {
+    if (!candidateDrag) return;
+    const drag = candidateDrag; candidateDrag = null;
+    drag.card.classList.remove("candidate-dragging");
+    drag.handle.setAttribute("aria-pressed", "false");
+    candidateBoard.querySelectorAll(".candidate-drop-target").forEach(el => el.classList.remove("candidate-drop-target"));
+    if (drag.handle.hasPointerCapture?.(drag.pointerId)) drag.handle.releasePointerCapture(drag.pointerId);
+  }
+  function dropColumn(event) {
+    const column = document.elementFromPoint(event.clientX, event.clientY)?.closest("[data-candidate-stages]");
+    return column && candidateBoard.contains(column) ? column : null;
+  }
+  candidateBoard.addEventListener("pointerdown", event => {
+    const handle = event.target.closest("[data-move-candidate]");
+    if (!handle || event.button !== 0 || event.isPrimary === false || !canHR()) return;
+    clearCandidateDrag();
+    candidateDrag = { handle, card: handle.closest(".candidate-card"), id: handle.dataset.moveCandidate, pointerId: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
+    handle.setPointerCapture?.(event.pointerId);
+  });
+  candidateBoard.addEventListener("pointermove", event => {
+    const drag = candidateDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    if (!drag.moved && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 6) return;
+    drag.moved = true; event.preventDefault();
+    drag.card.classList.add("candidate-dragging");drag.handle.setAttribute("aria-pressed", "true");
+    const column = dropColumn(event);
+    candidateBoard.querySelectorAll("[data-candidate-stages]").forEach(el => el.classList.toggle("candidate-drop-target", el === column && el !== drag.card.closest(".candidate-column")));
+    // Scroll the board near either edge so all sections remain reachable.
+    const bounds = candidateBoard.getBoundingClientRect();
+    if (event.clientX > bounds.right - 48) candidateBoard.scrollLeft += 24;
+    else if (event.clientX < bounds.left + 48) candidateBoard.scrollLeft -= 24;
+  });
+  candidateBoard.addEventListener("pointerup", event => {
+    const drag = candidateDrag;if (!drag || event.pointerId !== drag.pointerId) return;
+    const column = drag.moved ? dropColumn(event) : null;
+    const stages = column?.dataset.candidateStages.split("|");
+    const application = hrData.applications.find(item => item.id === drag.id);
+    clearCandidateDrag();
+    if (!canHR() || !application) return;
+    if (!drag.moved) { window.CAGE_RECRUITMENT_REVIEWS?.open(drag.id, drag.handle, application.stage); return; }
+    if (stages && !stages.includes(application.stage)) window.CAGE_RECRUITMENT_REVIEWS?.open(drag.id, drag.handle, stages[0]);
+  });
+  candidateBoard.addEventListener("pointercancel", clearCandidateDrag);
+  candidateBoard.addEventListener("lostpointercapture", clearCandidateDrag);
+  candidateBoard.addEventListener("click", event => {
+    const handle = event.target.closest("[data-move-candidate]");
+    // Keyboard and assistive technology clicks have no preceding pointerup.
+    if (handle && event.detail === 0 && canHR()) {
+      const application = hrData.applications.find(item => item.id === handle.dataset.moveCandidate);
+      if (application) window.CAGE_RECRUITMENT_REVIEWS?.open(application.id, handle, application.stage);
+    }
+  });
+  document.addEventListener("keydown", event => { if (event.key === "Escape") clearCandidateDrag(); });
+  window.addEventListener("cage:session-ended", clearCandidateDrag);
 
   function renderAdmin() {
     const target = document.getElementById("admin-user-list");
