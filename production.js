@@ -820,6 +820,10 @@
       throw new Error(message);
     }
     if (!result.data?.ok) throw new Error(result.data?.error || "User administration failed.");
+    if (action === "invite" || action === "update") {
+      try { await loadWorkspace(); }
+      catch { showBanner("Staff account saved. The team list will refresh when the connection recovers.", "error"); }
+    }
     return result.data;
   }
 
