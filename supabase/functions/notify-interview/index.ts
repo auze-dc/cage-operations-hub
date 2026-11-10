@@ -30,5 +30,10 @@ Deno.serve(async req => {
     subject: `Interview invitation — ${job.data?.title || "CAGE opportunity"}`,
     html: `<div style="font-family:Arial,sans-serif;max-width:650px;margin:auto"><h2 style="color:#071724">Interview invitation</h2><p>Dear ${esc(application.data.full_name)},</p><p>Thank you for your application for <strong>${esc(job.data?.title || "the CAGE vacancy")}</strong>. We would like to invite you to an interview.</p><p><strong>Date and time:</strong> ${esc(start)}<br><strong>Format:</strong> ${esc(interview.data.format)}<br><strong>Location/link:</strong> ${esc(interview.data.location_or_link)}</p><p>Please reply to confirm your availability.</p><p>Kind regards,<br>CAGE HR</p></div>`
   }) });
-  return response.ok ? json({ ok: true, emailSent: true }) : json({ ok: true, emailSent: false, warning: "Interview saved but email delivery failed" });
+  if (!response.ok) return json({ ok: true, emailSent: false, warning: "Interview saved but email delivery failed" });
+  const snapshot = await service.from("interviews").update({
+    invitation_sent_at: new Date().toISOString(), invitation_recipient: application.data.email,
+    invitation_location: interview.data.location_or_link
+  }).eq("id", interviewId).eq("organization_id", caller.data.organization_id);
+  return json({ ok: true, emailSent: true, warning: snapshot.error ? "Invitation sent, but the invitation record could not be saved." : "" });
 });
