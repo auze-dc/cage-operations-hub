@@ -48,3 +48,7 @@ verify_jwt = true
 
 [functions.quote-response]
 verify_jwt = false
+
+# Applicant capability links; separate one-way token for the approximate open signal.
+[functions.interview-response]
+verify_jwt = false
