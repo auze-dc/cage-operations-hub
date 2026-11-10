@@ -594,7 +594,7 @@ function loadState() {
       ...parsed,
       team: (() => {
         const savedTeam = Array.isArray(parsed.team) ? parsed.team : [];
-        return seedData.team.map(account => ({
+        return productionMode ? savedTeam : seedData.team.map(account => ({
           ...(savedTeam.find(member => member.id === account.id) || {}),
           ...account
         }));
@@ -682,7 +682,7 @@ function teamMember(id) {
 }
 
 function assignableTeam() {
-  return state.team.filter(member => member.assignable !== false);
+  return state.team.filter(member => member.active !== false && member.assignable !== false);
 }
 
 function projectById(id) {
@@ -2355,6 +2355,26 @@ function insertChatMention(memberId) {
   input.focus();
 }
 
+function refreshNewChatMembers() {
+  const dialog = document.getElementById("new-chat-dialog");
+  if (!dialog) return;
+  const form = document.getElementById("new-chat-form"), target = document.getElementById("new-chat-members");
+  const selected = new Set([...target.querySelectorAll('input[name="member"]:checked')].map(input => input.value));
+  const mode = form.elements.mode.value;
+  const current = window.CAGE_BACKEND?.currentMemberId?.() || "alexander";
+  const focused = target.contains(document.activeElement) ? document.activeElement.value : null;
+  const scroll = target.scrollTop;
+  const members = assignableTeam().filter(member => member.id !== current);
+  const signature = JSON.stringify([mode, current, members.map(member => [member.id, member.name, member.initials, member.role, member.email])]);
+  if (target.dataset.directory === signature) return;
+  const html = members.map(member => `<label class="chat-member-choice"><input type="${mode === "direct" ? "radio" : "checkbox"}" name="member" value="${escapeHtml(member.id)}" ${selected.has(member.id) ? "checked" : ""}><span class="owner-avatar">${escapeHtml(member.initials)}</span><span><strong>${escapeHtml(member.name)}</strong><small>${escapeHtml(member.role || member.email || "CAGE staff")}</small></span></label>`).join("");
+  if (target.innerHTML !== html) {
+    target.innerHTML = html; target.dataset.directory = signature; target.scrollTop = scroll;
+    if (focused) [...target.querySelectorAll('input[name="member"]')].find(input => input.value === focused)?.focus({preventScroll:true});
+  }
+}
+window.addEventListener("cage:messages-loaded", () => { if (document.getElementById("new-chat-dialog")?.open) refreshNewChatMembers(); });
+
 function openNewChatDialog(mode) {
   if (window.CAGE_BACKEND?.moduleLevel?.("chat") !== "edit") return showToast("You need chat edit access to start a conversation.");
   let dialog = document.getElementById("new-chat-dialog");
@@ -2398,8 +2418,9 @@ function openNewChatDialog(mode) {
   document.getElementById("new-chat-title").textContent = mode === "direct" ? "Message a staff member" : "Create a staff group";
   document.getElementById("chat-group-name-field").hidden = mode === "direct";
   document.getElementById("new-chat-members-label").textContent = mode === "direct" ? "Who do you want to message?" : "Who should be in this group?";
-  const current = window.CAGE_BACKEND?.currentMemberId?.() || "alexander";
-  document.getElementById("new-chat-members").innerHTML = assignableTeam().filter(member => member.id !== current).map(member => `<label class="chat-member-choice"><input type="${mode === "direct" ? "radio" : "checkbox"}" name="member" value="${escapeHtml(member.id)}"><span class="owner-avatar">${escapeHtml(member.initials)}</span><span><strong>${escapeHtml(member.name)}</strong><small>${escapeHtml(member.role || member.email || "CAGE staff")}</small></span></label>`).join("");
+  document.getElementById("new-chat-members").innerHTML = "";
+  delete document.getElementById("new-chat-members").dataset.directory;
+  refreshNewChatMembers();
   document.getElementById("new-chat-error").textContent = "";
   dialog.showModal();
 }

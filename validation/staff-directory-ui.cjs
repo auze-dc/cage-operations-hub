@@ -1,0 +1,30 @@
+const fs=require('node:fs'),assert=require('node:assert/strict'),vm=require('node:vm'),{JSDOM}=require('jsdom');
+(async()=>{
+ const source=fs.readFileSync('dist/app.js','utf8');
+ const dom=new JSDOM('<!doctype html><body></body>',{url:'https://hub.example.test',runScripts:'outside-only'}),w=dom.window,d=w.document;
+ w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};
+ w.CAGE_CONFIG={mode:'production'};w.CAGE_BACKEND={currentMemberId:()=> 'admin',moduleLevel:()=> 'edit'};
+ w.state={team:[{id:'admin',name:'Administrator',initials:'AM'},{id:'existing',name:'Existing staff',initials:'ES'}],chatGroups:[]};w.showToast=message=>{throw Error(message)};
+ w.escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ w.eval(source.slice(source.indexOf('function assignableTeam()'),source.indexOf('function projectById')));
+ w.eval(source.slice(source.indexOf('function refreshNewChatMembers()'),source.indexOf('function renderLeave()')));
+ w.openNewChatDialog('group');const form=d.getElementById('new-chat-form'),target=d.getElementById('new-chat-members');
+ form.elements.groupName.value='Field team';target.querySelector('input[value="existing"]').checked=true;target.querySelector('input[value="existing"]').focus();
+ const before=target.querySelector('input');w.dispatchEvent(new w.CustomEvent('cage:messages-loaded'));assert.equal(target.querySelector('input'),before,'unchanged directory retains live controls');
+ w.state.team.push({id:'new',name:'New <img src=x> staff',initials:'NS'});w.dispatchEvent(new w.CustomEvent('cage:messages-loaded'));assert(target.querySelector('input[value="new"]'));assert.equal(target.querySelector('input[value="existing"]').checked,true);assert.equal(form.elements.groupName.value,'Field team');assert.equal(d.activeElement.value,'existing');assert.equal(target.querySelectorAll('img').length,0);
+ w.state.team.find(p=>p.id==='new').name='Renamed staff';w.dispatchEvent(new w.CustomEvent('cage:messages-loaded'));assert.match(target.textContent,/Renamed staff/);
+ w.state.team.find(p=>p.id==='existing').active=false;w.dispatchEvent(new w.CustomEvent('cage:messages-loaded'));assert(!target.querySelector('input[value="existing"]'));
+ w.state.team.push({id:'shared',name:'Shared account',initials:'SA',assignable:false});w.dispatchEvent(new w.CustomEvent('cage:messages-loaded'));assert(!target.querySelector('input[value="shared"]'));
+ d.getElementById('new-chat-dialog').close();w.openNewChatDialog('direct');assert.equal(target.querySelector('input[value="new"]').type,'radio');assert(!target.querySelector('input[value="admin"]'));
+ // Cached production state must retain people who were not in the original seed list.
+ const keys=['projects','commercialRecords','requests','approvals','tasks','contacts','deals','events','invoices','expenses','boardLists','quotes','leaveRequests','knowledge','chatGroups','messages','missions','assets','compliance','requestPurposes','opportunityMatches'];
+ const seed=Object.fromEntries(keys.map(key=>[key,[]]));seed.team=[{id:'admin',name:'Seed administrator'}];seed.opportunityMonitor={sources:[],coverage:[]};seed.settings={};
+ w.seedData=seed;w.clone=value=>w.JSON.parse(w.JSON.stringify(value));w.STORAGE_KEY='fixture-cache';w.CORE_REQUEST_PURPOSES=[];w.localStorage.setItem(w.STORAGE_KEY,JSON.stringify({...seed,team:w.state.team}));
+ w.eval(source.slice(source.indexOf('function loadState()'),source.indexOf('function saveState()')));assert(w.loadState().team.some(person=>person.id==='new'));
+ dom.window.close();
+ const backend=fs.readFileSync('dist/production.js','utf8');let refreshed=0,warnings=0;const ctx=vm.createContext({client:{functions:{invoke:async()=>({data:{ok:true}})}},loadWorkspace:async()=>{refreshed++},showBanner:()=>warnings++});
+ vm.runInContext(backend.slice(backend.indexOf('  async function adminUsers('),backend.indexOf('  async function loadTraining(')),ctx);
+ await vm.runInContext("adminUsers('invite')",ctx);await vm.runInContext("adminUsers('update')",ctx);await vm.runInContext("adminUsers('list')",ctx);assert.equal(refreshed,2);
+ ctx.loadWorkspace=async()=>{throw Error('Offline')};assert.equal((await vm.runInContext("adminUsers('invite')",ctx)).ok,true);assert.equal(warnings,1,'a completed invitation must not be reported as failed if only the roster refresh failed');
+ console.log('PASS staff UI: new staff and renames in open DM/group pickers, preserved group name/selection/focus, inactive/shared exclusions, escaped names, production cache retention and post-administration refresh without duplicate-invite errors.');
+})().catch(e=>{console.error(e);process.exitCode=1});
