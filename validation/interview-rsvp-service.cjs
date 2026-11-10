@@ -1,0 +1,25 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),{webcrypto}=require('node:crypto'),{transformSync}=require('esbuild');
+const compile=path=>transformSync(fs.readFileSync(path,'utf8').replace(/^import .*;\n/gm,''),{loader:'ts',format:'cjs'}).code;
+(async()=>{
+ let handler,authorized=true,accept=true,prepareError=false,recordError=false;const emails=[],calls=[];
+ const meeting={id:'meeting',application_id:'app',format:'Video',scheduled_start:'2026-11-10T08:00:00Z',location_or_link:'https://meet.example.test/original?a=1&b=2'};
+ const prepared={id:'invitation',candidate_name:'Fixture Applicant',vacancy_title:'GIS role',...meeting};
+ const service={from:table=>{const q={select:()=>q,eq:()=>q,single:async()=>({data:table==='profiles'?{role:'hr',active:true,organization_id:'org'}:table==='interviews'?meeting:table==='job_applications'?{full_name:'Fixture Applicant',email:'fixture@example.test',job_opening_id:'job'}:{title:'GIS role'}})};return q;},rpc:async(name,payload)=>{calls.push({name,payload});return name==='interview_invitation_prepare'?{data:prepared,error:prepareError?{message:'Unavailable'}:null}:{data:{ok:true},error:recordError?{message:'Offline'}:null}}};
+ const caller={auth:{getUser:async()=>({data:{user:authorized?{id:'author'}:null}})}};
+ vm.runInNewContext(compile('supabase/functions/notify-interview/index.ts'),{Deno:{serve:fn=>handler=fn,env:{get:key=>({SUPABASE_URL:'https://fixture.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'fixture-service',SUPABASE_ANON_KEY:'fixture-public',RESEND_API_KEY:'fixture-email',APP_URL:'https://hub.example.test'})[key]}},createClient:(_url,key)=>key==='fixture-service'?service:caller,assertStaffMfa:async()=>null,Response,URL,AbortSignal,TextEncoder,crypto:webcrypto,fetch:async(_url,options)=>{emails.push(JSON.parse(options.body));return new Response(JSON.stringify({id:'provider-fixture'}),{status:accept?200:400})},Date});
+ const request=()=>new Request('https://fixture.test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({interviewId:'meeting'})});
+ let result=await(await handler(request())).json();assert.equal(result.emailSent,true);assert.match(emails[0].html,/10:00/);assert.match(emails[0].html,/Accept or decline/);assert.match(emails[0].html,/original\?a=1&amp;b=2/);assert.match(emails[0].text,/\nInterview:/);
+ const link=new URL(emails[0].text.match(/https:\/\/hub\.example\.test\/interview-response[^\s]+/)[0]);const token=new URLSearchParams(link.hash.slice(1)).get('token');assert.match(token,/^[a-f0-9]{64}$/);const hash=Buffer.from(await webcrypto.subtle.digest('SHA-256',new TextEncoder().encode(token))).toString('hex');assert.equal(calls[0].payload.p_response_hash,hash);assert.notEqual(calls[0].payload.p_tracking_hash,hash);assert(!JSON.stringify(calls).includes(token));
+ accept=false;result=await(await handler(request())).json();assert.equal(result.emailSent,false);assert(calls.some(c=>c.payload.p_status==='failed'));
+ accept=true;recordError=true;result=await(await handler(request())).json();assert.equal(result.emailSent,true);assert.match(result.warning,/could not be activated/);
+ prepareError=true;let before=emails.length;await handler(request());assert.equal(emails.length,before);authorized=false;await handler(request());assert.equal(emails.length,before);
+ let publicHandler;const rpc=[];
+ vm.runInNewContext(compile('supabase/functions/interview-response/index.ts'),{Deno:{serve:fn=>publicHandler=fn,env:{get:()=> 'fixture'}},createClient:()=>({rpc:(name,payload)=>({abortSignal:async()=>{rpc.push(payload);return {data:{response:payload.p_response||'pending'}}}})}),Response,URL,Uint8Array,atob,AbortSignal,TextEncoder,crypto:webcrypto});
+ const post=body=>publicHandler(new Request('https://fixture.test',{method:'POST',body:JSON.stringify(body)}));
+ result=await post({token,action:'accepted'});assert.equal(result.status,400);assert.equal(rpc.length,0);
+ result=await post({token});assert.equal(result.status,200);assert.equal(rpc.at(-1).p_mode,'view');
+ result=await post({token,action:'accepted',confirmed:true,reason:'Thank you.'});assert.equal(result.status,200);assert.equal(rpc.at(-1).p_mode,'respond');assert.equal(rpc.at(-1).p_hash,hash);
+ result=await publicHandler(new Request('https://fixture.test?action=open&token='+token));assert.equal(result.headers.get('Content-Type'),'image/gif');assert.equal(rpc.at(-1).p_mode,'open');assert.equal(result.headers.get('Cache-Control'),'no-store');
+ before=rpc.length;await post({token:'invalid'});assert.equal(rpc.length,before);await publicHandler(new Request('https://fixture.test',{method:'HEAD'}));assert.equal(rpc.length,before);
+ console.log('PASS RSVP services: hashed independent tokens, explicit response CTA and private fragment, exact link/time, provider success/failure, tracking warnings, explicit confirmation, views/opens cannot respond, bounded input and no external emails.');
+})().catch(e=>{console.error(e);process.exitCode=1});

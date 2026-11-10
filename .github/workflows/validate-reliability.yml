@@ -46,7 +46,10 @@ jobs:
           NODE_PATH="$CAGE_TEST_MODULES" node validation/staff-directory-ui.cjs
           node validation/interview-panel.mjs
           NODE_PATH="$CAGE_TEST_MODULES" node validation/interview-panel-ui.cjs
-          node validation/interview-notification.cjs
+          node validation/interview-rsvp-service.cjs
+          node validation/interview-rsvp.mjs
+          NODE_PATH="$CAGE_TEST_MODULES" node validation/interview-rsvp-ui.cjs
+          NODE_PATH="$CAGE_TEST_MODULES" node validation/message-links.cjs
           node validation/recruitment-reviews.mjs
           NODE_PATH="$CAGE_TEST_MODULES" node validation/recruitment-reviews-ui.cjs
 

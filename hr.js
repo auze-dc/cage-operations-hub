@@ -237,6 +237,15 @@
     const file = event.target.closest("[data-open-hr-file]"); if (file) window.CAGE_BACKEND.openFile(file.dataset.openHrFile).catch(e => showToast(e.message));
   });
 
+  let refreshingInterviews=false;
+  async function refreshInterviews() {
+    if(refreshingInterviews||loading||!canHR()||!window.CAGE_BACKEND?.loadHR)return;
+    const uid=profile()?.id;refreshingInterviews=true;
+    try{const interviews=(await window.CAGE_BACKEND.loadHR()).interviews;if(!interviews||uid!==profile()?.id||!canHR())return;if(JSON.stringify(interviews)!==JSON.stringify(hrData.interviews)){hrData.interviews=interviews;renderInterviews();renderCandidates();}}
+    catch{/* Keep the current cards during a temporary failure; the next poll retries. */}
+    finally{refreshingInterviews=false;}
+  }
+  window.setInterval(()=>{if(!document.hidden&&typeof activeView!=='undefined'&&activeView==='hr')refreshInterviews();},30000);
   window.addEventListener("cage:session-ready", () => load(isAdmin()));
-  window.CAGE_HR_UI = { load, render, interviewsFor: id => { if(!canHR())return []; const meeting=hrData.interviews.find(item=>item.id===id);return meeting?hrData.interviews.filter(item=>item.application_id===meeting.application_id).sort((a,b)=>new Date(b.scheduled_start)-new Date(a.scheduled_start)):[]; }, application: id => canHR() ? hrData.applications.find(item => item.id === id) : null };
+  window.CAGE_HR_UI = { load, render, refreshInterviews, interviewsFor: id => { if(!canHR())return []; const meeting=hrData.interviews.find(item=>item.id===id);return meeting?hrData.interviews.filter(item=>item.application_id===meeting.application_id).sort((a,b)=>new Date(b.scheduled_start)-new Date(a.scheduled_start)):[]; }, application: id => canHR() ? hrData.applications.find(item => item.id === id) : null };
 })();
