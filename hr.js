@@ -43,7 +43,7 @@
     const upcoming = hrData.interviews.filter(item => new Date(item.scheduled_end) >= new Date()).slice(0, 8);
     target.innerHTML = upcoming.length ? upcoming.map(item => {
       const application = hrData.applications.find(app => app.id === item.application_id);
-      return `<div class="hr-list-row"><div><strong>${esc(application?.full_name || "Candidate")}</strong><span>${new Date(item.scheduled_start).toLocaleString("en-MW", { dateStyle: "medium", timeStyle: "short" })} · ${esc(item.format)}</span></div><div class="hr-row-actions"><span>${esc(item.status)}</span></div></div>`;
+      return `<div class="hr-list-row"><div><strong>${esc(application?.full_name || "Candidate")}</strong><span>${new Date(item.scheduled_start).toLocaleString("en-GB", { timeZone: "Africa/Blantyre", dateStyle: "medium", timeStyle: "short" })} (Malawi) · ${esc(item.format)}</span></div><div class="hr-row-actions"><span>${esc(item.status)}</span><button type="button" data-interview-panel="${esc(item.id)}">Details & scores</button></div></div>`;
     }).join("") : '<div class="empty-state"><p>No upcoming interviews.</p></div>';
   }
 
@@ -53,6 +53,14 @@
     for (const item of hrData.applications) counts.set(item.job_opening_id, (counts.get(item.job_opening_id) || 0) + 1);
     select.innerHTML = `<option value="">All vacancies (${hrData.applications.length})</option>` + hrData.jobs.map(job => `<option value="${esc(job.id)}">${esc(job.title)} · ${esc(job.closing_date)} (${counts.get(job.id) || 0})</option>`).join("") + [...counts].filter(([id]) => !hrData.jobs.some(job => job.id === id)).map(([id,count]) => `<option value="${esc(id)}">Vacancy details unavailable (${count})</option>`).join("");
     if ([...select.options].some(option => option.value === selected)) select.value = selected;
+  }
+
+  function candidateInterview(applicationId) {
+    const meetings=hrData.interviews.filter(item=>item.application_id===applicationId);
+    const upcoming=meetings.filter(item=>item.status==='Scheduled'&&new Date(item.scheduled_end)>=new Date()).sort((a,b)=>new Date(a.scheduled_start)-new Date(b.scheduled_start));
+    const recent=meetings.filter(item=>item.status!=='Cancelled').sort((a,b)=>new Date(b.scheduled_start)-new Date(a.scheduled_start));
+    const meeting=upcoming[0]||recent[0]||meetings[meetings.length-1];
+    return meeting&&window.CAGE_INTERVIEWS?window.CAGE_INTERVIEWS.card(meeting):'';
   }
 
   function renderCandidates() {
@@ -71,7 +79,7 @@
     ];
     target.innerHTML = columns.map(([title, stages]) => `<section class="candidate-column" data-candidate-stages="${stages.join("|")}" aria-label="${esc(title)}"><h4>${title} · ${candidates.filter(item => stages.includes(item.stage)).length}</h4>${candidates.filter(item => stages.includes(item.stage)).map(item => {
       const job = hrData.jobs.find(job => job.id === item.job_opening_id);
-      return `<article class="candidate-card" data-candidate-id="${esc(item.id)}"><button type="button" class="candidate-drag-handle" data-move-candidate="${esc(item.id)}" aria-label="Move ${esc(item.full_name)} to another recruitment section" title="Drag to another section, or click to choose a stage">⠿ Move</button><strong>${esc(item.full_name)}</strong><small><span class="candidate-vacancy-label">${esc(job?.title || "Vacancy details unavailable")}</span><br>${esc(item.email)} · ${esc(item.phone)}</small><p class="candidate-salary">${item.salary_expectation != null ? `${esc(item.salary_currency)} ${Number(item.salary_expectation).toLocaleString()} / ${esc(item.salary_period)} gross` : "Salary expectation not supplied (earlier application)"}</p>${(item.screening_answers || []).map(answer => `<details><summary>${esc(answer.question)}</summary><p>${esc(answer.answer)}</p></details>`).join("")}<div class="hr-row-actions"><button data-candidate-cv="${esc(item.cv_storage_path)}">CV</button>${!["Hired", "Rejected", "Withdrawn"].includes(item.stage) ? `<button data-interview-candidate="${item.id}">Interview</button><button class="candidate-not-shortlisted" data-not-shortlisted="${esc(item.id)}">Not shortlisted</button>` : ""}</div><div class="candidate-review-line"><span class="status-pill">${esc(stageLabel(item.stage))}</span><span>${item.assigned_reviewer ? item.assigned_reviewer === profile()?.id ? "Assigned to you" : "Reviewer assigned" : "Unassigned"}</span></div><button class="secondary-button candidate-review-button" data-review-candidate="${esc(item.id)}">Review applicant</button></article>`;
+      return `<article class="candidate-card" data-candidate-id="${esc(item.id)}"><button type="button" class="candidate-drag-handle" data-move-candidate="${esc(item.id)}" aria-label="Move ${esc(item.full_name)} to another recruitment section" title="Drag to another section, or click to choose a stage">⠿ Move</button><strong>${esc(item.full_name)}</strong><small><span class="candidate-vacancy-label">${esc(job?.title || "Vacancy details unavailable")}</span><br>${esc(item.email)} · ${esc(item.phone)}</small><p class="candidate-salary">${item.salary_expectation != null ? `${esc(item.salary_currency)} ${Number(item.salary_expectation).toLocaleString()} / ${esc(item.salary_period)} gross` : "Salary expectation not supplied (earlier application)"}</p>${(item.screening_answers || []).map(answer => `<details><summary>${esc(answer.question)}</summary><p>${esc(answer.answer)}</p></details>`).join("")}<div class="hr-row-actions"><button data-candidate-cv="${esc(item.cv_storage_path)}">CV</button>${!["Hired", "Rejected", "Withdrawn"].includes(item.stage) ? `<button data-interview-candidate="${item.id}">Interview</button><button class="candidate-not-shortlisted" data-not-shortlisted="${esc(item.id)}">Not shortlisted</button>` : ""}</div>${candidateInterview(item.id)}<div class="candidate-review-line"><span class="status-pill">${esc(stageLabel(item.stage))}</span><span>${item.assigned_reviewer ? item.assigned_reviewer === profile()?.id ? "Assigned to you" : "Reviewer assigned" : "Unassigned"}</span></div><button class="secondary-button candidate-review-button" data-review-candidate="${esc(item.id)}">Review applicant</button></article>`;
     }).join("")}</section>`).join("");
   }
 
@@ -184,7 +192,7 @@
       state.events.push({ id: `ev-interview-${Date.now()}`, title: `Interview — ${application?.full_name || "Candidate"}`, date: payload.start.slice(0, 10), start: payload.start.slice(11, 16), end: payload.end.slice(11, 16), type: "Meeting", owner: window.CAGE_BACKEND.currentMemberId(), project: "", attendees: `${application?.full_name || "Candidate"} · ${payload.format} · ${payload.location}` });
       saveState();
       document.getElementById("interview-dialog").close();
-      showToast(result.emailSent ? "Interview scheduled and invitation emailed." : "Interview scheduled; check the email configuration before notifying the candidate.");
+      showToast(result.warning || (result.emailSent ? "Interview scheduled and invitation emailed." : "Interview scheduled; check the email configuration before notifying the candidate."));
       await load();
     }
     catch (e) { error.textContent = e.message || "Interview could not be scheduled."; }
@@ -230,5 +238,5 @@
   });
 
   window.addEventListener("cage:session-ready", () => load(isAdmin()));
-  window.CAGE_HR_UI = { load, render, application: id => canHR() ? hrData.applications.find(item => item.id === id) : null };
+  window.CAGE_HR_UI = { load, render, interviewsFor: id => { if(!canHR())return []; const meeting=hrData.interviews.find(item=>item.id===id);return meeting?hrData.interviews.filter(item=>item.application_id===meeting.application_id).sort((a,b)=>new Date(b.scheduled_start)-new Date(a.scheduled_start)):[]; }, application: id => canHR() ? hrData.applications.find(item => item.id === id) : null };
 })();

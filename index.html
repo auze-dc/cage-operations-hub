@@ -956,7 +956,7 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
   <dialog id="interview-dialog" class="app-dialog">
     <form method="dialog" id="interview-form">
       <div class="dialog-heading"><div><p class="section-kicker">Recruitment</p><h2>Schedule interview</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div>
-      <div class="form-grid"><label class="field field-wide"><span>Candidate *</span><select name="applicationId" id="interview-candidate-input" required></select></label><label class="field"><span>Start *</span><input name="start" type="datetime-local" required></label><label class="field"><span>End *</span><input name="end" type="datetime-local" required></label><label class="field"><span>Format *</span><select name="format"><option>In person</option><option>Video</option><option>Telephone</option></select></label><label class="field"><span>Location or meeting link *</span><input name="location" required></label><label class="field field-wide"><span>Panel members</span><input name="panel" placeholder="Select or list interview panel"></label></div>
+      <div class="form-grid"><label class="field field-wide"><span>Candidate *</span><select name="applicationId" id="interview-candidate-input" required></select></label><label class="field"><span>Start (Malawi time) *</span><input name="start" type="datetime-local" required></label><label class="field"><span>End (Malawi time) *</span><input name="end" type="datetime-local" required></label><label class="field"><span>Format *</span><select name="format"><option>In person</option><option>Video</option><option>Telephone</option></select></label><label class="field"><span>Location or meeting link *</span><input name="location" required></label><label class="field field-wide"><span>Panel members</span><input name="panel" placeholder="Select or list interview panel"></label></div>
       <p class="form-error" id="interview-form-error"></p><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Schedule interview</button></div>
     </form>
   </dialog>
@@ -990,11 +990,12 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
   <script src="./draft-privacy.js?v=enterprise-20261029" defer></script>
   <link rel="stylesheet" href="./security.css?v=mfa-20261029">
   <script src="./security.js?v=mfa-20261029" defer></script>
-  <script src="./production.js?v=reviews-20261104" defer></script>
+  <script src="./production.js?v=interviews-20261110" defer></script>
   <script src="./app.js?v=enterprise-20261029" defer></script>
   <script src="./payroll.js?v=20261027-pension3" defer></script>
   <script src="./job-advert.js?v=20261029" defer></script>
-<script src="./hr.js?v=reviews-20261104" defer></script>
+<script src="./interview-panel.js?v=20261110" defer></script>
+<script src="./hr.js?v=interviews-20261110" defer></script>
 <script src="./vacancy-editor.js?v=20261029" defer></script>
 <script src="./recruitment-reviews.js?v=20261104" defer></script>
 <link rel="stylesheet" href="./recruitment-reviews.css?v=20261104">
