@@ -227,16 +227,25 @@
 
   function transientSyncError(error) {
     const message=String(error?.message||error||'').toLowerCase();
-    return !navigator.onLine || /fetch|network|timeout|timed out|jwt|token|connection|502|503|504/.test(message);
+    return !navigator.onLine || [408,429,500,502,503,504].includes(Number(error?.status)) || ['57014','PGRST003'].includes(error?.code) || /fetch|network|timeout|timed out|jwt|token|connection|502|503|504/.test(message);
   }
-  async function syncRpcWithRetry(patches, expectedEpoch) {
+  async function syncRpcWithRetry(patches, expectedEpoch, user, generation) {
     let lastError;
     for (let attempt=0; attempt<3; attempt++) {
       try {
         if (!navigator.onLine) throw new Error('You are offline');
-        if (attempt) { try { await client.auth.refreshSession(); } catch {} await new Promise(r=>setTimeout(r,350*attempt)); }
+        if (attempt) {
+          // Refresh only for an expired JWT. Database timeouts do not warrant
+          // extra Auth traffic or contention on the SDK's session lock.
+          if(lastError?.code==='PGRST301'&&/expired/i.test(lastError.message||'')){
+            const refreshed=await client.auth.refreshSession();
+            if(refreshed.error)throw refreshed.error;
+          }
+          await new Promise(r=>setTimeout(r,1000*attempt+Math.floor(Math.random()*500)));
+        }
+        if(user!==profile?.id||generation!==sessionGeneration)throw new Error('Your session changed.');
         const result=await client.rpc("save_workspace_changes_isolated",{changes:patches,expected_epoch:expectedEpoch}).abortSignal(AbortSignal.timeout(20000));
-        if(result.error)throw result.error;
+        if(result.error)throw Object.assign(new Error(result.error.message),{code:result.error.code,status:result.status});
         return result.data;
       } catch(error) {
         lastError=error;
@@ -313,7 +322,7 @@
     const user=profile.id,generation=sessionGeneration,key=draftKey();
     savingNow=true;showBanner('Saving changes…');
     try{
-      const data=await syncRpcWithRetry(patches,resetEpoch(base));
+      const data=await syncRpcWithRetry(patches,resetEpoch(base),user,generation);
       if(user!==profile?.id||generation!==sessionGeneration)return;
       if(!Array.isArray(data?.results)||data.results.length!==patches.length||patches.some(c=>data.results.filter(r=>r.key===c.key&&r.id===c.id&&['saved','blocked','conflict'].includes(r.status)).length!==1))throw new Error('Unexpected sync response. Your drafts remain on this device.');
       const latest=structuredClone(pendingState||snapshot),newer=writableChanges(snapshot,latest);
@@ -399,11 +408,10 @@
   function loginFailure(error){sessionReady=false;profile=null;clearInterval(workspacePoll);workspacePoll=null;showLogin(error?.message||'The workspace could not load. Retry without resetting your password.');retryLogin.hidden=false;banner.className='sync-banner';}
   let accessRetryTimer=null;
   function sessionCheckFailure(error,refresh,uid,generation){
-    const transient=![401,403].includes(Number(error?.status))&&error?.code!=='PGRST116'&&(/fetch|network|timeout|timed out|connection|502|503|504/i.test(error?.message||'')||[500,502,503,504].includes(Number(error?.status)));
-    if(refresh&&transient&&sessionReady&&profile?.id===uid){
+    if(refresh&&temporaryAccessError(error)&&sessionReady&&profile?.id===uid){
       showBanner('Connection interrupted while checking your access. Your workspace stays open; changes may wait for sync. Retrying…','error');
       clearTimeout(accessRetryTimer);
-      accessRetryTimer=setTimeout(()=>{if(generation===sessionGeneration&&profile?.id===uid){lastAccessRefresh=0;refreshAccess();}},15000);
+      accessRetryTimer=setTimeout(()=>{if(generation===sessionGeneration&&profile?.id===uid){lastAccessRefresh=0;refreshAccess();}},30000+Math.floor(Math.random()*10000));
       return;
     }
     clearTimeout(accessRetryTimer);loginFailure(error);
@@ -453,13 +461,15 @@
         if(window.CAGE_SECURITY)await window.CAGE_SECURITY.ensure(client,{requireEnrollment:nextProfile.role==='admin'});
         if(generation!==sessionGeneration)return;
         const access=await accessRead(signal=>client.from('module_access').select('module,access').eq('user_id',uid).abortSignal(signal),'Module permissions',uid,generation);
-        const workspace=await accessRead(signal=>client.rpc('get_my_workspace').abortSignal(signal),'Workspace data',uid,generation);
-        if(!workspace.data?.data||typeof workspace.data.data!=='object')throw new Error('Workspace data is unavailable. Please contact your administrator.');
+        // The workspace poll already syncs data for signed-in staff. A slow
+        // workspace fetch should never decide whether a verified session is valid.
+        const workspace=refresh?null:await accessRead(signal=>client.rpc('get_my_workspace').abortSignal(signal),'Workspace data',uid,generation);
+        if(!refresh&&(!workspace.data?.data||typeof workspace.data.data!=='object'))throw new Error('Workspace data is unavailable. Please contact your administrator.');
         if(generation!==sessionGeneration)return;
         if(lastLoadedUser&&lastLoadedUser!==uid){window.dispatchEvent(new CustomEvent("cage:session-ended"));
       pendingState=null;syncConflicts=[];cloudBase={};remoteSnapshot=null;clearTimeout(saveTimer);}
         profile=nextProfile;moduleAccess=Object.fromEntries((access.data||[]).map(row=>[row.module,row.access]));lastLoadedUser=uid;
-        if(!savingNow)receiveWorkspace(workspace.data);
+        if(workspace&&!savingNow)receiveWorkspace(workspace.data);
         try{chooseGreetingLanguage();}catch{greetingLanguage="English";}setCurrentUser();applyPermissions();subscribe();sessionReady=true;retryLogin.hidden=true;hideLogin();hideBanner();
         if(!refresh)window.dispatchEvent(new CustomEvent('cage:session-ready',{detail:{profile}}));
       }catch(error){if(generation===sessionGeneration)sessionCheckFailure(error,refresh,uid,generation);}
@@ -468,7 +478,7 @@
     return sessionLoad;
   }
   async function refreshAccess(){
-    if(!client||!profile||!sessionReady||sessionLoad||accessRefreshRunning||Date.now()-lastAccessRefresh<3000)return;
+    if(!client||!profile||!sessionReady||sessionLoad||accessRefreshRunning||Date.now()-lastAccessRefresh<60000)return;
     lastAccessRefresh=Date.now();accessRefreshRunning=true;const refreshGeneration=sessionGeneration;
     try{const r=await limited(client.auth.getSession(),'Session check');if(refreshGeneration!==sessionGeneration)return;if(r.error)throw r.error;await establishSession(r.data.session,true);}
     catch(error){if(refreshGeneration===sessionGeneration)sessionCheckFailure(error,true,profile?.id,refreshGeneration);}finally{accessRefreshRunning=false;}
