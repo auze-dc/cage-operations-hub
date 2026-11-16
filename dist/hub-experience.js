@@ -1,6 +1,6 @@
 (function(){'use strict';
 const $=id=>document.getElementById(id),api=()=>window.CAGE_BACKEND,esc=escapeHtml,me=()=>api()?.currentProfile()?.id;
-let receipts=[],receiptThread='',receiptReady=false,receiptError='',busy=false,interval,readTimer,prefs={banners:true,sound:true,desktop:false,chat:true,mentions:true,tasks:true,reminders:true,approvals:true,other:true,muted_threads:[]},audio,lastBeep=0,baseline=false,seen=new Set(),acked=new Set();
+let receipts=[],receiptThread='',receiptReady=false,receiptError='',busy=false,interval,readTimer,prefs={banners:true,sound:true,desktop:false,chat:true,mentions:true,tasks:true,reminders:true,approvals:true,other:true,muted_threads:[]},audio,lastBeep=0,baseline=false,seen=new Set(),acked=new Set(),delivered=new Set();
 const chat=$('chat-messages'),input=$('chat-input'),workspace=document.querySelector('.chat-workspace');
 const settingsKey=()=>`cage-notifications-seen:${me()}`,draftKey=t=>`cage-chat-draft:${me()}:${t}`;
 function modal(title,content){let d=$('hub-detail-dialog');if(!d){d=document.createElement('dialog');d.id='hub-detail-dialog';d.className='app-dialog academy-dialog';document.body.append(d);}d.innerHTML=`<div class="dialog-heading"><h2>${esc(title)}</h2><button type="button" class="icon-button" data-hub-close aria-label="Close">×</button></div>${content}<p id="hub-detail-error" class="form-error" role="alert"></p>`;if(!d.open)d.showModal();return d;}
@@ -28,7 +28,15 @@ function visibleKeys(){
  const bounds=chat.getBoundingClientRect();return [...chat.querySelectorAll('[data-message-id]:not(.mine)')].filter(el=>{const r=el.getBoundingClientRect();return Math.min(r.bottom,bounds.bottom)-Math.max(r.top,bounds.top)>=Math.min(r.height,bounds.height)*.5&&r.width>0;}).map(el=>el.dataset.messageId);
 }
 function scheduleRead(){clearTimeout(readTimer);readTimer=setTimeout(async()=>{const ids=visibleKeys().filter(id=>!acked.has(id));if(!ids.length)return;try{await api().acknowledgeChat(ids,true);ids.forEach(id=>acked.add(id));await window.CAGE_PERSONAL?.refresh?.();await refreshReceipts();}catch{receiptError='Read status is waiting for connection';}},650);}
-async function acknowledgeDelivered(){if(!me()||!api()?.acknowledgeChat)return;const ids=state.messages.slice(-500).map(m=>m.id);if(ids.length)await api().acknowledgeChat(ids,false);}
+async function acknowledgeDelivered(){
+ const user=me(),sessionDelivered=delivered;
+ if(!user||!api()?.acknowledgeChat)return;
+ const ids=state.messages.slice(-500).map(m=>m.id).filter(id=>!sessionDelivered.has(id));
+ if(!ids.length)return;
+ await api().acknowledgeChat(ids,false);
+ if(user!==me()||sessionDelivered!==delivered)return;
+ ids.forEach(id=>sessionDelivered.add(id));
+}
 async function refreshReceipts(){if(!me()||!activeChatThread||busy||api().moduleLevel('chat')==='none')return;busy=true;const thread=activeChatThread;try{await acknowledgeDelivered();const rows=await api().chatReceipts(thread);if(activeChatThread===thread){receipts=rows;receiptThread=thread;receiptReady=true;receiptError='';labels();scheduleRead();}}catch(e){receiptError=e.message;receiptReady=true;labels();}finally{busy=false;}}
 const jump=document.createElement('button');jump.className='chat-jump';jump.type='button';jump.textContent='↓ Latest messages';jump.hidden=true;document.querySelector('.chat-main').append(jump);jump.onclick=()=>{chat.scrollTop=chat.scrollHeight;scheduleRead();};
 chat.addEventListener('scroll',()=>{jump.hidden=chat.scrollHeight-chat.scrollTop-chat.clientHeight<120;scheduleRead();},{passive:true});
@@ -76,7 +84,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('button');i
 window.addEventListener('cage:personal-notifications',e=>receiveNotifications(e.detail));
 window.addEventListener('cage:messages-loaded',refreshReceipts);window.addEventListener('cage:sync',refreshReceipts);
 window.addEventListener('focus',()=>{refreshReceipts();scheduleRead();});document.addEventListener('visibilitychange',()=>{if(!document.hidden){refreshReceipts();scheduleRead();}});
-window.addEventListener('cage:session-ready',async()=>{baseline=false;seen=new Set();acked.clear();receiptReady=false;prefs={banners:true,sound:true,desktop:false,chat:true,mentions:true,tasks:true,reminders:true,approvals:true,other:true,muted_threads:[]};try{prefs={...prefs,...await api().appNotificationPreferences()};const selected=sessionStorage.getItem('cage-finance-tab:'+me());if(selected){finance.dataset.financeTab=selected;tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.financeSection===selected));}}catch(e){showToast('Notification preferences could not load. Check migration 015.');}layout();refreshReceipts();clearInterval(interval);interval=setInterval(()=>{if(!document.hidden){refreshReceipts();window.CAGE_PERSONAL?.refresh?.();}},6000);});
+window.addEventListener('cage:session-ready',async()=>{baseline=false;seen=new Set();acked.clear();delivered=new Set();receiptReady=false;prefs={banners:true,sound:true,desktop:false,chat:true,mentions:true,tasks:true,reminders:true,approvals:true,other:true,muted_threads:[]};try{prefs={...prefs,...await api().appNotificationPreferences()};const selected=sessionStorage.getItem('cage-finance-tab:'+me());if(selected){finance.dataset.financeTab=selected;tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.financeSection===selected));}}catch(e){showToast('Notification preferences could not load. Check migration 015.');}layout();refreshReceipts();clearInterval(interval);interval=setInterval(()=>{if(!document.hidden){refreshReceipts();window.CAGE_PERSONAL?.refresh?.();}},6000);});
 window.CAGE_CHAT={receiptLabel,rendered,switchDraft,sent(thread){try{sessionStorage.removeItem(draftKey(thread));}catch{}input.style.height='44px';chat.scrollTop=chat.scrollHeight;setTimeout(()=>chat.scrollTop=chat.scrollHeight,0);},visibleKeys,refresh:refreshReceipts};
 window.CAGE_RECORDS={open:financialRecord};layout();
 })();
