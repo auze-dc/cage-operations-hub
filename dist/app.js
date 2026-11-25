@@ -770,14 +770,11 @@ function formatDate(value, options = {}) {
   }).format(date);
 }
 
-function formatMoney(value, compact = false) {
-  const amount = Number(value) || 0;
-  if (compact && Math.abs(amount) >= 1000000) {
-    const millions = amount / 1000000;
-    return `MWK ${millions.toFixed(millions >= 100 ? 0 : 1).replace(".0", "")}m`;
-  }
-  if (compact && Math.abs(amount) >= 1000) return `MWK ${(amount / 1000).toFixed(0)}k`;
-  return `MWK ${new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 }).format(amount)}`;
+function formatMoney(value, compact = false, currency = 'MWK') {
+  return CageCurrency.format(value, compact, currency);
+}
+function moneyTotals(rows, amount = row => row.amount, compact = true) {
+  return CageCurrency.totals(rows, amount, compact);
 }
 
 function effectiveInvoiceStatus(invoice) {
@@ -936,7 +933,7 @@ function renderMetrics() {
   const metrics = [
     { view: "approvals", label: "Decisions waiting", value: pendingApprovals.length, note: pendingApprovals.length ? "Open the approval inbox" : "Nothing waiting", icon: "✓", tone: "#b76e00", tint: "#fff7e6" },
     { view: "projects", label: "Delivery at risk", value: deliveryRisks.length, note: `${active.filter(task => task.status === "Blocked").length} blocked · ${active.filter(isOverdue).length} overdue tasks`, icon: "!", tone: "#c83c3c", tint: "#fff0ef" },
-    { view: "finance", label: "Outstanding invoices", value: formatMoney(openInvoices.reduce((sum, invoice) => sum + Math.max(0, invoice.amount - Number(invoice.paidAmount || 0)), 0), true), note: `${openInvoices.filter(invoice => effectiveInvoiceStatus(invoice) === "Overdue").length} overdue`, icon: "¤", tone: "#6b4bc3", tint: "#f3f0ff" },
+    { view: "finance", label: "Outstanding invoices", value: moneyTotals(openInvoices, r => Math.max(0, r.amount - Number(r.paidAmount || 0))), note: `${openInvoices.filter(invoice => effectiveInvoiceStatus(invoice) === "Overdue").length} overdue`, icon: "¤", tone: "#6b4bc3", tint: "#f3f0ff" },
     { view: operationalAlerts ? "compliance" : "assets", label: "Operational alerts", value: operationalAlerts, note: operationalAlerts ? "Compliance or equipment action" : "Operations ready", icon: "◈", tone: operationalAlerts ? "#007fae" : "#168a65", tint: operationalAlerts ? "#eaf8fd" : "#eaf8f2" }
   ];
   document.getElementById("metric-grid").innerHTML = metrics.map(metric => `
@@ -970,7 +967,7 @@ function attentionScore(task) {
 function renderAttention() {
   const decisions = state.approvals.filter(item => item.status === "Pending").map(item => ({ title: item.title, detail: `Approval requested by ${teamMember(item.requester).name}`, label: "Decision", view: "approvals", tone: "decision" }));
   const blockers = activeTasks().filter(task => task.status === "Blocked" || isOverdue(task)).sort((a,b) => attentionScore(b)-attentionScore(a)).map(task => ({ title: task.title, detail: `${teamMember(task.owner).name} · ${dueLabel(task)}`, label: task.status === "Blocked" ? "Blocked" : "Overdue", task: task.id, tone: "risk" }));
-  const receivables = state.invoices.filter(invoice => effectiveInvoiceStatus(invoice) === "Overdue").map(invoice => ({ title: `${invoice.number} · ${invoice.client}`, detail: `${formatMoney(Math.max(0, invoice.amount - Number(invoice.paidAmount || 0)))} outstanding`, label: "Payment", view: "finance", tone: "money" }));
+  const receivables = state.invoices.filter(invoice => effectiveInvoiceStatus(invoice) === "Overdue").map(invoice => ({ title: `${invoice.number} · ${invoice.client}`, detail: `${formatMoney(Math.max(0, invoice.amount - Number(invoice.paidAmount || 0)), false, invoice.currency)} outstanding`, label: "Payment", view: "finance", tone: "money" }));
   const items = [...decisions, ...blockers, ...receivables].slice(0,5);
   document.getElementById("attention-list").innerHTML = items.length ? items.map(item => `<button class="attention-item executive-action ${item.tone}" ${item.task ? `data-task-detail="${item.task}"` : `data-go-view="${item.view}"`}><span class="attention-copy"><span class="action-kind">${escapeHtml(item.label)}</span><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></span><span class="action-arrow">›</span></button>`).join("") : `<div class="empty-state compact"><div>✓</div><h3>No urgent decisions</h3><p>The management queue is clear.</p></div>`;
 }
@@ -1074,7 +1071,7 @@ function renderRequests() {
     { label: "Open requests", value: String(active.length), unit: "requests", note: `${needsInformation.length} still need clarification`, icon: "↳", tone: "#008fc8", tint: "#e6f7fe" },
     { label: "Needs action", value: String(scopeRows.filter(requestNeedsAction).length), unit: "requests", note: "Owner, deadline or gate action", icon: "!", tone: "#d64e4b", tint: "#feeceb" },
     { label: "Review progress", value: String(awaitingReview.length), unit: "requests", note: "Review progress; no manager approval required", icon: "✓", tone: "#e99a24", tint: "#fff4df" },
-    { label: "Converted value", value: formatMoney(converted.reduce((sum, request) => sum + Number(request.value || 0), 0), true), unit: "", note: `${converted.length} requests became projects`, icon: "¤", tone: "#168a65", tint: "#e5f5ef" },
+    { label: "Converted value", value: moneyTotals(converted, r => r.value), unit: "", note: `${converted.length} requests became projects`, icon: "¤", tone: "#168a65", tint: "#e5f5ef" },
     { label: "Due within 7 days", value: String(deadlineActions.length), unit: "requests", note: "Including overdue responses", icon: "□", tone: "#7357c8", tint: "#f0edfb" }
   ]);
 
@@ -1109,7 +1106,7 @@ function requestCard(request) {
     <div class="request-card-top"><span class="request-type">${escapeHtml(request.type)}</span><span class="request-number">${escapeHtml(displayRecordReference("requests",request))}</span></div>
     <button class="request-card-title" data-open-request="${request.id}">${escapeHtml(request.title)}</button>
     <p>${escapeHtml(request.organisation)}</p>
-    <div class="request-card-meta"><span class="owner-avatar" title="${escapeHtml(owner.name)}">${owner.initials}</span><span class="deadline-chip ${days < 0 ? "overdue" : days <= 7 ? "soon" : ""}">${escapeHtml(dueCopy)}</span>${request.value ? `<strong>${formatMoney(request.value, true)}</strong>` : ""}</div>
+    <div class="request-card-meta"><span class="owner-avatar" title="${escapeHtml(owner.name)}">${owner.initials}</span><span class="deadline-chip ${days < 0 ? "overdue" : days <= 7 ? "soon" : ""}">${escapeHtml(dueCopy)}</span>${request.value ? `<strong>${formatMoney(request.value, true, request.currency)}</strong>` : ""}</div>
     <div class="request-progress-head"><span>${stats.done}/${stats.total} controls</span><b>${stats.percent}%</b></div>
     <div class="progress-track"><span style="width:${stats.percent}%"></span></div>
     ${controlGap ? `<div class="request-control-gap">! Control gap: acceptance evidence missing</div>` : ""}
@@ -1138,7 +1135,7 @@ function renderRequestDetail(requestId = activeRequestId) {
           <div><span>Response deadline</span><strong>${formatDate(request.deadline, { year: true })}</strong><small>${daysUntil(request.deadline) < 0 ? `${Math.abs(daysUntil(request.deadline))} days overdue` : `${daysUntil(request.deadline)} days remaining`}</small></div>
           <div><span>Delivery target</span><strong>${formatDate(request.deliveryDeadline, { year: true })}</strong><small>${escapeHtml(request.location || "Location not set")}</small></div>
           <div><span>Source</span><strong>${escapeHtml(request.source)}</strong><small>Received ${formatDate(request.received, { year: true })}</small></div>
-          <div><span>Potential value</span><strong>${request.value ? formatMoney(request.value) : "Not recorded"}</strong><small>${escapeHtml(request.priority)} priority</small></div>
+          <div><span>Potential value</span><strong>${request.value ? formatMoney(request.value, false, request.currency) : "Not recorded"}</strong><small>${escapeHtml(request.priority)} priority</small></div>
         </div>
         <article class="request-brief"><span>Request summary</span><p>${escapeHtml(request.summary)}</p><span>Evidence and source files</span><p>${escapeHtml(request.attachments || "No links or documents recorded")}</p></article>
         <label class="request-next-action"><span>Next specific action</span><input data-request-next-action="${request.id}" value="${escapeHtml(request.nextAction)}" maxlength="160"></label>
@@ -1485,23 +1482,23 @@ function renderCRM() {
   const dueFollowUps = activeDeals.filter(deal => deal.nextAction <= TODAY).length;
   renderMetricCards("crm-metric-grid", [
     { label: "Open opportunities", value: String(activeDeals.length), unit: "deals", note: `${dueFollowUps} follow-ups due`, icon: "◇", tone: "#7357c8", tint: "#f0edfb" },
-    { label: "Pipeline value", value: formatMoney(pipelineValue, true), unit: "", note: "Total open potential", icon: "↗", tone: "#008fc8", tint: "#e6f7fe" },
-    { label: "Weighted forecast", value: formatMoney(weightedValue, true), unit: "", note: "Value adjusted by probability", icon: "≈", tone: "#e99a24", tint: "#fff4df" },
-    { label: "Won value", value: formatMoney(scopeRows.filter(deal => deal.stage === "Won").reduce((sum, deal) => sum + deal.value, 0), true), unit: "", note: "Ready for delivery and billing", icon: "✓", tone: "#168a65", tint: "#e5f5ef" }
+    { label: "Pipeline value", value: moneyTotals(activeDeals, r => r.value), unit: "", note: "Total open potential", icon: "↗", tone: "#008fc8", tint: "#e6f7fe" },
+    { label: "Weighted forecast", value: moneyTotals(activeDeals, r => r.value * r.probability / 100), unit: "", note: "Value adjusted by probability", icon: "≈", tone: "#e99a24", tint: "#fff4df" },
+    { label: "Won value", value: moneyTotals(scopeRows.filter(deal => deal.stage === "Won"), r => r.value), unit: "", note: "Ready for delivery and billing", icon: "✓", tone: "#168a65", tint: "#e5f5ef" }
   ]);
 
   document.getElementById("crm-pipeline").innerHTML = stages.map(stage => {
     const deals = scopeRows.filter(deal => deal.stage === stage).sort((a, b) => b.value - a.value);
     return `
       <section class="pipeline-column crm-stage-column" data-stage="${stage}" data-deal-stage-column="${stage}">
-        <div class="pipeline-column-heading"><strong>${stage}</strong><span>${deals.length} · ${formatMoney(deals.reduce((sum, deal) => sum + deal.value, 0), true)}</span></div>
+        <div class="pipeline-column-heading"><strong>${stage}</strong><span>${deals.length} · ${moneyTotals(deals, r => r.value)}</span></div>
         <div class="pipeline-cards">
           ${deals.length ? deals.map(deal => `
             <article class="deal-card" draggable="true" data-deal-card="${deal.id}">
               ${deal.category ? `<small class="project-client">${escapeHtml(deal.category)}</small>` : ""}
               <input class="inline-deal-company" data-inline-deal-company="${deal.id}" value="${escapeHtml(deal.company)}" aria-label="Edit organisation for ${escapeHtml(deal.name)}">
               <textarea class="inline-deal-title" data-inline-deal-title="${deal.id}" rows="${Math.min(3, Math.max(1, Math.ceil(deal.name.length / 27)))}" aria-label="Edit opportunity name">${escapeHtml(deal.name)}</textarea>
-              <strong class="deal-value">${formatMoney(deal.value, true)}</strong>
+              <strong class="deal-value">${formatMoney(deal.value, true, deal.currency)}</strong>
               <div class="deal-meta"><span>${deal.probability}% probability</span><span>${formatDate(deal.nextAction)}</span></div>
               <textarea class="inline-deal-next" data-inline-deal-next="${deal.id}" rows="2" aria-label="Edit next action for ${escapeHtml(deal.name)}">${escapeHtml(deal.nextStep)}</textarea>
               <select class="deal-stage-select" data-deal-stage="${deal.id}" aria-label="Stage for ${escapeHtml(deal.name)}">${stages.map(option => `<option ${option === deal.stage ? "selected" : ""}>${option}</option>`).join("")}</select>
@@ -1548,7 +1545,7 @@ function openContactDetail(contactId) {
   state.projects.filter(project => project.client === contact.company).forEach(project => projectIds.add(project.id));
   const projects = [...projectIds].map(projectById).filter(Boolean);
   document.getElementById("contact-linked-work").innerHTML = `
-    <div class="contact-linked-group"><strong>Opportunities</strong>${deals.length ? deals.map(deal => `<button type="button" data-contact-open-deal="${deal.id}"><span>${escapeHtml(deal.name)}</span><small>${escapeHtml(deal.stage)} · ${formatMoney(deal.value, true)}</small></button>`).join("") : `<p>No CRM opportunities linked yet.</p>`}</div>
+    <div class="contact-linked-group"><strong>Opportunities</strong>${deals.length ? deals.map(deal => `<button type="button" data-contact-open-deal="${deal.id}"><span>${escapeHtml(deal.name)}</span><small>${escapeHtml(deal.stage)} · ${formatMoney(deal.value, true, deal.currency)}</small></button>`).join("") : `<p>No CRM opportunities linked yet.</p>`}</div>
     <div class="contact-linked-group"><strong>Projects</strong>${projects.length ? projects.map(project => `<button type="button" data-project-detail="${project.id}"><span>${escapeHtml(project.name)}</span><small>${projectProgress(project.id)}% complete · due ${formatDate(project.deadline, { year: true })}</small></button>`).join("") : `<p>No delivery projects linked yet.</p>`}</div>`;
   document.getElementById("contact-detail-dialog").showModal();
 }
@@ -1813,11 +1810,11 @@ function renderApprovals() {
   renderMetricCards("approval-metric-grid", [
     { label: "Awaiting decision", value: String(pending.length), unit: "requests", note: `${pending.filter(item => item.due <= TODAY).length} due now`, icon: "✓", tone: "#e99a24", tint: "#fff4df" },
     { label: "Overdue decisions", value: String(overdue.length), unit: "requests", note: "Escalate before work is delayed", icon: "!", tone: "#d64e4b", tint: "#feeceb" },
-    { label: "Value awaiting approval", value: formatMoney(amount, true), unit: "", note: "Purchase and commercial requests", icon: "¤", tone: "#008fc8", tint: "#e6f7fe" },
+    { label: "Value awaiting approval", value: moneyTotals(pending), unit: "", note: "Purchase and commercial requests", icon: "¤", tone: "#008fc8", tint: "#e6f7fe" },
     { label: "Approved", value: String(state.approvals.filter(item => item.status === "Approved").length), unit: "requests", note: "Decision history retained", icon: "✓", tone: "#168a65", tint: "#e5f5ef" }
   ]);
   const order = { Pending: 0, Returned: 1, Approved: 2 };
-  document.getElementById("approval-list").innerHTML = [...state.approvals].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || a.due.localeCompare(b.due)).map(item => `<article class="surface approval-card ${statusClass(item.status)}"><div class="approval-type">${escapeHtml(item.type)}</div><div class="approval-main"><div class="approval-title-row"><div><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.summary)}</p></div><span class="status-pill ${item.status === "Approved" ? "done" : item.status === "Returned" ? "blocked" : "attention"}">${escapeHtml(item.status)}</span></div><div class="approval-meta"><span><b>Requested by</b>${escapeHtml(teamMember(item.requester).name)}</span><span><b>Submitted</b>${formatDate(item.submitted)}</span><span><b>Decision by</b>${formatDate(item.due)}</span>${item.amount ? `<span><b>Value</b>${formatMoney(item.amount)}</span>` : ""}</div>${item.decisionNote ? `<div class="decision-note">${escapeHtml(item.decisionNote)}</div>` : ""}</div>${item.status === "Pending" ? `<div class="approval-actions"><button class="return-button" data-decide-approval="${item.id}" data-decision="Returned">Return</button><button class="approve-button" data-decide-approval="${item.id}" data-decision="Approved">Approve</button></div>` : ""}</article>`).join("");
+  document.getElementById("approval-list").innerHTML = [...state.approvals].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || a.due.localeCompare(b.due)).map(item => `<article class="surface approval-card ${statusClass(item.status)}"><div class="approval-type">${escapeHtml(item.type)}</div><div class="approval-main"><div class="approval-title-row"><div><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.summary)}</p></div><span class="status-pill ${item.status === "Approved" ? "done" : item.status === "Returned" ? "blocked" : "attention"}">${escapeHtml(item.status)}</span></div><div class="approval-meta"><span><b>Requested by</b>${escapeHtml(teamMember(item.requester).name)}</span><span><b>Submitted</b>${formatDate(item.submitted)}</span><span><b>Decision by</b>${formatDate(item.due)}</span>${item.amount ? `<span><b>Value</b>${formatMoney(item.amount, false, item.currency)}</span>` : ""}</div>${item.decisionNote ? `<div class="decision-note">${escapeHtml(item.decisionNote)}</div>` : ""}</div>${item.status === "Pending" ? `<div class="approval-actions"><button class="return-button" data-decide-approval="${item.id}" data-decision="Returned">Return</button><button class="approve-button" data-decide-approval="${item.id}" data-decision="Approved">Approve</button></div>` : ""}</article>`).join("");
   const rules = [
     ["Requests", "Qualification, scope and costing must be complete before internal review."],
     ["Field missions", "Five readiness gates and an approved clearance are required before deployment."],
@@ -2018,13 +2015,13 @@ function renderCommercial() {
   renderMetricCards("commercial-metric-grid", [
     { label: "Active records", value: String(active.length), unit: "records", note: "Tenders, grants and contracts", icon: "▣", tone: "#008fc8", tint: "#e6f7fe" },
     { label: "Due within 14 days", value: String(active.filter(record => daysUntil(record.deadline) >= 0 && daysUntil(record.deadline) <= 14).length), unit: "records", note: "Submission or renewal deadline", icon: "!", tone: "#d64e4b", tint: "#feeceb" },
-    { label: "Recorded value", value: formatMoney(active.reduce((sum, record) => sum + Number(record.value || 0), 0), true), unit: "", note: "Across active opportunities", icon: "¤", tone: "#7357c8", tint: "#f0edfb" },
+    { label: "Recorded value", value: moneyTotals(active, r => r.value), unit: "", note: "Across active opportunities", icon: "¤", tone: "#7357c8", tint: "#f0edfb" },
     { label: "In review or submitted", value: String(active.filter(record => ["Internal review", "Submitted"].includes(record.stage)).length), unit: "records", note: "Close to external decision", icon: "↗", tone: "#168a65", tint: "#e5f5ef" }
   ]);
   document.getElementById("commercial-grid").innerHTML = records.length ? records.map(record => {
     const due = daysUntil(record.deadline);
     const pendingReview = state.approvals.some(item => item.status === "Pending" && ((item.linkedType === "commercial" && item.linkedId === record.id) || (record.request && item.linkedType === "request" && item.linkedId === record.request)));
-    return `<article class="commercial-card ${commercialNeedsAttention(record) ? "attention" : ""}"><div class="commercial-card-head"><span class="commercial-type ${record.type.toLowerCase()}">${escapeHtml(record.type)}</span><span class="deadline-chip ${due < 0 ? "overdue" : due <= 14 ? "soon" : ""}">${due < 0 ? `${Math.abs(due)}d overdue` : `${due}d left`}</span></div><h3>${escapeHtml(record.title)}</h3><p class="commercial-org">${escapeHtml(record.organisation)}</p><div class="commercial-progress-head"><span>Completion</span><strong>${record.progress}%</strong></div><div class="progress-track commercial-progress"><span style="width:${record.progress}%"></span></div><div class="commercial-facts"><span><small>Owner</small><strong>${escapeHtml(teamMember(record.owner).name)}</strong></span><span><small>Deadline</small><strong>${formatDate(record.deadline, { year: true })}</strong></span><span><small>Value</small><strong>${record.value ? formatMoney(record.value, true) : "Not recorded"}</strong></span></div><div class="commercial-next"><span>Next action</span><p>${escapeHtml(record.nextAction)}</p></div><div class="commercial-controls"><select data-commercial-stage="${record.id}">${["Monitoring", "Preparing", "Internal review", "Submitted", "Negotiation", "Active", "Awarded", "Closed"].map(stage => `<option ${stage === record.stage ? "selected" : ""}>${stage}</option>`).join("")}</select><label><span>Progress</span><input data-commercial-progress="${record.id}" type="number" min="0" max="100" value="${record.progress}"></label><button data-open-work-chat="commercial" data-work-chat-id="${record.id}">Work chat</button>${record.request ? `<button data-commercial-request="${record.request}">Open request</button>` : ""}${pendingReview ? `<span class="review-requested">Review requested</span>` : `<button data-commercial-review="${record.id}">Request review</button>`}</div></article>`;
+    return `<article class="commercial-card ${commercialNeedsAttention(record) ? "attention" : ""}"><div class="commercial-card-head"><span class="commercial-type ${record.type.toLowerCase()}">${escapeHtml(record.type)}</span><span class="deadline-chip ${due < 0 ? "overdue" : due <= 14 ? "soon" : ""}">${due < 0 ? `${Math.abs(due)}d overdue` : `${due}d left`}</span></div><h3>${escapeHtml(record.title)}</h3><p class="commercial-org">${escapeHtml(record.organisation)}</p><div class="commercial-progress-head"><span>Completion</span><strong>${record.progress}%</strong></div><div class="progress-track commercial-progress"><span style="width:${record.progress}%"></span></div><div class="commercial-facts"><span><small>Owner</small><strong>${escapeHtml(teamMember(record.owner).name)}</strong></span><span><small>Deadline</small><strong>${formatDate(record.deadline, { year: true })}</strong></span><span><small>Value</small><strong>${record.value ? formatMoney(record.value, true, record.currency) : "Not recorded"}</strong></span></div><div class="commercial-next"><span>Next action</span><p>${escapeHtml(record.nextAction)}</p></div><div class="commercial-controls"><select data-commercial-stage="${record.id}">${["Monitoring", "Preparing", "Internal review", "Submitted", "Negotiation", "Active", "Awarded", "Closed"].map(stage => `<option ${stage === record.stage ? "selected" : ""}>${stage}</option>`).join("")}</select><label><span>Progress</span><input data-commercial-progress="${record.id}" type="number" min="0" max="100" value="${record.progress}"></label><button data-open-work-chat="commercial" data-work-chat-id="${record.id}">Work chat</button>${record.request ? `<button data-commercial-request="${record.request}">Open request</button>` : ""}${pendingReview ? `<span class="review-requested">Review requested</span>` : `<button data-commercial-review="${record.id}">Request review</button>`}</div></article>`;
   }).join("") : `<div class="empty-state"><div>▣</div><h3>No matching records</h3><p>Clear the filters or add a tender, grant or contract.</p></div>`;
   window.CAGE_TEAMWORK?.applyAccess();
 }
@@ -2035,10 +2032,10 @@ function renderFinance() {
   const paidInvoices = state.invoices.filter(invoice => effectiveInvoiceStatus(invoice) === "Paid");
   const expensesThisMonth = state.expenses.filter(expense => expense.date.startsWith(TODAY.slice(0,7)));
   renderMetricCards("finance-metric-grid", [
-    { label: "Outstanding", value: formatMoney(openInvoices.reduce((sum, invoice) => sum + Math.max(0, invoice.amount - Number(invoice.paidAmount || 0)), 0), true), unit: "", note: `${openInvoices.length} invoices awaiting payment`, icon: "¤", tone: "#008fc8", tint: "#e6f7fe" },
-    { label: "Overdue", value: formatMoney(overdueInvoices.reduce((sum, invoice) => sum + Math.max(0, invoice.amount - Number(invoice.paidAmount || 0)), 0), true), unit: "", note: `${overdueInvoices.length} invoices need follow-up`, icon: "!", tone: "#d64e4b", tint: "#feeceb" },
-    { label: "Paid invoices", value: formatMoney(paidInvoices.reduce((sum, invoice) => sum + invoice.amount, 0), true), unit: "", note: "Fully paid invoice value", icon: "✓", tone: "#168a65", tint: "#e5f5ef" },
-    { label: new Date().toLocaleDateString("en-GB",{month:"long"}) + " costs", value: formatMoney(expensesThisMonth.reduce((sum, expense) => sum + expense.amount, 0), true), unit: "", note: `${expensesThisMonth.length} expenses recorded`, icon: "−", tone: "#e99a24", tint: "#fff4df" }
+    { label: "Outstanding", value: moneyTotals(openInvoices, r => Math.max(0, r.amount - Number(r.paidAmount || 0))), unit: "", note: `${openInvoices.length} invoices awaiting payment`, icon: "¤", tone: "#008fc8", tint: "#e6f7fe" },
+    { label: "Overdue", value: moneyTotals(overdueInvoices, r => Math.max(0, r.amount - Number(r.paidAmount || 0))), unit: "", note: `${overdueInvoices.length} invoices need follow-up`, icon: "!", tone: "#d64e4b", tint: "#feeceb" },
+    { label: "Paid invoices", value: moneyTotals(paidInvoices), unit: "", note: "Fully paid invoice value", icon: "✓", tone: "#168a65", tint: "#e5f5ef" },
+    { label: new Date().toLocaleDateString("en-GB",{month:"long"}) + " costs", value: moneyTotals(expensesThisMonth), unit: "", note: `${expensesThisMonth.length} expenses recorded`, icon: "−", tone: "#e99a24", tint: "#fff4df" }
   ]);
   document.getElementById("auto-reminders").checked = state.settings.autoReminders !== false;
 
@@ -2047,7 +2044,7 @@ function renderFinance() {
       <td><button type="button" class="financial-record-link" data-view-document="quote" data-record-id="${quote.id}">${escapeHtml(displayRecordReference("quotes",quote))}</button><br><span class="project-client">${escapeHtml(quote.description)}</span></td>
       <td>${escapeHtml(quote.client)}<br><span class="project-client">${escapeHtml(dealById(quote.deal)?.name || "Direct quote")}</span></td>
       <td>${formatDate(quote.validUntil)}</td>
-      <td class="money-cell">${formatMoney(quote.amount)}</td>
+      <td class="money-cell">${formatMoney(quote.amount, false, quote.currency)}</td>
       <td><span class="status-pill ${quote.status === "Sent" ? "doing" : quote.status === "Approved" ? "done" : "to-do"}">${escapeHtml(quote.status)}</span></td>
       <td><button class="document-action" data-send-document="quote" data-document-id="${quote.id}" >${quote.sentAt ? "Resend" : "Send"}</button>${quote.sentAt ? `<div class="document-sent">Sent ${formatDate(quote.sentAt.slice(0, 10))}</div>` : ""}</td>
     </tr>
@@ -2063,20 +2060,24 @@ function renderFinance() {
   const invoices=window.CAGE_RECORDS?.financeRows('invoices',invoiceCandidates)||invoiceCandidates;
   document.getElementById("finance-invoice-list").innerHTML = invoices.map(invoice => {
     const effective = effectiveInvoiceStatus(invoice);
-    return `<tr><td><button type="button" class="financial-record-link" data-view-document="invoice" data-record-id="${invoice.id}">${escapeHtml(displayRecordReference("invoices",invoice))}</button><br><span class="project-client">${escapeHtml(invoice.description)}</span></td><td>${escapeHtml(invoice.client)}<br><span class="project-client">${escapeHtml(projectById(invoice.project)?.name || "Unlinked")}</span></td><td><span class="due-date ${effective === "Overdue" ? "overdue" : ""}">${formatDate(invoice.due)}</span></td><td class="money-cell">${formatMoney(invoice.amount)}</td><td><select class="invoice-status-select ${statusClass(effective)}" data-invoice-status="${invoice.id}" aria-label="Status for ${escapeHtml(displayRecordReference("invoices",invoice))}">${["Draft", "Sent", "Overdue", "Paid"].map(option => `<option ${option === effective ? "selected" : ""}>${option}</option>`).join("")}</select></td><td><button class="document-action" data-send-document="invoice" data-document-id="${invoice.id}">${invoice.sentAt ? "Resend" : "Send"}</button>${invoice.sentAt ? `<div class="document-sent">Sent ${formatDate(invoice.sentAt.slice(0, 10))}</div>` : ""}</td></tr>`;
+    return `<tr><td><button type="button" class="financial-record-link" data-view-document="invoice" data-record-id="${invoice.id}">${escapeHtml(displayRecordReference("invoices",invoice))}</button><br><span class="project-client">${escapeHtml(invoice.description)}</span></td><td>${escapeHtml(invoice.client)}<br><span class="project-client">${escapeHtml(projectById(invoice.project)?.name || "Unlinked")}</span></td><td><span class="due-date ${effective === "Overdue" ? "overdue" : ""}">${formatDate(invoice.due)}</span></td><td class="money-cell">${formatMoney(invoice.amount, false, invoice.currency)}</td><td><select class="invoice-status-select ${statusClass(effective)}" data-invoice-status="${invoice.id}" aria-label="Status for ${escapeHtml(displayRecordReference("invoices",invoice))}">${["Draft", "Sent", "Overdue", "Paid"].map(option => `<option ${option === effective ? "selected" : ""}>${option}</option>`).join("")}</select></td><td><button class="document-action" data-send-document="invoice" data-document-id="${invoice.id}">${invoice.sentAt ? "Resend" : "Send"}</button>${invoice.sentAt ? `<div class="document-sent">Sent ${formatDate(invoice.sentAt.slice(0, 10))}</div>` : ""}</td></tr>`;
   }).join("") || `<tr><td colspan="6"><div class="empty-state"><p>No invoices match this filter.</p></div></td></tr>`;
 
-  const projectFigures = state.projects.map(project => {
-    const revenue = state.invoices.filter(invoice => invoice.project === project.id).reduce((sum, invoice) => sum + invoice.amount, 0);
-    const costs = state.expenses.filter(expense => expense.project === project.id).reduce((sum, expense) => sum + expense.amount, 0);
-    return { project, revenue, costs, net: revenue - costs };
-  }).filter(item => item.revenue || item.costs).sort((a, b) => b.revenue - a.revenue);
+  const projectFigures = state.projects.flatMap(project => {
+    const invoices = state.invoices.filter(r => r.project === project.id);
+    const expenses = state.expenses.filter(r => r.project === project.id);
+    return [...new Set([...invoices, ...expenses].map(r => CageCurrency.code(r.currency)))].map(currency => {
+      const sum = rows => rows.filter(r => CageCurrency.code(r.currency) === currency).reduce((n,r) => n + Number(r.amount || 0), 0);
+      const revenue = sum(invoices), costs = sum(expenses);
+      return {project, currency, revenue, costs, net:revenue-costs};
+    });
+  }).filter(item => item.revenue || item.costs);
   document.getElementById("project-profitability").innerHTML = `<div class="profit-list">${projectFigures.map(item => {
     const total = Math.max(1, item.revenue + item.costs);
-    return `<div class="profit-row"><div class="profit-row-head"><strong>${escapeHtml(item.project.name)}</strong><span class="${item.net < 0 ? "negative" : ""}">${formatMoney(item.net, true)}</span></div><div class="profit-row-meta"><span>Revenue ${formatMoney(item.revenue, true)}</span><span>Costs ${formatMoney(item.costs, true)}</span></div><div class="profit-bar"><span style="width:${item.revenue / total * 100}%"></span><span style="width:${item.costs / total * 100}%"></span></div></div>`;
+    return `<div class="profit-row"><div class="profit-row-head"><strong>${escapeHtml(item.project.name)}</strong><span class="${item.net < 0 ? "negative" : ""}">${formatMoney(item.net, true, item.currency)}</span></div><div class="profit-row-meta"><span>Revenue ${formatMoney(item.revenue, true, item.currency)}</span><span>Costs ${formatMoney(item.costs, true, item.currency)}</span></div><div class="profit-bar"><span style="width:${item.revenue / total * 100}%"></span><span style="width:${item.costs / total * 100}%"></span></div></div>`;
   }).join("")}</div>`;
 
-  document.getElementById("expense-list").innerHTML = [...state.expenses].sort((a, b) => b.date.localeCompare(a.date)).map(expense => `<div class="expense-row"><span class="expense-icon">−</span><span class="expense-main"><button type="button" class="financial-record-link" data-view-document="expense" data-record-id="${expense.id}">${escapeHtml(expense.description)}</button><span>${expense.receiptPath ? `<button type="button" data-open-receipt="${expense.id}">Open receipt</button>` : escapeHtml(expense.receipt || "No receipt attached")}</span></span><span>${escapeHtml(projectById(expense.project)?.name || "Unlinked")}</span><span>${escapeHtml(expense.category)} · ${formatDate(expense.date)}</span><strong class="money-cell">${formatMoney(expense.amount)}</strong></div>`).join("");
+  document.getElementById("expense-list").innerHTML = [...state.expenses].sort((a, b) => b.date.localeCompare(a.date)).map(expense => `<div class="expense-row"><span class="expense-icon">−</span><span class="expense-main"><button type="button" class="financial-record-link" data-view-document="expense" data-record-id="${expense.id}">${escapeHtml(expense.description)}</button><span>${expense.receiptPath ? `<button type="button" data-open-receipt="${expense.id}">Open receipt</button>` : escapeHtml(expense.receipt || "No receipt attached")}</span></span><span>${escapeHtml(projectById(expense.project)?.name || "Unlinked")}</span><span>${escapeHtml(expense.category)} · ${formatDate(expense.date)}</span><strong class="money-cell">${formatMoney(expense.amount, false, expense.currency)}</strong></div>`).join("");
 }
 
 function threadIdForMessage(message) {
@@ -2540,8 +2541,8 @@ function renderReports() {
     <header class="report-header"><div><h2>Weekly Operations Brief</h2><p>Reporting snapshot · ${formatDate(TODAY, { year: true })}</p></div><span class="status-pill attention">Management review</span></header>
     <div class="report-stat-grid">
       <div class="report-stat"><span>Active projects</span><strong>${state.projects.filter(p => projectHealth(p) !== "complete").length}</strong></div>
-      <div class="report-stat"><span>Open pipeline</span><strong>${formatMoney(activeDeals.reduce((sum, deal) => sum + deal.value, 0), true)}</strong></div>
-      <div class="report-stat"><span>Outstanding</span><strong>${formatMoney(outstandingValue, true)}</strong></div>
+      <div class="report-stat"><span>Open pipeline</span><strong>${moneyTotals(activeDeals, r => r.value)}</strong></div>
+      <div class="report-stat"><span>Outstanding</span><strong>${moneyTotals(state.invoices.filter(invoice => !["Paid", "Draft"].includes(effectiveInvoiceStatus(invoice))), r => Math.max(0, r.amount - Number(r.paidAmount || 0)))}</strong></div>
       <div class="report-stat"><span>Blocked work</span><strong>${blocked.length}</strong></div>
       <div class="report-stat"><span>Field ready</span><strong>${activeMissions.filter(missionCanDeploy).length}/${activeMissions.length}</strong></div>
       <div class="report-stat"><span>Pending approvals</span><strong>${pendingApprovals.length}</strong></div>
@@ -2550,7 +2551,7 @@ function renderReports() {
     <section class="report-section"><h3>Management attention</h3><ul class="report-list">${requestActions.slice(0,4).map(request => `<li><strong>${escapeHtml(displayRecordReference("requests",request))}</strong> — ${escapeHtml(request.title)} is at ${escapeHtml(request.stage)}; next action: ${escapeHtml(request.nextAction)}</li>`).join("")}${blocked.map(task => `<li><strong>${escapeHtml(task.title)}</strong> — ${escapeHtml(task.blocker || "Blocker reason required")} Owner: ${escapeHtml(teamMember(task.owner).name)}.</li>`).join("") || "<li>No blocked work.</li>"}${attentionProjects.slice(0,3).map(project => `<li>${escapeHtml(project.name)} needs attention because it contains overdue or blocked work.</li>`).join("")}${pendingApprovals.filter(item => item.due <= TODAY).map(item => `<li>Decision due: ${escapeHtml(item.title)} — requested by ${escapeHtml(teamMember(item.requester).name)}.</li>`).join("")}${complianceActions.slice(0,3).map(record => `<li>${escapeHtml(record.title)} — ${escapeHtml(complianceDisplayStatus(record))}; owner ${escapeHtml(teamMember(record.owner).name)}.</li>`).join("")}</ul></section>
     <section class="report-section"><h3>Field readiness</h3><ul class="report-list">${activeMissions.sort((a, b) => a.start.localeCompare(b.start)).slice(0,4).map(mission => `<li>${formatDate(mission.start)} — ${escapeHtml(mission.title)}; ${readinessCount(mission)}/5 gates complete and ${escapeHtml(assetById(mission.asset)?.name || "equipment unassigned")}.</li>`).join("") || "<li>No active missions.</li>"}</ul></section>
     <section class="report-section"><h3>Due within seven days</h3><ul class="report-list">${dueSoon.map(task => `<li>${escapeHtml(task.title)} — ${escapeHtml(dueLabel(task))}; ${escapeHtml(teamMember(task.owner).name)}.</li>`).join("") || "<li>No tasks due this week.</li>"}</ul></section>
-    <section class="report-section"><h3>Sales and cash</h3><ul class="report-list">${activeDeals.sort((a,b) => b.value - a.value).slice(0,3).map(deal => `<li>${escapeHtml(deal.name)} — ${formatMoney(deal.value, true)} at ${deal.probability}% probability; next action ${formatDate(deal.nextAction)}.</li>`).join("")}${overdueInvoices.map(invoice => `<li>${escapeHtml(displayRecordReference("invoices",invoice))} for ${escapeHtml(invoice.client)} is overdue — ${formatMoney(invoice.amount)}.</li>`).join("") || "<li>No overdue invoices.</li>"}</ul></section>
+    <section class="report-section"><h3>Sales and cash</h3><ul class="report-list">${activeDeals.sort((a,b) => b.value - a.value).slice(0,3).map(deal => `<li>${escapeHtml(deal.name)} — ${formatMoney(deal.value, true, deal.currency)} at ${deal.probability}% probability; next action ${formatDate(deal.nextAction)}.</li>`).join("")}${overdueInvoices.map(invoice => `<li>${escapeHtml(displayRecordReference("invoices",invoice))} for ${escapeHtml(invoice.client)} is overdue — ${formatMoney(invoice.amount, false, invoice.currency)}.</li>`).join("") || "<li>No overdue invoices.</li>"}</ul></section>
     <section class="report-section"><h3>Calendar</h3><ul class="report-list">${upcomingEvents.map(event => `<li>${formatDate(event.date)} at ${escapeHtml(event.start)} — ${escapeHtml(event.title)}; ${escapeHtml(teamMember(event.owner).name)}.</li>`).join("") || "<li>No scheduled events this week.</li>"}</ul></section>
     <section class="report-section"><h3>Recently completed</h3><ul class="report-list">${recentlyDone.map(task => `<li>${escapeHtml(task.title)} — evidence: ${escapeHtml(task.evidence || "completion note only")}.</li>`).join("") || "<li>No recent completions recorded.</li>"}</ul></section>
     <section class="report-section"><h3>Recommended actions</h3><ul class="report-list"><li>Qualify every new request and record the next dated action before work is scoped.</li><li>Do not submit offers or start delivery until internal approval and formal acceptance are recorded.</li><li>Clear every deployment gate and compliance action before field mobilisation.</li><li>Resolve blocked work and attach client-ready evidence before closing high-priority tasks.</li></ul></section>
@@ -2680,6 +2681,7 @@ async function createRequest(event) {
     deadline: String(data.get("deadline") || ""),
     deliveryDeadline: String(data.get("deliveryDeadline") || ""),
     value: Number(data.get("value") || 0),
+    currency: CageCurrency.code(data.get("currency")),
     stage: "New",
     summary: String(data.get("summary") || "").trim(),
     attachments: String(data.get("attachments") || "").trim(),
@@ -2732,6 +2734,7 @@ function ensureRequestCRM(request) {
       company: request.organisation,
       owner: request.owner,
       value: request.value,
+      currency: request.currency || "MWK",
       stage: "Qualified",
       probability: 35,
       nextAction: request.deadline,
@@ -2756,6 +2759,7 @@ function ensureRequestCommercial(request) {
       owner: request.owner,
       deadline: request.deadline,
       value: request.value,
+      currency: request.currency || "MWK",
       stage: "Monitoring",
       progress: 10,
       nextAction: request.nextAction,
@@ -2786,6 +2790,7 @@ function syncRequestLinks(request) {
     [deal.stage, deal.probability] = dealStages[request.stage];
     deal.owner = request.owner;
     deal.value = request.value;
+    deal.currency = request.currency || "MWK";
     deal.nextAction = request.deadline;
     deal.nextStep = request.nextAction;
   }
@@ -2808,6 +2813,7 @@ function syncRequestLinks(request) {
     commercial.owner = request.owner;
     commercial.deadline = request.stage === "Converted" ? request.deliveryDeadline || commercial.deadline : request.deadline;
     commercial.value = request.value;
+    commercial.currency = request.currency || "MWK";
     commercial.nextAction = request.nextAction;
   }
 }
@@ -2854,6 +2860,7 @@ function prepareRequestQuote(requestId) {
   form.elements.client.value = request.organisation;
   form.elements.recipient.value = request.contactDetail.includes("@") ? request.contactDetail : "";
   form.elements.amount.value = request.value || "";
+  form.elements.currency.value = request.currency || "MWK";
   form.elements.description.value = request.summary;
 }
 
@@ -2965,6 +2972,7 @@ function convertRequest(requestId) {
       owner: request.owner,
       deadline: request.deliveryDeadline || dateAfter(30),
       value: request.value,
+      currency: request.currency || "MWK",
       stage: commercialType === "Tender" ? "Awarded" : "Active",
       progress: 100,
       nextAction: "Mobilise the linked delivery project.",
@@ -3380,6 +3388,7 @@ function createApproval(event) {
     requester: String(data.get("requester") || ""),
     due: String(data.get("due") || ""),
     amount: Number(data.get("amount") || 0),
+    currency: CageCurrency.code(data.get("currency")),
     summary: String(data.get("summary") || "").trim(),
     submitted: TODAY,
     status: "Pending"
@@ -3488,6 +3497,7 @@ function createCommercialRecord(event) {
     owner: String(data.get("owner") || ""),
     deadline: String(data.get("deadline") || ""),
     value: Number(data.get("value") || 0),
+    currency: CageCurrency.code(data.get("currency")),
     stage: String(data.get("stage") || "Monitoring"),
     progress: Math.min(100, Math.max(0, Number(data.get("progress") || 0))),
     nextAction: String(data.get("nextAction") || "").trim()
@@ -3553,6 +3563,7 @@ function requestCommercialReview(recordId) {
     submitted: TODAY,
     due: record.deadline,
     amount: record.value,
+    currency: record.currency || "MWK",
     status: "Pending",
     summary: `Review the ${record.type.toLowerCase()} requirements, scope, evidence and commercial position before external release.`,
     linkedType: "commercial",
@@ -3611,16 +3622,16 @@ function projectTimeline(tasks) {
 function projectWorkspaceTab(project, context) {
   const { owner, tasks, progress, revenue, costs, invoices, quotes, events, missions, members, files } = context;
   if (activeProjectTab === "overview") return `
-    <div class="project-kpi-grid"><div><span>Progress</span><strong>${progress}%</strong><small>${tasks.filter(task => task.status === "Done").length} of ${tasks.length} tasks complete</small></div><div><span>Deadline</span><strong>${formatDate(project.deadline, { year: true })}</strong><small>${projectHealth(project) === "attention" ? "Needs management attention" : "Delivery is on track"}</small></div><div><span>Project lead</span><strong>${escapeHtml(owner.name)}</strong><small>${members.length} project members</small></div><div><span>Balance</span><strong>${formatMoney(revenue - costs, true)}</strong><small>${formatMoney(revenue, true)} invoiced</small></div></div>
+    <div class="project-kpi-grid"><div><span>Progress</span><strong>${progress}%</strong><small>${tasks.filter(task => task.status === "Done").length} of ${tasks.length} tasks complete</small></div><div><span>Deadline</span><strong>${formatDate(project.deadline, { year: true })}</strong><small>${projectHealth(project) === "attention" ? "Needs management attention" : "Delivery is on track"}</small></div><div><span>Project lead</span><strong>${escapeHtml(owner.name)}</strong><small>${members.length} project members</small></div><div><span>Balance</span><strong>${moneyTotals([...invoices, ...context.expenses.map(e => ({...e, amount:-e.amount}))])}</strong><small>${moneyTotals(invoices)} invoiced</small></div></div>
     <div class="project-overview-grid"><section class="project-panel"><div class="project-panel-heading"><div><span>Required outcome</span><h3>What success looks like</h3></div></div><p class="project-outcome">${escapeHtml(project.outcome)}</p><div class="project-progress-large"><div><span>Delivery progress</span><strong>${progress}%</strong></div><div class="progress-track"><span style="width:${progress}%"></span></div></div></section><section class="project-panel"><div class="project-panel-heading"><div><span>Next actions</span><h3>Upcoming work</h3></div><button data-new-task-project="${project.id}">＋ Add task</button></div><div class="project-activity-list">${tasks.filter(task => task.status !== "Done").sort((a,b) => a.due.localeCompare(b.due)).slice(0,4).map(task => `<button data-task-detail="${task.id}"><span class="status-dot ${statusClass(task.status)}"></span><span><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(teamMember(task.owner).name)} · Due ${formatDate(task.due)}</small></span><b>›</b></button>`).join("") || `<div class="project-empty"><strong>No outstanding tasks</strong><span>This project has no open work.</span></div>`}</div></section></div>
-    <div class="project-overview-grid"><section class="project-panel"><div class="project-panel-heading"><div><span>Schedule</span><h3>Events and missions</h3></div></div><div class="project-summary-list"><span><b>${events.length}</b> calendar events</span><span><b>${missions.length}</b> field missions</span><span><b>${project.milestones.filter(item => item.complete).length}/${project.milestones.length}</b> milestones complete</span></div></section><section class="project-panel"><div class="project-panel-heading"><div><span>Financials</span><h3>Project position</h3></div></div><div class="project-summary-list"><span><b>${formatMoney(revenue, true)}</b> invoiced</span><span><b>${formatMoney(costs, true)}</b> recorded costs</span><span><b>${quotes.length}</b> linked quotations</span></div></section></div>`;
+    <div class="project-overview-grid"><section class="project-panel"><div class="project-panel-heading"><div><span>Schedule</span><h3>Events and missions</h3></div></div><div class="project-summary-list"><span><b>${events.length}</b> calendar events</span><span><b>${missions.length}</b> field missions</span><span><b>${project.milestones.filter(item => item.complete).length}/${project.milestones.length}</b> milestones complete</span></div></section><section class="project-panel"><div class="project-panel-heading"><div><span>Financials</span><h3>Project position</h3></div></div><div class="project-summary-list"><span><b>${moneyTotals(invoices)}</b> invoiced</span><span><b>${moneyTotals(context.expenses)}</b> recorded costs</span><span><b>${quotes.length}</b> linked quotations</span></div></section></div>`;
 
   if (activeProjectTab === "members") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Project team</span><h3>${members.length} members</h3></div><div class="project-inline-action"><select id="project-member-select" aria-label="Select a member"><option value="">Add a colleague…</option>${assignableTeam().filter(member => !project.team.includes(member.id)).map(member => `<option value="${member.id}">${escapeHtml(member.name)}</option>`).join("")}</select><button data-add-project-member="${project.id}">＋ Add</button></div></div><div class="project-member-grid">${members.map(member => `<article><span class="owner-avatar">${member.initials}</span><div><strong>${escapeHtml(member.name)}</strong><small>${escapeHtml(member.role)}</small><em>${member.id === project.owner ? "Project lead" : "Project member"}</em></div>${member.id !== project.owner ? `<button data-remove-project-member="${project.id}" data-member-id="${member.id}" aria-label="Remove ${escapeHtml(member.name)}">×</button>` : ""}</article>`).join("")}</div></section>`;
 
   if (activeProjectTab === 'files') window.CAGE_BACKEND?.refreshProjectFiles?.(project.id).then(changed=>{if(changed&&activeProjectId===project.id&&activeProjectTab==='files')renderProjectWorkspace();});
   if (activeProjectTab === "files") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Documents and evidence</span><h3>${files.length} project files</h3><p role="status">${escapeHtml(window.CAGE_BACKEND?.projectFilesNotice?.(project.id)||'')}</p><button type="button" data-refresh-project-files="${project.id}">Refresh files</button></div><label class="project-upload-button">＋ Upload file<input type="file" data-project-file-input="${project.id}" hidden></label></div><div class="project-file-list">${files.map(file => `<button ${file.path ? `data-open-project-file="${escapeHtml(file.id)}"` : ""} class="${file.path ? "" : "reference-only"}"><span class="project-file-icon">▤</span><span><strong>${escapeHtml(file.name)}</strong><small>${escapeHtml(file.source)}${file.uploaded ? ` · ${formatDate(file.uploaded)}` : ""}</small></span><b>${file.path ? "Open" : "Reference"}</b></button>`).join("") || `<div class="project-empty"><strong>No files recorded</strong><span>Upload a project document or attach evidence to a task.</span></div>`}</div></section>`;
 
-  if (activeProjectTab === "milestones") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Delivery checkpoints</span><h3>Milestones</h3></div><button data-add-project-milestone="${project.id}">＋ Add milestone</button></div><div class="milestone-list">${project.milestones.slice().sort((a,b) => a.due.localeCompare(b.due)).map(item => `<label class="milestone-row ${item.complete ? "complete" : ""}"><input type="checkbox" data-project-milestone-toggle="${item.id}" ${item.complete ? "checked" : ""}><span><strong>${escapeHtml(item.title)}</strong><small>Due ${formatDate(item.due, { year: true })}${Number(item.cost || 0) ? ` · Budget ${formatMoney(Number(item.cost), true)}` : ""}</small></span><em>${item.complete ? "Complete" : item.due < TODAY ? "Overdue" : "Upcoming"}</em></label>`).join("") || `<div class="project-empty"><strong>No milestones yet</strong><span>Add the major approval, delivery and completion checkpoints for this project.</span></div>`}</div></section>`;
+  if (activeProjectTab === "milestones") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Delivery checkpoints</span><h3>Milestones</h3></div><button data-add-project-milestone="${project.id}">＋ Add milestone</button></div><div class="milestone-list">${project.milestones.slice().sort((a,b) => a.due.localeCompare(b.due)).map(item => `<label class="milestone-row ${item.complete ? "complete" : ""}"><input type="checkbox" data-project-milestone-toggle="${item.id}" ${item.complete ? "checked" : ""}><span><strong>${escapeHtml(item.title)}</strong><small>Due ${formatDate(item.due, { year: true })}${Number(item.cost || 0) ? ` · Budget ${formatMoney(Number(item.cost), true, item.currency)}` : ""}</small></span><em>${item.complete ? "Complete" : item.due < TODAY ? "Overdue" : "Upcoming"}</em></label>`).join("") || `<div class="project-empty"><strong>No milestones yet</strong><span>Add the major approval, delivery and completion checkpoints for this project.</span></div>`}</div></section>`;
 
   if (activeProjectTab === "tasks") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Execution</span><h3>${tasks.length} project tasks</h3></div><button data-new-task-project="${project.id}">＋ Add task</button></div><div class="project-task-table">${tasks.slice().sort((a,b) => a.due.localeCompare(b.due)).map(task => `<div><button data-task-detail="${task.id}"><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.output)}</small></button><span class="owner-chip"><span class="owner-avatar">${teamMember(task.owner).initials}</span>${escapeHtml(teamMember(task.owner).name.split(" ")[0])}</span><span class="due-date ${isOverdue(task) ? "overdue" : ""}">${formatDate(task.due)}</span><select data-task-status="${task.id}" aria-label="Status for ${escapeHtml(task.title)}">${["To Do", "Doing", "Blocked", "Done"].map(status => `<option ${status === task.status ? "selected" : ""}>${status}</option>`).join("")}</select></div>`).join("") || `<div class="project-empty"><strong>No tasks yet</strong><span>Add the first task to start tracking delivery.</span></div>`}</div></section>`;
 
@@ -3628,11 +3639,11 @@ function projectWorkspaceTab(project, context) {
 
   if (activeProjectTab === "gantt") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Schedule visual</span><h3>Gantt Chart</h3></div><button data-new-task-project="${project.id}">＋ Add task</button></div>${projectTimeline(tasks)}</section>`;
 
-  if (activeProjectTab === "invoices") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Billing</span><h3>${invoices.length} project invoices</h3></div><button data-new-invoice-project="${project.id}">＋ Create invoice</button></div><div class="project-finance-list">${invoices.map(invoice => `<div><span><button type="button" class="financial-record-link" data-view-document="invoice" data-record-id="${invoice.id}">${escapeHtml(displayRecordReference("invoices",invoice))}</button><small>${escapeHtml(invoice.description)}</small></span><span><strong>${formatMoney(invoice.amount, true)}</strong><small>Due ${formatDate(invoice.due)}</small></span><span class="status-pill ${statusClass(invoice.status)}">${escapeHtml(invoice.status)}</span><button data-send-document="invoice" data-document-id="${invoice.id}">${invoice.sentAt ? "Resend" : "Send"}</button></div>`).join("") || `<div class="project-empty"><strong>No invoices yet</strong><span>Create the first project invoice when a billing milestone is reached.</span></div>`}</div></section>`;
+  if (activeProjectTab === "invoices") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Billing</span><h3>${invoices.length} project invoices</h3></div><button data-new-invoice-project="${project.id}">＋ Create invoice</button></div><div class="project-finance-list">${invoices.map(invoice => `<div><span><button type="button" class="financial-record-link" data-view-document="invoice" data-record-id="${invoice.id}">${escapeHtml(displayRecordReference("invoices",invoice))}</button><small>${escapeHtml(invoice.description)}</small></span><span><strong>${formatMoney(invoice.amount, true, invoice.currency)}</strong><small>Due ${formatDate(invoice.due)}</small></span><span class="status-pill ${statusClass(invoice.status)}">${escapeHtml(invoice.status)}</span><button data-send-document="invoice" data-document-id="${invoice.id}">${invoice.sentAt ? "Resend" : "Send"}</button></div>`).join("") || `<div class="project-empty"><strong>No invoices yet</strong><span>Create the first project invoice when a billing milestone is reached.</span></div>`}</div></section>`;
 
-  if (activeProjectTab === "quotes") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Commercial record</span><h3>${quotes.length} linked quotations</h3></div><button data-new-quote-project="${project.id}">＋ Create quotation</button></div><div class="project-finance-list">${quotes.map(quote => `<div><span><button type="button" class="financial-record-link" data-view-document="quote" data-record-id="${quote.id}">${escapeHtml(displayRecordReference("quotes",quote))}</button><small>${escapeHtml(quote.description)}</small></span><span><strong>${formatMoney(quote.amount, true)}</strong><small>Valid to ${formatDate(quote.validUntil)}</small></span><span class="status-pill ${statusClass(quote.status)}">${escapeHtml(quote.status)}</span><button data-send-document="quote" data-document-id="${quote.id}">${quote.sentAt ? "Resend" : "Send"}</button></div>`).join("") || `<div class="project-empty"><strong>No linked quotations</strong><span>Create a quotation for this project.</span></div>`}</div></section>`;
+  if (activeProjectTab === "quotes") return `<section class="project-panel"><div class="project-panel-heading"><div><span>Commercial record</span><h3>${quotes.length} linked quotations</h3></div><button data-new-quote-project="${project.id}">＋ Create quotation</button></div><div class="project-finance-list">${quotes.map(quote => `<div><span><button type="button" class="financial-record-link" data-view-document="quote" data-record-id="${quote.id}">${escapeHtml(displayRecordReference("quotes",quote))}</button><small>${escapeHtml(quote.description)}</small></span><span><strong>${formatMoney(quote.amount, true, quote.currency)}</strong><small>Valid to ${formatDate(quote.validUntil)}</small></span><span class="status-pill ${statusClass(quote.status)}">${escapeHtml(quote.status)}</span><button data-send-document="quote" data-document-id="${quote.id}">${quote.sentAt ? "Resend" : "Send"}</button></div>`).join("") || `<div class="project-empty"><strong>No linked quotations</strong><span>Create a quotation for this project.</span></div>`}</div></section>`;
 
-  return `<section class="project-panel"><div class="project-panel-heading"><div><span>Project spending</span><h3>${context.expenses.length} recorded expenses</h3></div><button data-new-project-expense="${project.id}">＋ Add expense</button></div><div class="project-expense-summary"><span><small>Total project expenses</small><strong>${formatMoney(costs, true)}</strong></span><span><small>Approved</small><strong>${formatMoney(context.expenses.filter(item => (item.status || "Pending") === "Approved").reduce((sum, item) => sum + item.amount, 0), true)}</strong></span><span><small>Pending review</small><strong>${context.expenses.filter(item => (item.status || "Pending") === "Pending").length}</strong></span></div><div class="project-expense-list">${context.expenses.slice().sort((a,b) => b.date.localeCompare(a.date)).map(expense => `<div><span><button type="button" class="financial-record-link" data-view-document="expense" data-record-id="${expense.id}">${escapeHtml(expense.description)}</button><small>${expense.receiptPath ? `<button type="button" data-open-receipt="${expense.id}">Open receipt</button> · ` : ""}${escapeHtml(expense.category)} · ${formatDate(expense.date)}${expense.receipt ? ` · ${escapeHtml(expense.receipt)}` : ""}</small></span><strong>${formatMoney(expense.amount, true)}</strong><select data-expense-status="${expense.id}" aria-label="Status for ${escapeHtml(expense.description)}">${["Pending", "Approved", "Rejected"].map(status => `<option ${status === (expense.status || "Pending") ? "selected" : ""}>${status}</option>`).join("")}</select></div>`).join("") || `<div class="project-empty"><strong>No expenses recorded</strong><span>Add field, equipment, travel or administrative costs against this project.</span></div>`}</div></section>`;
+  return `<section class="project-panel"><div class="project-panel-heading"><div><span>Project spending</span><h3>${context.expenses.length} recorded expenses</h3></div><button data-new-project-expense="${project.id}">＋ Add expense</button></div><div class="project-expense-summary"><span><small>Total project expenses</small><strong>${moneyTotals(context.expenses)}</strong></span><span><small>Approved</small><strong>${moneyTotals(context.expenses.filter(item => (item.status || "Pending") === "Approved"))}</strong></span><span><small>Pending review</small><strong>${context.expenses.filter(item => (item.status || "Pending") === "Pending").length}</strong></span></div><div class="project-expense-list">${context.expenses.slice().sort((a,b) => b.date.localeCompare(a.date)).map(expense => `<div><span><button type="button" class="financial-record-link" data-view-document="expense" data-record-id="${expense.id}">${escapeHtml(expense.description)}</button><small>${expense.receiptPath ? `<button type="button" data-open-receipt="${expense.id}">Open receipt</button> · ` : ""}${escapeHtml(expense.category)} · ${formatDate(expense.date)}${expense.receipt ? ` · ${escapeHtml(expense.receipt)}` : ""}</small></span><strong>${formatMoney(expense.amount, true, expense.currency)}</strong><select data-expense-status="${expense.id}" aria-label="Status for ${escapeHtml(expense.description)}">${["Pending", "Approved", "Rejected"].map(status => `<option ${status === (expense.status || "Pending") ? "selected" : ""}>${status}</option>`).join("")}</select></div>`).join("") || `<div class="project-empty"><strong>No expenses recorded</strong><span>Add field, equipment, travel or administrative costs against this project.</span></div>`}</div></section>`;
 }
 
 function renderProjectWorkspace() {
@@ -3927,8 +3938,8 @@ function openDealDialog(dealId = "") {
   document.getElementById("deal-dialog-title").textContent = deal ? "Edit opportunity" : "New opportunity";
   document.getElementById("save-deal-button").textContent = deal ? "Save changes" : "Create opportunity";
   if (deal) {
-    ["name", "company", "owner", "value", "stage", "probability", "nextAction", "nextStep"].forEach(field => {
-      form.elements[field].value = deal[field] ?? "";
+    ["name", "company", "owner", "value", "stage", "probability", "nextAction", "nextStep", "currency"].forEach(field => {
+      form.elements[field].value = deal[field] ?? (field === "currency" ? "MWK" : "");
     });
   } else {
     form.elements.nextAction.value = dateAfter(7);
@@ -3955,6 +3966,7 @@ function createDeal(event) {
     company: String(data.get("company") || "").trim(),
     owner: String(data.get("owner") || ""),
     value: Number(data.get("value") || 0),
+    currency: CageCurrency.code(data.get("currency")),
     stage: String(data.get("stage") || "Prospect"),
     probability: Number(data.get("probability") || 20),
     nextAction: String(data.get("nextAction") || ""),
@@ -4101,6 +4113,7 @@ async function createInvoice(event) {
     issued: String(data.get("issued") || ""),
     due: String(data.get("due") || ""),
     amount: Number(data.get("amount") || 0),
+    currency: CageCurrency.code(data.get("currency")),
     status: String(data.get("status") || "Draft"),
     recipient: String(data.get("recipient") || "").trim(),
     description: String(data.get("description") || "").trim()
@@ -4170,6 +4183,7 @@ function openQuoteDialog(dealId = "", projectId = "") {
     const deal = dealById(dealId);
     form.elements.deal.value = dealId;
     form.elements.client.value = deal?.company || "";
+    form.elements.currency.value = deal?.currency || "MWK";
     form.elements.amount.value = deal?.value || "";
     form.elements.description.value = deal?.name || "";
   }
@@ -4207,6 +4221,7 @@ async function createQuote(event) {
     issued: String(data.get("issued") || ""),
     validUntil: String(data.get("validUntil") || ""),
     amount: Number(data.get("amount") || 0),
+    currency: CageCurrency.code(data.get("currency")),
     status: String(data.get("status") || "Draft"),
     recipient: String(data.get("recipient") || "").trim(),
     description: String(data.get("description") || "").trim(),
@@ -4269,7 +4284,7 @@ function openSendDocument(type, id) {
   form.elements.message.value = type === "quote" ? `Hello,\n\nPlease find CAGE quotation ${documentRecord.number} for ${documentRecord.description}.\n\nKind regards,\nCAGE` : `Hello,\n\nPlease find CAGE invoice ${documentRecord.number} for ${documentRecord.description}.\n\nKind regards,\nCAGE`;
   form.elements.automaticFollowUp.checked = documentRecord.automaticFollowUp !== false;
   document.getElementById("send-dialog-title").textContent = `Send ${documentRecord.number}`;
-  document.getElementById("send-document-preview").innerHTML = `<strong>${escapeHtml(documentRecord.number)} · ${formatMoney(documentRecord.amount)}</strong><span>${escapeHtml(documentRecord.client)} · ${escapeHtml(documentRecord.description)}</span>`;
+  document.getElementById("send-document-preview").innerHTML = `<strong>${escapeHtml(documentRecord.number)} · ${formatMoney(documentRecord.amount, false, documentRecord.currency)}</strong><span>${escapeHtml(documentRecord.client)} · ${escapeHtml(documentRecord.description)}</span>`;
   document.getElementById("send-form-error").textContent = "";
   const canSendInvoice=['invoice','quote'].includes(type)&&window.CAGE_BACKEND?.canSendInvoice?.();
   const sendButton=form.querySelector('button.primary-button');
@@ -4349,6 +4364,7 @@ async function createExpense(event) {
     category: String(data.get("category") || ""),
     date: String(data.get("date") || ""),
     amount: Number(data.get("amount") || 0),
+    currency: CageCurrency.code(data.get("currency")),
     receipt: String(data.get("receipt") || "").trim(),
     status: "Pending"
   };
@@ -4537,10 +4553,10 @@ function findGlobalSearchResults(query) {
   state.projects.forEach(project => { if (`${project.name} ${project.client} ${project.category}`.toLowerCase().includes(value)) results.push({ type: "Project", id: project.id, title: project.name, detail: project.client, view: "projects", icon: "PR" }); });
   state.tasks.forEach(task => { if (`${task.title} ${task.output} ${projectById(task.project)?.name || ""}`.toLowerCase().includes(value)) results.push({ type: "Task", id: task.id, title: task.title, detail: `${teamMember(task.owner).name} · ${task.status}`, view: "tasks", icon: "TK" }); });
   state.contacts.forEach(contact => { if (`${contact.company} ${contact.contact} ${contact.note}`.toLowerCase().includes(value)) results.push({ type: "Organisation", id: contact.id, title: contact.company, detail: contact.note, view: "crm", icon: "CR" }); });
-  state.deals.forEach(deal => { if (`${deal.name} ${deal.company} ${deal.nextStep}`.toLowerCase().includes(value)) results.push({ type: "Opportunity", id: deal.id, title: deal.name, detail: `${deal.company} · ${formatMoney(deal.value, true)}`, view: "crm", icon: "SL" }); });
+  state.deals.forEach(deal => { if (`${deal.name} ${deal.company} ${deal.nextStep}`.toLowerCase().includes(value)) results.push({ type: "Opportunity", id: deal.id, title: deal.name, detail: `${deal.company} · ${formatMoney(deal.value, true, deal.currency)}`, view: "crm", icon: "SL" }); });
   state.events.forEach(event => { if (`${event.title} ${event.attendees}`.toLowerCase().includes(value)) results.push({ type: "Calendar", id: event.id, title: event.title, detail: `${formatDate(event.date)} · ${event.start}`, view: "calendar", icon: "CA" }); });
-  state.invoices.forEach(invoice => { if (`${invoice.number} ${invoice.client} ${invoice.description}`.toLowerCase().includes(value)) results.push({ type: "Invoice", id: invoice.id, title: `${invoice.number} · ${invoice.client}`, detail: `${formatMoney(invoice.amount)} · ${effectiveInvoiceStatus(invoice)}`, view: "finance", icon: "FI" }); });
-  state.quotes.forEach(quote => { if (`${quote.number} ${quote.client} ${quote.description}`.toLowerCase().includes(value)) results.push({ type: "Quote", id: quote.id, title: `${quote.number} · ${quote.client}`, detail: `${formatMoney(quote.amount)} · ${quote.status}`, view: "finance", icon: "QU" }); });
+  state.invoices.forEach(invoice => { if (`${invoice.number} ${invoice.client} ${invoice.description}`.toLowerCase().includes(value)) results.push({ type: "Invoice", id: invoice.id, title: `${invoice.number} · ${invoice.client}`, detail: `${formatMoney(invoice.amount, false, invoice.currency)} · ${effectiveInvoiceStatus(invoice)}`, view: "finance", icon: "FI" }); });
+  state.quotes.forEach(quote => { if (`${quote.number} ${quote.client} ${quote.description}`.toLowerCase().includes(value)) results.push({ type: "Quote", id: quote.id, title: `${quote.number} · ${quote.client}`, detail: `${formatMoney(quote.amount, false, quote.currency)} · ${quote.status}`, view: "finance", icon: "QU" }); });
   state.missions.forEach(mission => { if (`${mission.title} ${mission.location} ${mission.objective} ${projectById(mission.project)?.name || ""}`.toLowerCase().includes(value)) results.push({ type: "Mission", id: mission.id, title: mission.title, detail: `${mission.status} · ${mission.location}`, view: "missions", icon: "MS" }); });
   state.assets.forEach(asset => { if (`${asset.name} ${asset.tag} ${asset.category} ${projectById(asset.project)?.name || ""}`.toLowerCase().includes(value)) results.push({ type: "Equipment", id: asset.id, title: asset.name, detail: `${asset.tag} · ${asset.status}`, view: "assets", icon: "EQ" }); });
   state.compliance.forEach(record => { if (`${record.title} ${record.category} ${record.document} ${record.note}`.toLowerCase().includes(value)) results.push({ type: "Compliance", id: record.id, title: record.title, detail: `${complianceDisplayStatus(record)} · ${formatDate(record.renewal)}`, view: "compliance", icon: "CO" }); });

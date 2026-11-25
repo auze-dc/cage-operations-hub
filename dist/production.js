@@ -853,7 +853,7 @@
   async function createTrainingCourse(payload) {
     const result = await client.from("training_courses").insert({
       organization_id: config.organizationId, name: payload.name, category: payload.category,
-      duration: payload.duration, default_fee: Number(payload.fee || 0), certificate_type: payload.certificate,
+      duration: payload.duration, default_fee: Number(payload.fee || 0), currency: payload.currency || 'MWK', certificate_type: payload.certificate,
       requirements: payload.requirements || null, outcome: payload.outcome, created_by: profile.id
     }).select().single();
     if (result.error) throw new Error(result.error.message);
@@ -1070,7 +1070,7 @@
   }
   async function academySave(table, values, id) {
     const fields = {
-      training_courses:['name','category','duration','default_fee','certificate_type','requirements','outcome','active','modules','minimum_attendance','practical_minutes','required_assessments'],
+      training_courses:['name','category','duration','default_fee','currency','certificate_type','requirements','outcome','active','modules','minimum_attendance','practical_minutes','required_assessments'],
       training_cohorts:['name','lead_instructor','start_date','end_date','venue','capacity','status','source_reference','project_id'],
       learners:['full_name','email','phone','date_of_birth','sponsor','guardian_name','guardian_phone','guardian_consent','collection_contacts','documents_complete','invoice_id','external_licence_status','rpl_number','rpl_expiry','renewal_due','notes','alumni_consent','skills'],
       training_sessions:['cohort_id','title','starts_at','ends_at','instructor_id','venue','session_type','cancelled'],

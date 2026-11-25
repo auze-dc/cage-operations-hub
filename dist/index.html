@@ -586,7 +586,7 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
         <label class="field"><span>Location</span><input name="location" maxlength="120" placeholder="Site, district, country or online"></label>
         <label class="field"><span>Required date or deadline *</span><input name="deadline" type="date" required></label>
         <label class="field"><span>Expected delivery date</span><input name="deliveryDeadline" type="date"></label>
-        <label class="field"><span>Estimated value (MWK)</span><input name="value" type="number" min="0" step="0.01" placeholder="Optional"></label>
+        <label class="field"><span>Estimated value</span><input name="value" type="number" min="0" step="0.01" placeholder="Optional"></label><label class="field"><span>Currency</span><select name="currency" required><option>MWK</option><option>USD</option><option>GBP</option><option>EUR</option></select></label>
         <label class="field field-wide"><span>Request summary *</span><textarea name="summary" rows="3" required placeholder="Requirements, outputs and what success looks like"></textarea></label>
         <label class="field field-wide"><span>Attachments or links</span><input name="attachments" maxlength="220" placeholder="Email thread, tender document, KMZ, brief or Drive location"></label>
         <label class="field field-wide"><span>Next action *</span><input name="nextAction" required maxlength="160" placeholder="The next specific action and who CAGE is waiting on"></label>
@@ -692,7 +692,7 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
         <label class="field"><span>Organisation *</span><input name="company" required placeholder="Client or partner"></label>
         <label class="field"><span>Category</span><select name="category"><option value="">Uncategorised</option><option>Mapping &amp; Data</option><option>Training</option><option>Agriculture</option><option>Equipment Hire</option><option>Disaster Risk</option><option>Internal</option></select></label>
         <label class="field"><span>Owner *</span><select name="owner" id="deal-owner-input" required></select></label>
-        <label class="field"><span>Expected value (MWK) *</span><input name="value" type="number" min="0" step="1000" required placeholder="0"></label>
+        <label class="field"><span>Expected value *</span><input name="value" type="number" min="0" step="0.01" required placeholder="0"></label><label class="field"><span>Currency</span><select name="currency" required><option>MWK</option><option>USD</option><option>GBP</option><option>EUR</option></select></label>
         <label class="field"><span>Stage</span><select name="stage"><option>Prospect</option><option>Lead</option><option>Qualified</option><option>Proposal</option><option>Negotiation</option><option>Won</option><option>Lost</option></select></label>
         <label class="field"><span>Next follow-up *</span><input name="nextAction" type="date" required min="2026-09-04"></label>
         <label class="field"><span>Probability</span><select name="probability"><option value="0">0%</option><option value="10">10%</option><option value="20">20%</option><option value="40">40%</option><option value="60">60%</option><option value="80">80%</option><option value="100">100%</option></select></label>
@@ -729,7 +729,7 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
         <label class="field"><span>Linked project *</span><select name="project" id="invoice-project-input" required></select></label>
         <label class="field"><span>Issue date *</span><input name="issued" type="date" required></label>
         <label class="field"><span>Due date *</span><input name="due" type="date" required></label>
-        <label class="field"><span>Amount (MWK) *</span><input name="amount" type="number" min="0" step="1000" required placeholder="0"></label>
+        <label class="field"><span>Amount *</span><input name="amount" type="number" min="0" step="0.01" required placeholder="0"></label>
         <label class="field"><span>Status</span><select name="status"><option>Draft</option><option>Sent</option><option>Paid</option></select></label>
         <label class="field field-wide"><span>Recipient email *</span><input name="recipient" type="email" required placeholder="accounts@client.org"></label>
         <label class="field field-wide"><span>Description *</span><input name="description" required placeholder="Service, milestone or deliverable being billed"></label>
@@ -748,7 +748,7 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
         <label class="field"><span>Linked opportunity</span><select name="deal" id="quote-deal-input"></select></label>
         <label class="field"><span>Issue date *</span><input name="issued" type="date" required></label>
         <label class="field"><span>Valid until *</span><input name="validUntil" type="date" required></label>
-        <label class="field"><span>Amount (MWK) *</span><input name="amount" type="number" min="0" step="1000" required placeholder="0"></label>
+        <label class="field"><span>Amount *</span><input name="amount" type="number" min="0" step="0.01" required placeholder="0"></label>
         <label class="field"><span>Status</span><select name="status"><option>Draft</option></select></label>
         <label class="field field-wide"><span>Recipient email *</span><input name="recipient" type="email" required placeholder="client@example.org"></label>
         <label class="field field-wide"><span>Scope summary *</span><textarea name="description" required rows="3" placeholder="What CAGE will deliver"></textarea></label>
@@ -890,7 +890,7 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
         <label class="field"><span>Type *</span><select name="type"><option>Purchase</option><option>Mission clearance</option><option>Quote</option><option>Expense</option><option>Leave</option><option>Submission</option><option>Contract</option><option>Other</option></select></label>
         <label class="field"><span>Requested by *</span><select name="requester" id="approval-requester-input" required></select></label>
         <label class="field"><span>Decision by *</span><input name="due" type="date" required></label>
-        <label class="field"><span>Amount (MWK)</span><input name="amount" type="number" min="0" step="1000" placeholder="Optional"></label>
+        <label class="field"><span>Amount</span><input name="amount" type="number" min="0" step="0.01" placeholder="Optional"></label><label class="field"><span>Currency</span><select name="currency" required><option>MWK</option><option>USD</option><option>GBP</option><option>EUR</option></select></label>
         <label class="field field-wide"><span>Decision summary *</span><textarea name="summary" rows="3" required placeholder="What is being requested, why it is needed and the impact"></textarea></label>
       </div>
       <p class="form-error" id="approval-form-error" role="alert"></p>
@@ -907,7 +907,7 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
         <label class="field"><span>Organisation *</span><input name="organisation" required placeholder="Client, funder or issuing organisation"></label>
         <label class="field"><span>Owner *</span><select name="owner" id="commercial-owner-input" required></select></label>
         <label class="field"><span>Deadline or renewal *</span><input name="deadline" type="date" required></label>
-        <label class="field"><span>Value (MWK)</span><input name="value" type="number" min="0" step="1000" placeholder="Optional"></label>
+        <label class="field"><span>Value</span><input name="value" type="number" min="0" step="0.01" placeholder="Optional"></label><label class="field"><span>Currency</span><select name="currency" required><option>MWK</option><option>USD</option><option>GBP</option><option>EUR</option></select></label>
         <label class="field"><span>Stage *</span><select name="stage"><option>Monitoring</option><option>Preparing</option><option>Internal review</option><option>Submitted</option><option>Negotiation</option><option>Active</option><option>Awarded</option><option>Closed</option></select></label>
         <label class="field"><span>Completion</span><input name="progress" type="number" min="0" max="100" value="10"></label>
         <label class="field field-wide"><span>Next action *</span><input name="nextAction" required placeholder="The next action, requirement or signature needed"></label>
@@ -925,7 +925,7 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
         <label class="field"><span>Linked project *</span><select name="project" id="expense-project-input" required></select></label>
         <label class="field"><span>Category *</span><select name="category"><option>Field operations</option><option>Equipment</option><option>Software</option><option>Training</option><option>Travel</option><option>Administration</option></select></label>
         <label class="field"><span>Date *</span><input name="date" type="date" required></label>
-        <label class="field"><span>Amount (MWK) *</span><input name="amount" type="number" min="0" step="1000" required placeholder="0"></label>
+        <label class="field"><span>Amount *</span><input name="amount" type="number" min="0" step="0.01" required placeholder="0"></label><label class="field"><span>Currency</span><select name="currency" required><option>MWK</option><option>USD</option><option>GBP</option><option>EUR</option></select></label>
         <label class="field field-wide"><span>Receipt reference</span><input name="receipt" placeholder="Receipt number, file name or link"></label>
       </div>
       <p class="form-error" id="expense-form-error" role="alert"></p>
@@ -947,7 +947,7 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
     </form>
   </dialog>
 
-  <dialog id="training-program-dialog" class="app-dialog"><form method="dialog" id="training-program-form"><div class="dialog-heading"><div><p class="section-kicker">Training catalogue</p><h2>Create course</h2><p>Use this for any future training CAGE wants to deliver.</p></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div><div class="form-grid"><label class="field field-wide"><span>Course name *</span><input name="name" required></label><label class="field"><span>Training category *</span><select name="category"><option>RPL</option><option>RPL Refresher</option><option>STEM</option><option>Industry Specific</option><option>Technical</option><option>Corporate</option><option>Other</option></select></label><label class="field"><span>Default duration *</span><input name="duration" required placeholder="e.g. 5 days"></label><label class="field"><span>Default fee per learner (MWK)</span><input name="fee" type="number" min="0" step="1000"></label><label class="field"><span>Certificate *</span><select name="certificate"><option>CAGE certificate</option><option>RPL / regulatory pathway</option><option>Attendance certificate</option><option>None</option></select></label><label class="field field-wide"><span>Required documents or controls</span><input name="requirements" placeholder="ID, medical, existing RPL, guardian consent, etc."></label><label class="field field-wide"><span>Course outcome *</span><textarea name="outcome" required rows="3"></textarea></label></div><p class="form-error" id="training-program-error"></p><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Create course</button></div></form></dialog>
+  <dialog id="training-program-dialog" class="app-dialog"><form method="dialog" id="training-program-form"><div class="dialog-heading"><div><p class="section-kicker">Training catalogue</p><h2>Create course</h2><p>Use this for any future training CAGE wants to deliver.</p></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div><div class="form-grid"><label class="field field-wide"><span>Course name *</span><input name="name" required></label><label class="field"><span>Training category *</span><select name="category"><option>RPL</option><option>RPL Refresher</option><option>STEM</option><option>Industry Specific</option><option>Technical</option><option>Corporate</option><option>Other</option></select></label><label class="field"><span>Default duration *</span><input name="duration" required placeholder="e.g. 5 days"></label><label class="field"><span>Default fee per learner</span><input name="fee" type="number" min="0" step="0.01"></label><label class="field"><span>Currency</span><select name="currency" required><option>MWK</option><option>USD</option><option>GBP</option><option>EUR</option></select></label><label class="field"><span>Certificate *</span><select name="certificate"><option>CAGE certificate</option><option>RPL / regulatory pathway</option><option>Attendance certificate</option><option>None</option></select></label><label class="field field-wide"><span>Required documents or controls</span><input name="requirements" placeholder="ID, medical, existing RPL, guardian consent, etc."></label><label class="field field-wide"><span>Course outcome *</span><textarea name="outcome" required rows="3"></textarea></label></div><p class="form-error" id="training-program-error"></p><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Create course</button></div></form></dialog>
 
   <dialog id="training-cohort-dialog" class="app-dialog"><form method="dialog" id="training-cohort-form"><div class="dialog-heading"><div><p class="section-kicker">Training delivery</p><h2>Create cohort</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></div><div class="form-grid"><label class="field field-wide"><span>Cohort name *</span><input name="name" required></label><label class="field"><span>Course *</span><select name="courseId" id="cohort-course-input" required></select></label><label class="field"><span>Lead instructor *</span><select name="lead" id="cohort-lead-input" required></select></label><label class="field"><span>Start date *</span><input name="start" type="date" required></label><label class="field"><span>End date *</span><input name="end" type="date" required></label><label class="field"><span>Venue *</span><input name="venue" required></label><label class="field"><span>Capacity *</span><input name="capacity" type="number" min="1" value="12" required></label><label class="field field-wide"><span>Linked accepted request or client</span><input name="source" placeholder="Request number, client or internal programme"></label></div><p class="form-error" id="training-cohort-error"></p><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" value="default">Create cohort</button></div></form></dialog>
 
@@ -990,10 +990,11 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
   <script src="./draft-privacy.js?v=enterprise-20261029" defer></script>
   <link rel="stylesheet" href="./security.css?v=mfa-20261029">
   <script src="./security.js?v=mfa-20261029" defer></script>
-  <script src="./production.js?v=access-recovery-20261116" defer></script>
+  <script src="./production.js?v=currency-20261125" defer></script>
   <script src="./message-links.js?v=20261110" defer></script>
-  <script src="./app.js?v=staff-directory-20261110" defer></script>
-  <script src="./payroll.js?v=20261027-pension3" defer></script>
+  <script src="./currency.js?v=20261125" defer></script>
+  <script src="./app.js?v=currency-20261125" defer></script>
+  <script src="./payroll.js?v=currency-20261125" defer></script>
   <script src="./job-advert.js?v=20261029" defer></script>
 <script src="./interview-panel.js?v=rsvp-20261110" defer></script>
 <script src="./hr.js?v=rsvp-20261110" defer></script>
@@ -1005,16 +1006,16 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
 <script src="./vendor/pdf-lib.min.js?v=15.9.0" defer></script>
 <script src="./document-pdf.js?v=tpin-20260930" defer></script>
 <script src="./amount-input.js?v=audit-20261020" defer></script>
-<script src="./documents-ui.js?v=audit-20261020" defer></script>
+<script src="./documents-ui.js?v=currency-20261125" defer></script>
 <script src="./personal-work.js?v=payroll-20261027" defer></script>
   <script src="./mobile.js?v=15.9.0" defer></script>
 <script src="./daily-planner.js?v=15.9.0" defer></script>
 <script src="./staff-email.js?v=21.0.0" defer></script>
-<script src="./workflows.js?v=staff-workflow-20261008" defer></script>
+<script src="./workflows.js?v=currency-20261125" defer></script>
 <script src="./admissions-common.js?v=15.9.1-review" defer></script>
 <script src="./admissions-review.js?v=amounts-20261009" defer></script>
-<script src="./admissions-admin.js?v=amounts-20261009" defer></script>
-<script src="./academy.js?v=20261002-1" defer></script>
+<script src="./admissions-admin.js?v=currency-20261125" defer></script>
+<script src="./academy.js?v=currency-20261125" defer></script>
 <script src="./hub-experience.js?v=access-recovery-20261116" defer></script>
 <script src="./stem-intake.js?v=15.9.0-access1" defer></script>
 <script src="./messenger.js?v=work-discovery-20260930" defer></script>
@@ -1031,7 +1032,7 @@ body.auth-pending:not(.session-checking) .session-loader { display: none; }
 <script src="./record-management.js?v=finance-delete-20261008" defer></script>
 <script src="./payment-receipts.js?v=receipts-20260925" defer></script>
 <script src="./order-document.js?v=20260927" defer></script>
-<script src="./quote-order.js?v=workflow-controls-20261021" defer></script>
+<script src="./quote-order.js?v=currency-20261125" defer></script>
 <script src="./opportunities.js?v=company-documents-20261026" defer></script>
 <link rel="stylesheet" href="teamwork.css?v=20260930">
 <script src="teamwork.js?v=workflow-controls-20261021" defer></script>
