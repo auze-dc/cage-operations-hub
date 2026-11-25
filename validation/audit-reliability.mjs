@@ -55,7 +55,7 @@ console.log('PASS: migration applies twice; reservations unique/idempotent; serv
 const {JSDOM}=require(`${process.env.CAGE_TEST_MODULES}/jsdom`);
 const dom=new JSDOM(['quote','invoice'].map(t=>`<form id="${t}-form"><div class="form-grid"><input name="amount"></div><div class="dialog-actions"></div></form>`).join('')+'<div id="send-document-preview"></div>',{runScripts:'outside-only'});
 const win=dom.window;win.escapeHtml=s=>String(s).replaceAll('&','&amp;').replaceAll('"','&quot;');
-win.eval(fs.readFileSync('dist/amount-input.js','utf8'));win.eval(fs.readFileSync('dist/documents-ui.js','utf8'));
+win.eval(fs.readFileSync('dist/currency.js','utf8'));win.eval(fs.readFileSync('dist/amount-input.js','utf8'));win.eval(fs.readFileSync('dist/documents-ui.js','utf8'));
 for(const type of ['quote','invoice']){
  const f=win.document.getElementById(type+'-form');
  win.CAGE_DOCUMENTS.fillItems(f,[{description:'Survey',quantity:2,unitPrice:1100000}]);
