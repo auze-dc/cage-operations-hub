@@ -27,6 +27,10 @@ jobs:
       - run: node validation/go-live-guards.mjs
       - name: Install isolated DOM and SQL test dependencies
         run: npm install --prefix "$RUNNER_TEMP/cage-reliability" --no-save --ignore-scripts jsdom@26.1.0 @electric-sql/pglite@0.3.14
+      - name: Install PDF text verification utility
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
       - name: Verify sign-in recovery and financial document guards
         env:
           CAGE_TEST_MODULES: ${{ runner.temp }}/cage-reliability/node_modules
@@ -34,6 +38,8 @@ jobs:
           node validation/login-recovery.mjs
           node validation/sign-in-access.mjs
           node validation/audit-reliability.mjs
+          node validation/multi-currency.mjs
+          node validation/multi-currency-db.mjs
           node validation/background-job-access.mjs
           node validation/enterprise.mjs
           node validation/mfa-security.mjs
