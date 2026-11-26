@@ -16,7 +16,7 @@ async function createDocumentPDF(PDFLib,record,type,logoBytes,sendingAt=new Date
  const logo=await doc.embedPng(logoBytes),blue=rgb(0,173/255,239/255),navy=rgb(.09,.10,.20),black=rgb(0,0,0),grey=rgb(.85,.85,.85);
  const currency=record.currency||'MWK', num=n=>Number(n).toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2});
  const clean=v=>String(v??'').replace(/[\u2010-\u2015]/g,'-').replace(/\u2022/g,'-').replace(/\u2019/g,"'").replace(/[^\x20-\x7E\xA0-\xFF\n]/g,'?');
- function lines(value,width,size=11,font=regular){const out=[];for(const para of clean(value).split('\n')){let line='';for(const word of para.split(/\s+/)){if(font.widthOfTextAtSize((line?line+' ':'')+word,size)>width&&line){out.push(line);line='';}if(font.widthOfTextAtSize(word,size)>width){for(const ch of word){if(font.widthOfTextAtSize(line+ch,size)>width){out.push(line);line='';}line+=ch;}}else line+=(line?' ':'')+word;}out.push(line);}return out;}
+ function lines(value,width,size=11,font=regular){const out=[];for(const para of clean(String(value??'').replace(/\r\n?/g,'\n').replace(/\s*\bAttention[ \t]*:[ \t]*/gi,'\nAttention: ').replace(/^\n/,'')).split('\n')){let line='';for(const word of para.split(/\s+/)){if(font.widthOfTextAtSize((line?line+' ':'')+word,size)>width&&line){out.push(line);line='';}if(font.widthOfTextAtSize(word,size)>width){for(const ch of word){if(font.widthOfTextAtSize(line+ch,size)>width){out.push(line);line='';}line+=ch;}}else line+=(line?' ':'')+word;}out.push(line);}return out;}
  let page,y;const occupied=new Map();
  function reserve(x,y,width,height){occupied.get(page).push({x,y,width,height});}
  function floor(){return layout.reserveStamp&&doc.getPageCount()===1?229:92;}
