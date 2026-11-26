@@ -8,3 +8,16 @@
 @media print{.payroll-slip{padding:0;font-size:11px}.payroll-slip header{padding-bottom:14px;margin-bottom:14px}.payroll-slip header h2{font-size:24px}.payroll-slip header p{font-size:10px}.payroll-slip-meta{margin:14px 0;gap:10px}.payroll-slip-meta span{font-size:10px}.payroll-slip .payroll-table{font-size:11px}.payroll-slip .payroll-table td,.payroll-slip .payroll-table th{padding:7px 6px}.payroll-slip .payroll-table tr{break-inside:avoid}.payroll-slip-total{margin-top:14px;padding:14px;font-size:18px;break-inside:avoid}.payroll-slip footer{margin-top:15px;padding-top:10px;font-size:10px}}
 
 .payroll-allowance-row{grid-template-columns:minmax(0,1.3fr) minmax(0,.8fr) minmax(0,1.5fr) auto}@media(max-width:720px){.payroll-allowance-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.payroll-allowance-row label:first-child,.payroll-allowance-row label:nth-child(3){grid-column:1/-1}.payroll-allowance-row button{justify-self:end;grid-column:2}}
+
+/* Payslip: official wordmark, document metadata and separate print-safe draft treatment. */
+.payroll-slip header{align-items:flex-start;gap:18px}
+.payroll-slip header .payroll-slip-logo{display:block;width:150px;max-width:100%;height:auto;max-height:none;object-fit:contain}
+.payroll-slip-title{text-align:right;min-width:0}
+.payroll-slip header h2{color:#172b43}
+.payroll-slip-stamp{display:inline-grid;gap:4px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;color:#334155;font-size:11px;line-height:1.35;font-variant-numeric:tabular-nums}
+.payroll-slip-stamp strong,.payroll-slip-meta dt{font-size:10px;letter-spacing:.045em;text-transform:uppercase;color:#475569}
+.payroll-slip-disclaimer{border:1px solid #d6b36b;border-left-width:4px;border-radius:5px;padding:8px 11px;color:#674603;background:#fff8e6;line-height:1.35;font-size:12px;break-inside:avoid}
+.payroll-slip-meta{border:1px solid #dce4ef;border-radius:8px;padding:12px 14px}
+.payroll-slip-meta dd{margin:4px 0 0;overflow-wrap:anywhere}
+@media(max-width:520px){.payroll-slip header .payroll-slip-logo{width:122px}.payroll-slip-title h2{font-size:20px}.payroll-slip-stamp{padding:6px}.payroll-slip-total{font-size:16px;padding:13px}.payroll-slip-meta{gap:9px;padding:9px}}
+@media print{.payroll-slip header .payroll-slip-logo{width:135px}.payroll-slip .payroll-table td,.payroll-slip .payroll-table th{padding:5px 6px}.payroll-slip-meta{break-inside:avoid}.payroll-slip p{margin:6px 0}}
