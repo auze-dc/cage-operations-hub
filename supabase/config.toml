@@ -52,3 +52,7 @@ verify_jwt = false
 # Applicant capability links; separate one-way token for the approximate open signal.
 [functions.interview-response]
 verify_jwt = false
+
+# An isolated payroll cron secret is validated in the handler. Never callable by a staff UI session.
+[functions.payroll-email-dispatch]
+verify_jwt = false

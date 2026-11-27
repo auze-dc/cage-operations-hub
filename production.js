@@ -1198,6 +1198,7 @@
     categoryAdd: async(category_module,category_name)=>{const r=await client.rpc("hub_category_add",{category_module,category_name});if(r.error)throw r.error;return r.data;},
     companyDocuments,companyDocumentSave,companyDocumentHistory,companyDocumentUrl,companyDocumentLink,
     payrollData: async(target=null)=>{const r=await client.rpc("payroll_read",{target}).abortSignal(AbortSignal.timeout(20000));if(r.error)throw r.error;return r.data;},
+    payrollEmailStatus: async(target)=>{const r=await client.rpc("payroll_email_status",{target}).abortSignal(AbortSignal.timeout(7000));if(r.error)throw r.error;return r.data;},
     payrollWrite: async(action,target,expected,payload)=>{const r=await client.rpc("payroll_write",{action,target,expected,payload}).abortSignal(AbortSignal.timeout(25000));if(r.error)throw r.error;return r.data;},
     presenceHeartbeat,
     presenceStatusSettings: async()=>{const r=await client.rpc("hub_status_settings");if(r.error)throw r.error;return r.data;},
