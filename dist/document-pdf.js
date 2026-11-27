@@ -107,5 +107,17 @@ async function createDocumentPDF(PDFLib,record,type,logoBytes,sendingAt=new Date
  doc.getPages().forEach((p,i)=>p.drawText(`${clean(record.number).slice(0,42)} | ${i+1} / ${doc.getPageCount()}`,{x:252,y:26,size:8,font:regular,color:navy}));
  return doc.save();
 }
-root.CagePDF={createDocumentPDF,stampDateAt};
+
+// Same artwork and date arc as the commercial PDFs, for browser-printed documents.
+function stampSvgAt(value){
+ if(!value||!Number.isFinite(new Date(value).getTime()))return '';
+ const stampDate=stampDateAt(value);
+ return `<svg class="payroll-round-mark" viewBox="0 0 236 242" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+ <image href="data:image/png;base64,${stampBase64}" width="236" height="242"/>
+ <path d="M53.76 50.66 A96 96 0 0 1 182.24 50.66 L164.84 69.98 A70 70 0 0 0 71.16 69.98 Z" fill="#fff"/>
+ <path id="cage-payslip-stamp-arc" d="M40 122 A78 78 0 0 1 196 122" fill="none"/>
+ <text fill="#4fabd6" font-family="Arial, sans-serif" font-size="20" font-weight="bold" letter-spacing=".8"><textPath href="#cage-payslip-stamp-arc" startOffset="50%" text-anchor="middle">${stampDate}</textPath></text>
+ </svg>`;
+}
+root.CagePDF={createDocumentPDF,stampDateAt,stampSvgAt};
 })(globalThis);
