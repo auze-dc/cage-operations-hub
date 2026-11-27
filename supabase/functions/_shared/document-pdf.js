@@ -7,6 +7,37 @@ function stampDateAt(value=new Date()){
  return `${parts.day}.${parts.month}.${parts.year}`;
 }
 
+async function roundStampAssets(PDFLib,doc){
+ return {
+   stamp:await doc.embedPng(Uint8Array.from(atob(stampBase64),c=>c.charCodeAt(0))),
+   stampFont:await doc.embedFont(PDFLib.StandardFonts.HelveticaBold)
+ };
+}
+function drawRoundStamp(PDFLib,page,stamp,stampFont,stampDate,sx,sy,scale){
+ const {rgb,degrees}=PDFLib;
+ page.drawImage(stamp,{x:sx,y:sy,width:236*scale,height:242*scale});
+ // The original PNG remains intact. A PDF-native white annular strip covers
+ // its fixed date, and selectable date characters follow the same curve.
+ const cx=118,cy=122,inner=70,outer=96;
+ const points=[];
+ for(let angle=48;angle<=132;angle+=2){const a=angle*Math.PI/180;points.push([cx+outer*Math.cos(a),cy-outer*Math.sin(a)]);}
+ for(let angle=132;angle>=48;angle-=2){const a=angle*Math.PI/180;points.push([cx+inner*Math.cos(a),cy-inner*Math.sin(a)]);}
+ const mask=points.map((p,i)=>`${i?'L':'M'} ${p[0]} ${p[1]}`).join(' ')+' Z';
+ page.drawSvgPath(mask,{x:sx,y:sy+242*scale,scale,color:rgb(1,1,1)});
+ const radius=78*scale,fontSize=20*scale,tracking=0.8*scale;
+ const widths=[...stampDate].map(ch=>stampFont.widthOfTextAtSize(ch,fontSize));
+ const totalWidth=widths.reduce((a,b)=>a+b,0)+tracking*(widths.length-1);
+ let offset=-totalWidth/2;
+ [...stampDate].forEach((ch,i)=>{
+ const theta=Math.PI/2-(offset+widths[i]/2)/radius;
+ const rotation=theta-Math.PI/2;
+ const px=sx+cx*scale+radius*Math.cos(theta),py=sy+(242-cy)*scale+radius*Math.sin(theta);
+ page.drawText(ch,{x:px-widths[i]/2*Math.cos(rotation),y:py-widths[i]/2*Math.sin(rotation),font:stampFont,size:fontSize,rotate:degrees(rotation*180/Math.PI),color:rgb(0.31,0.67,0.84)});
+ offset+=widths[i]+tracking;
+ });
+
+}
+
 async function createDocumentPDF(PDFLib,record,type,logoBytes,sendingAt=new Date(),layout={}){
  const {PDFDocument,StandardFonts,rgb,degrees}=PDFLib;
  const stampDate=stampDateAt(sendingAt);
@@ -82,30 +113,10 @@ async function createDocumentPDF(PDFLib,record,type,logoBytes,sendingAt=new Date
   return createDocumentPDF(PDFLib,record,type,logoBytes,sendingAt,{reserveStamp:true});
  }
  page=placement.page;
- const scale=0.5,sx=placement.x,sy=placement.y;
- page.drawImage(stamp,{x:sx,y:sy,width:236*scale,height:242*scale});
- // The original PNG remains intact. A PDF-native white annular strip covers
- // its fixed date, and selectable date characters follow the same curve.
- const cx=118,cy=122,inner=70,outer=96;
- const points=[];
- for(let angle=48;angle<=132;angle+=2){const a=angle*Math.PI/180;points.push([cx+outer*Math.cos(a),cy-outer*Math.sin(a)]);}
- for(let angle=132;angle>=48;angle-=2){const a=angle*Math.PI/180;points.push([cx+inner*Math.cos(a),cy-inner*Math.sin(a)]);}
- const mask=points.map((p,i)=>`${i?'L':'M'} ${p[0]} ${p[1]}`).join(' ')+' Z';
- page.drawSvgPath(mask,{x:sx,y:sy+242*scale,scale,color:rgb(1,1,1)});
- const radius=78*scale,fontSize=20*scale,tracking=0.8*scale;
- const widths=[...stampDate].map(ch=>stampFont.widthOfTextAtSize(ch,fontSize));
- const totalWidth=widths.reduce((a,b)=>a+b,0)+tracking*(widths.length-1);
- let offset=-totalWidth/2;
- [...stampDate].forEach((ch,i)=>{
- const theta=Math.PI/2-(offset+widths[i]/2)/radius;
- const rotation=theta-Math.PI/2;
- const px=sx+cx*scale+radius*Math.cos(theta),py=sy+(242-cy)*scale+radius*Math.sin(theta);
- page.drawText(ch,{x:px-widths[i]/2*Math.cos(rotation),y:py-widths[i]/2*Math.sin(rotation),font:stampFont,size:fontSize,rotate:degrees(rotation*180/Math.PI),color:rgb(0.31,0.67,0.84)});
- offset+=widths[i]+tracking;
- });
+ drawRoundStamp(PDFLib,page,stamp,stampFont,stampDate,placement.x,placement.y,.5);
 
  doc.getPages().forEach((p,i)=>p.drawText(`${clean(record.number).slice(0,42)} | ${i+1} / ${doc.getPageCount()}`,{x:252,y:26,size:8,font:regular,color:navy}));
  return doc.save();
 }
-root.CagePDF={createDocumentPDF,stampDateAt};
+root.CagePDF={createDocumentPDF,stampDateAt,roundStampAssets,drawRoundStamp};
 })(globalThis);
